@@ -1,0 +1,37 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+  - repo: https://github.com/dnephin/pre-commit-golang.git
+    rev: v0.5.1
+    hooks:
+      - id: go-fmt
+      # - id: go-vet
+      - id: go-lint
+      - id: go-imports
+      # - id: go-cyclo
+      #   args: [-over=15]
+      - id: validate-toml
+      # - id: no-go-testing
+      # - id: gometalinter
+      - id: golangci-lint
+      # - id: go-critic
+      - id: go-unit-tests
+      # - id: go-build
+      - id: go-mod-tidy
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: check-byte-order-marker
+      - id: check-case-conflict
+      - id: check-json
+        exclude: ".vscode"
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-xml
+      - id: debug-statements
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+      - id: requirements-txt-fixer
+      - id: sort-simple-yaml
+      - id: trailing-whitespace
