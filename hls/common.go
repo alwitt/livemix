@@ -36,7 +36,7 @@ type Playlist struct {
 	// Version EXT-X-VERSION value
 	Version int `json:"version"`
 	// URI video playlist file URI
-	URI string `json:"path" validate:"required,uri"`
+	URI *url.URL `json:"path" validate:"required,uri"`
 	// TargetSegDuration target segment duration
 	TargetSegDuration float64 `json:"duration" validate:"required"`
 	// Segments list of TS segments associated with this playlist
@@ -49,10 +49,6 @@ GetDIRPath helper function to get the DIR where the playlist is
 	@returns DIR path
 */
 func (p Playlist) GetDIRPath() (string, error) {
-	parsedURI, err := url.Parse(p.URI)
-	if err != nil {
-		return "", err
-	}
-	dirPath, _ := filepath.Split(parsedURI.EscapedPath())
+	dirPath, _ := filepath.Split(p.URI.EscapedPath())
 	return dirPath, nil
 }

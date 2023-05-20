@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alwitt/streamhub/hls"
+	"github.com/alwitt/livemix/hls"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -98,7 +98,7 @@ func TestHLSParsing(t *testing.T) {
 		}
 		parsed, err := uut.ParsePlaylist(utCtxt, "file:///vid/testing.m3u8", testfile, currentTime)
 		assert.Nilf(err, "Got %s", err)
-		assert.Equal("file:///vid/testing.m3u8", parsed.URI)
+		assert.Equal("file:///vid/testing.m3u8", parsed.URI.String())
 		assert.Equal("testing.m3u8", parsed.Name)
 		dirPath, err := parsed.GetDIRPath()
 		assert.Nil(err)
@@ -125,7 +125,7 @@ func TestHLSParsing(t *testing.T) {
 		}
 		parsed, err := uut.ParsePlaylist(utCtxt, "file:///vid/testing.m3u8", testfile, currentTime)
 		assert.Nilf(err, "Got %s", err)
-		assert.Equal("file:///vid/testing.m3u8", parsed.URI)
+		assert.Equal("file:///vid/testing.m3u8", parsed.URI.String())
 		assert.Equal("testing.m3u8", parsed.Name)
 		dirPath, err := parsed.GetDIRPath()
 		assert.Nil(err)

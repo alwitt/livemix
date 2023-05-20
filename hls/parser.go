@@ -105,7 +105,7 @@ func (p playlistParserImpl) ParsePlaylist(
 		log.WithError(err).WithFields(logTags).WithField("uri", uri).Error("HLS m3u8 URI parse failure")
 		return playlist, err
 	}
-	playlist.URI = parsedURI.String()
+	playlist.URI = parsedURI
 	// Get playlist name
 	{
 		_, fileName := filepath.Split(parsedURI.EscapedPath())

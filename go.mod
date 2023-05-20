@@ -1,4 +1,4 @@
-module github.com/alwitt/streamhub
+module github.com/alwitt/livemix
 
 go 1.20
 

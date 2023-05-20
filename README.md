@@ -1,1 +1,1 @@
-# StreamHub - HLS Live Streaming Proxy
+# LiveMix - HLS Live Streaming Proxy
