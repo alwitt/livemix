@@ -3,6 +3,8 @@ package utils
 import (
 	"context"
 	"fmt"
+	"io/fs"
+	"os"
 	"sync"
 	"sync/atomic"
 
@@ -48,10 +50,10 @@ type FileSystemWatcher interface {
 /*
 NewFileSystemWatcher define new FileSystemWatcher
 
-	@param eventChan chan fsnotify.Event - the channel to return file system events
+	@param eventChan chan FSEvent - the channel to return file system events
 	@returns watcher
 */
-func NewFileSystemWatcher(eventChan chan fsnotify.Event) (FileSystemWatcher, error) {
+func NewFileSystemWatcher(eventChan chan FSEvent) (FileSystemWatcher, error) {
 	logTags := log.Fields{"module": "utils", "component": "file-system-watcher"}
 
 	// Define a watcher
@@ -82,12 +84,20 @@ func NewFileSystemWatcher(eventChan chan fsnotify.Event) (FileSystemWatcher, err
 // fileSystemWatchImpl implement FileSystemWatcher
 type fileSystemWatchImpl struct {
 	goutils.Component
-	eventChan      chan fsnotify.Event
+	eventChan      chan FSEvent
 	watcher        *fsnotify.Watcher
 	watcherRunning uint32
 	wg             *sync.WaitGroup
 	watcherContext context.Context
 	contextCancel  func()
+}
+
+// FSEvent wrapper around `fsnotify.Event` with metadata
+type FSEvent struct {
+	// The original event
+	fsnotify.Event
+	// Meta file metadata
+	Meta fs.FileInfo
 }
 
 func (w *fileSystemWatchImpl) Start(ctxt, runtimeCtxt context.Context) error {
@@ -130,7 +140,17 @@ func (w *fileSystemWatchImpl) Start(ctxt, runtimeCtxt context.Context) error {
 						WithField("path", event.Name).
 						WithField("op", event.Op.String()).
 						Debug("Observed new relevant event")
-					w.eventChan <- event
+					stat, err := os.Stat(event.Name)
+					if err == nil {
+						w.eventChan <- FSEvent{Event: event, Meta: stat}
+					} else {
+						log.
+							WithError(err).
+							WithFields(logTags).
+							WithField("path", event.Name).
+							WithField("op", event.Op.String()).
+							Error("Unable to `stat` file")
+					}
 				}
 			case err, ok := <-w.watcher.Errors:
 				if !ok {

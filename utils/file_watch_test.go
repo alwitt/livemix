@@ -22,7 +22,7 @@ func TestFileSystemWatcher(t *testing.T) {
 	utCtxt, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	fsEvents := make(chan fsnotify.Event)
+	fsEvents := make(chan utils.FSEvent)
 
 	uut, err := utils.NewFileSystemWatcher(fsEvents)
 	assert.Nil(err)
