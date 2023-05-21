@@ -64,26 +64,6 @@ type playlistParserImpl struct {
 	validator *validator.Validate
 }
 
-/*
-ParsePlaylist parse a HLS playlist to get the playlist properties, and the associated segments,
-
-The playlist is expected to be already parsed into a list of strings. The expected structure
-of a HLS playlist
-
-#EXTM3U
-#EXT-X-VERSION:6
-#EXT-X-TARGETDURATION:4
-#EXT-X-MEDIA-SEQUENCE:0
-#EXTINF:4.000000,
-vid-1684541470.ts
-#EXT-X-ENDLIST
-
-	@param ctxt context.Context - execution context
-	@param uri string - HLS playlist URI
-	@param content []string - HLS playlist content
-	@param timestamp time.Time - When the playlist is generated
-	@returns parsed playlist
-*/
 func (p playlistParserImpl) ParsePlaylist(
 	ctxt context.Context, uri string, content []string, timestamp time.Time,
 ) (Playlist, error) {
