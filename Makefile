@@ -16,6 +16,10 @@ fix: .prepare ## Lint and fix vialoations
 test: .prepare ## Run unittests
 	@go test --count 1 -timeout 30s -short ./...
 
+.PHONY: one-test
+one-test: .prepare ## Run one unittest
+	go test --count 1 -v -timeout 30s -run ^$(FILTER) github.com/alwitt/livemix/...
+
 .PHONY: build
 build: lint ## Build the application
 	@go build -o stream-hub.bin .

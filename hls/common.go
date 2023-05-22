@@ -9,13 +9,13 @@ import (
 // Segment represents a HLS TS segment
 type Segment struct {
 	// Name segment name
-	Name string `json:"name" validate:"required"`
+	Name string `json:"name" validate:"required" gorm:"column:name;not null;uniqueIndex:video_segment_name_index"`
 	// StartTime when segment was first seen
-	StartTime time.Time `json:"start" validate:"required"`
+	StartTime time.Time `json:"start" validate:"required" gorm:"column:start;not null"`
 	// EndTime end of segment timestamp
-	EndTime time.Time `json:"end" validate:"required"`
+	EndTime time.Time `json:"end" validate:"required" gorm:"column:stop;not null"`
 	// Length segment length in time
-	Length float64 `json:"length" validate:"required"`
+	Length float64 `json:"length" validate:"required" gorm:"column:length;not null"`
 }
 
 /*
