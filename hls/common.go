@@ -9,13 +9,15 @@ import (
 // Segment represents a HLS TS segment
 type Segment struct {
 	// Name segment name
-	Name string `json:"name" validate:"required" gorm:"column:name;not null;uniqueIndex:video_segment_name_index"`
+	Name string `json:"name" validate:"required" gorm:"column:name;not null;index:video_segment_uniq"`
 	// StartTime when segment was first seen
 	StartTime time.Time `json:"start" validate:"required" gorm:"column:start;not null"`
 	// EndTime end of segment timestamp
 	EndTime time.Time `json:"end" validate:"required" gorm:"column:stop;not null"`
 	// Length segment length in time
 	Length float64 `json:"length" validate:"required" gorm:"column:length;not null"`
+	// URI video segment storage URI
+	URI string `json:"uri" validate:"required,uri" gorm:"column:uri;not null"`
 }
 
 /*
@@ -48,7 +50,22 @@ GetDIRPath helper function to get the DIR where the playlist is
 
 	@returns DIR path
 */
-func (p Playlist) GetDIRPath() (string, error) {
+func (p Playlist) GetDIRPath() string {
 	dirPath, _ := filepath.Split(p.URI.EscapedPath())
-	return dirPath, nil
+	return dirPath
+}
+
+/*
+BuildSegmentURI helper function to get the segment URI
+
+	@param segmentName string - name of the segment object
+	@return segment URI
+*/
+func (p Playlist) BuildSegmentURI(segmentName string) string {
+	dirPath, _ := filepath.Split(p.URI.EscapedPath())
+	objectPath := filepath.Join(dirPath, segmentName)
+	// Build new URI
+	newURI := *p.URI
+	newURI.Path = objectPath
+	return newURI.String()
 }

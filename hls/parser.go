@@ -193,6 +193,8 @@ func (p playlistParserImpl) ParsePlaylist(
 		playlist.Segments[itr].EndTime = currentTime
 		currentTime = currentTime.Add(-playlist.Segments[itr].GetDuration())
 		playlist.Segments[itr].StartTime = currentTime
+		// Update the segment URI
+		playlist.Segments[itr].URI = playlist.BuildSegmentURI(playlist.Segments[itr].Name)
 	}
 
 	// Validate the complete playlist

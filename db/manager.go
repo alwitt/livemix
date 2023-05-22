@@ -121,7 +121,7 @@ func NewManager(dbDialector gorm.Dialector, logLevel logger.LogLevel) (Manager, 
 	if err := db.AutoMigrate(&videoSource{}); err != nil {
 		return nil, err
 	}
-	if err := db.AutoMigrate(&VideoSegment{}); err != nil {
+	if err := db.AutoMigrate(&videoSegment{}); err != nil {
 		return nil, err
 	}
 
