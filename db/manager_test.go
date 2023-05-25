@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/db"
+	"github.com/alwitt/livemix/hls"
 	"github.com/apex/log"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -129,5 +131,152 @@ func TestDBManagerVideoSource(t *testing.T) {
 		assert.True(ok)
 		assert.Equal(source3, entry.Name)
 		assert.Equal(getURI(source3), entry.PlaylistURI)
+	}
+}
+
+func TestDBManagerVideoSegment(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	testInstance := fmt.Sprintf("ut-%s", uuid.NewString())
+	testDB := fmt.Sprintf("/tmp/%s.db", testInstance)
+	uut, err := db.NewManager(db.GetSqliteDialector(testDB), logger.Info)
+	assert.Nil(err)
+
+	log.Debugf("Using %s", testDB)
+
+	utCtxt := context.Background()
+
+	assert.Nil(uut.Ready(utCtxt))
+
+	// Create a source
+	sourceID, err := uut.DefineVideoSource(
+		utCtxt, uuid.NewString(), fmt.Sprintf("file:///%s.m3u8", uuid.NewString()), nil,
+	)
+	assert.Nil(err)
+
+	// Case 0: no segments
+	{
+		_, err := uut.GetSegment(utCtxt, uuid.NewString())
+		assert.NotNil(err)
+		entries, err := uut.ListAllSegments(utCtxt, sourceID)
+		assert.Nil(err)
+		assert.Empty(entries)
+	}
+
+	startTime := time.Now().UTC()
+	segDuration := time.Second * 4
+
+	// Case 1: register new segment
+	segment0 := fmt.Sprintf("seg-0-%s.ts", uuid.NewString())
+	segStart0 := startTime
+	segStop0 := segStart0.Add(segDuration)
+	segmentID0, err := uut.RegisterSegment(utCtxt, sourceID, hls.Segment{
+		Name:      segment0,
+		StartTime: segStart0,
+		EndTime:   segStop0,
+		Length:    segDuration.Seconds(),
+		URI:       fmt.Sprintf("file:///%s", segment0),
+	})
+	assert.Nil(err)
+	{
+		seg, err := uut.GetSegment(utCtxt, segmentID0)
+		assert.Nil(err)
+		assert.Equal(segment0, seg.Name)
+		assert.Equal(segStart0, seg.StartTime)
+		assert.Equal(segStop0, seg.EndTime)
+		assert.Equal(fmt.Sprintf("file:///%s", segment0), seg.URI)
+		entries, err := uut.ListAllSegments(utCtxt, sourceID)
+		assert.Nil(err)
+		assert.Len(entries, 1)
+		seg = entries[0]
+		assert.Equal(segment0, seg.Name)
+		assert.Equal(segStart0, seg.StartTime)
+		assert.Equal(segStop0, seg.EndTime)
+		assert.Equal(fmt.Sprintf("file:///%s", segment0), seg.URI)
+	}
+
+	// Case 2: register new segment
+	segment1 := fmt.Sprintf("seg-1-%s.ts", uuid.NewString())
+	segStart1 := segStop0
+	segStop1 := segStart1.Add(segDuration)
+	segmentID1, err := uut.RegisterSegment(utCtxt, sourceID, hls.Segment{
+		Name:      segment1,
+		StartTime: segStart1,
+		EndTime:   segStop1,
+		Length:    segDuration.Seconds(),
+		URI:       fmt.Sprintf("file:///%s", segment1),
+	})
+	assert.Nil(err)
+	{
+		entries, err := uut.ListAllSegments(utCtxt, sourceID)
+		assert.Nil(err)
+		assert.Len(entries, 2)
+		segMap := map[string]common.VideoSegment{}
+		for _, segment := range entries {
+			segMap[segment.ID] = segment
+		}
+		assert.Contains(segMap, segmentID1)
+		seg := segMap[segmentID1]
+		assert.Equal(segment1, seg.Name)
+		assert.Equal(segStart1, seg.StartTime)
+		assert.Equal(segStop1, seg.EndTime)
+		assert.Equal(fmt.Sprintf("file:///%s", segment1), seg.URI)
+	}
+
+	// Case 3: fetch segment by timestamp
+	{
+		targetTime := startTime.Add(segDuration).Add(segDuration / 2)
+		entries, err := uut.ListAllSegmentsAfterTime(utCtxt, sourceID, targetTime)
+		assert.Nil(err)
+		assert.Len(entries, 1)
+		segMap := map[string]common.VideoSegment{}
+		for _, segment := range entries {
+			segMap[segment.ID] = segment
+		}
+		assert.Contains(segMap, segmentID1)
+		seg := segMap[segmentID1]
+		assert.Equal(segment1, seg.Name)
+		assert.Equal(segStart1, seg.StartTime)
+		assert.Equal(segStop1, seg.EndTime)
+		assert.Equal(fmt.Sprintf("file:///%s", segment1), seg.URI)
+	}
+	{
+		targetTime := startTime.Add(segDuration / 2)
+		entries, err := uut.ListAllSegmentsAfterTime(utCtxt, sourceID, targetTime)
+		assert.Nil(err)
+		assert.Len(entries, 2)
+		segMap := map[string]common.VideoSegment{}
+		for _, segment := range entries {
+			segMap[segment.ID] = segment
+		}
+		assert.Contains(segMap, segmentID0)
+		assert.Contains(segMap, segmentID1)
+		seg := segMap[segmentID0]
+		assert.Equal(segment0, seg.Name)
+		assert.Equal(segStart0, seg.StartTime)
+		assert.Equal(segStop0, seg.EndTime)
+		assert.Equal(fmt.Sprintf("file:///%s", segment0), seg.URI)
+	}
+
+	// Case 4: delete segment
+	assert.Nil(uut.DeleteSegment(utCtxt, segmentID1))
+	{
+		entries, err := uut.ListAllSegments(utCtxt, sourceID)
+		assert.Nil(err)
+		assert.Len(entries, 1)
+		seg := entries[0]
+		assert.Equal(segment0, seg.Name)
+		assert.Equal(segStart0, seg.StartTime)
+		assert.Equal(segStop0, seg.EndTime)
+		assert.Equal(fmt.Sprintf("file:///%s", segment0), seg.URI)
+	}
+
+	// Case #: delete video source
+	assert.Nil(uut.DeleteVideoSource(utCtxt, sourceID))
+	{
+		entries, err := uut.ListAllSegments(utCtxt, sourceID)
+		assert.Nil(err)
+		assert.Len(entries, 0)
 	}
 }

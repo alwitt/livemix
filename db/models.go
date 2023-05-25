@@ -8,7 +8,7 @@ import (
 type videoSource struct {
 	common.VideoSource
 	// Segments associated video segments
-	Segments []videoSegment `gorm:"foreignKey:SourceID"`
+	Segments []videoSegment `gorm:"foreignKey:SourceID" validate:"-"`
 }
 
 // TableName hard code table name
@@ -19,7 +19,7 @@ func (videoSource) TableName() string {
 // videoSegment a single HLS TS segment
 type videoSegment struct {
 	common.VideoSegment
-	Source videoSource `gorm:"constraint:OnDelete:CASCADE;foreignKey:SourceID"`
+	Source videoSource `gorm:"constraint:OnDelete:CASCADE;foreignKey:SourceID" validate:"-"`
 }
 
 // TableName hard code table name

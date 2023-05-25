@@ -1,6 +1,7 @@
 package hls
 
 import (
+	"encoding/json"
 	"net/url"
 	"path/filepath"
 	"time"
@@ -18,6 +19,12 @@ type Segment struct {
 	Length float64 `json:"length" validate:"required" gorm:"column:length;not null"`
 	// URI video segment storage URI
 	URI string `json:"uri" validate:"required,uri" gorm:"column:uri;not null"`
+}
+
+// String toString function
+func (s Segment) String() string {
+	t, _ := json.Marshal(&s)
+	return string(t)
 }
 
 /*

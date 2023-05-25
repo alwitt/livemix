@@ -2,12 +2,15 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/alwitt/goutils"
 	"github.com/alwitt/livemix/common"
+	"github.com/alwitt/livemix/hls"
 	"github.com/apex/log"
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
+	"github.com/oklog/ulid/v2"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
@@ -92,6 +95,54 @@ type Manager interface {
 	// =====================================================================================
 	// Video segments
 
+	/*
+		RegisterSegment record a new segment with a source
+
+			@param ctxt context.Context - execution context
+			@param sourceID string - video source ID
+			@param segment hls.Segment - video segment parameters
+			@returns new segment entry ID
+	*/
+	RegisterSegment(ctxt context.Context, sourceID string, segment hls.Segment) (string, error)
+
+	/*
+		ListAllSegments fetch all video segments
+
+			@param ctxt context.Context - execution context
+			@param sourceID string - video source ID
+			@returns list of segments
+	*/
+	ListAllSegments(ctxt context.Context, sourceID string) ([]common.VideoSegment, error)
+
+	/*
+		GetVideoSegment get a video segment
+
+			@param ctxt context.Context - execution context
+			@param id string - video segment ID
+			@returns segment
+	*/
+	GetSegment(ctxt context.Context, id string) (common.VideoSegment, error)
+
+	/*
+		ListAllSegmentsAfterTime fetch all video segments which have a stop timestamp are
+		after a timestamp
+
+			@param ctxt context.Context - execution context
+			@param sourceID string - video source ID
+			@param timestamp time.Time - timestamp to check against
+			@returns list of segments
+	*/
+	ListAllSegmentsAfterTime(
+		ctxt context.Context, sourceID string, timestamp time.Time,
+	) ([]common.VideoSegment, error)
+
+	/*
+		DeleteSegment delete a segment
+
+			@param ctxt context.Context - execution context
+			@param id string - video segment ID
+	*/
+	DeleteSegment(ctxt context.Context, id string) error
 }
 
 // managerImpl implements Manager
@@ -273,10 +324,110 @@ func (m *managerImpl) UpdateVideoSource(ctxt context.Context, newSetting common.
 func (m *managerImpl) DeleteVideoSource(ctxt context.Context, id string) error {
 	return m.db.Transaction(func(tx *gorm.DB) error {
 		logTags := m.GetLogTagsForContext(ctxt)
+		if tmp := tx.Where("source = ?", id).Delete(&videoSegment{}); tmp.Error != nil {
+			return tmp.Error
+		}
 		if tmp := tx.Delete(&videoSource{VideoSource: common.VideoSource{ID: id}}); tmp.Error != nil {
-			return nil
+			return tmp.Error
 		}
 		log.WithFields(logTags).WithField("id", id).Info("Delete video source")
+		return nil
+	})
+}
+
+// =====================================================================================
+// Video segments
+
+func (m *managerImpl) RegisterSegment(
+	ctxt context.Context, sourceID string, segment hls.Segment,
+) (string, error) {
+	var newID string
+	return newID, m.db.Transaction(func(tx *gorm.DB) error {
+		logTags := m.GetLogTagsForContext(ctxt)
+
+		newID = ulid.Make().String()
+
+		newEntry := videoSegment{
+			VideoSegment: common.VideoSegment{
+				ID:       newID,
+				Segment:  segment,
+				SourceID: sourceID,
+			},
+		}
+
+		// Verify data
+		if err := m.validator.Struct(&newEntry); err != nil {
+			return err
+		}
+
+		// Insert entry
+		if tmp := tx.Create(&newEntry); tmp.Error != nil {
+			return tmp.Error
+		}
+
+		log.
+			WithFields(logTags).
+			WithField("source-id", sourceID).
+			WithField("id", newID).
+			WithField("segment", segment.String()).
+			Debug("Registered new video segment")
+		return nil
+	})
+}
+
+func (m *managerImpl) ListAllSegments(ctxt context.Context, sourceID string) (
+	[]common.VideoSegment, error,
+) {
+	var results []common.VideoSegment
+	return results, m.db.Transaction(func(tx *gorm.DB) error {
+		var entries []videoSegment
+		if tmp := tx.Where("source = ?", sourceID).Order("id").Find(&entries); tmp.Error != nil {
+			return tmp.Error
+		}
+		for _, entry := range entries {
+			results = append(results, entry.VideoSegment)
+		}
+		return nil
+	})
+}
+
+func (m *managerImpl) GetSegment(ctxt context.Context, id string) (common.VideoSegment, error) {
+	var result common.VideoSegment
+	return result, m.db.Transaction(func(tx *gorm.DB) error {
+		var entry videoSegment
+		if tmp := tx.Where("id = ?", id).First(&entry); tmp.Error != nil {
+			return tmp.Error
+		}
+		result = entry.VideoSegment
+		return nil
+	})
+}
+
+func (m *managerImpl) ListAllSegmentsAfterTime(
+	ctxt context.Context, sourceID string, timestamp time.Time,
+) ([]common.VideoSegment, error) {
+	var results []common.VideoSegment
+	return results, m.db.Transaction(func(tx *gorm.DB) error {
+		var entries []videoSegment
+		if tmp := tx.
+			Where("source = ?", sourceID).
+			Where("stop > ?", timestamp).
+			Order("id").
+			Find(&entries); tmp.Error != nil {
+			return tmp.Error
+		}
+		for _, entry := range entries {
+			results = append(results, entry.VideoSegment)
+		}
+		return nil
+	})
+}
+
+func (m *managerImpl) DeleteSegment(ctxt context.Context, id string) error {
+	return m.db.Transaction(func(tx *gorm.DB) error {
+		if tmp := tx.Where("id = ?", id).Delete(&videoSegment{}); tmp.Error != nil {
+			return tmp.Error
+		}
 		return nil
 	})
 }
