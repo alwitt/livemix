@@ -258,6 +258,34 @@ func TestDBManagerVideoSegment(t *testing.T) {
 		assert.Equal(segStop0, seg.EndTime)
 		assert.Equal(fmt.Sprintf("file:///%s", segment0), seg.URI)
 	}
+	{
+		targetTime := startTime.Add(segDuration).Add(segDuration / 2)
+		entries, err := uut.ListAllSegmentsBeforeTime(utCtxt, sourceID, targetTime)
+		assert.Nil(err)
+		assert.Len(entries, 1)
+		segMap := map[string]common.VideoSegment{}
+		for _, segment := range entries {
+			segMap[segment.ID] = segment
+		}
+		assert.Contains(segMap, segmentID0)
+		seg := segMap[segmentID0]
+		assert.Equal(segment0, seg.Name)
+		assert.Equal(segStart0, seg.StartTime)
+		assert.Equal(segStop0, seg.EndTime)
+		assert.Equal(fmt.Sprintf("file:///%s", segment0), seg.URI)
+	}
+	{
+		targetTime := startTime.Add(segDuration * 2).Add(segDuration / 2)
+		entries, err := uut.ListAllSegmentsBeforeTime(utCtxt, sourceID, targetTime)
+		assert.Nil(err)
+		assert.Len(entries, 2)
+		segMap := map[string]common.VideoSegment{}
+		for _, segment := range entries {
+			segMap[segment.ID] = segment
+		}
+		assert.Contains(segMap, segmentID0)
+		assert.Contains(segMap, segmentID1)
+	}
 
 	// Case 4: delete segment
 	assert.Nil(uut.DeleteSegment(utCtxt, segmentID1))

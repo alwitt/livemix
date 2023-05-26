@@ -124,7 +124,7 @@ type Manager interface {
 	GetSegment(ctxt context.Context, id string) (common.VideoSegment, error)
 
 	/*
-		ListAllSegmentsAfterTime fetch all video segments which have a stop timestamp are
+		ListAllSegmentsAfterTime fetch all video segments which have a stop timestamp
 		after a timestamp
 
 			@param ctxt context.Context - execution context
@@ -133,6 +133,19 @@ type Manager interface {
 			@returns list of segments
 	*/
 	ListAllSegmentsAfterTime(
+		ctxt context.Context, sourceID string, timestamp time.Time,
+	) ([]common.VideoSegment, error)
+
+	/*
+		ListAllSegmentsBeforeTime fetch all video segments which have a stop timestamp
+		before a timestamp
+
+			@param ctxt context.Context - execution context
+			@param sourceID string - video source ID
+			@param timestamp time.Time - timestamp to check against
+			@returns list of segments
+	*/
+	ListAllSegmentsBeforeTime(
 		ctxt context.Context, sourceID string, timestamp time.Time,
 	) ([]common.VideoSegment, error)
 
@@ -411,7 +424,27 @@ func (m *managerImpl) ListAllSegmentsAfterTime(
 		var entries []videoSegment
 		if tmp := tx.
 			Where("source = ?", sourceID).
-			Where("stop > ?", timestamp).
+			Where("stop >= ?", timestamp).
+			Order("id").
+			Find(&entries); tmp.Error != nil {
+			return tmp.Error
+		}
+		for _, entry := range entries {
+			results = append(results, entry.VideoSegment)
+		}
+		return nil
+	})
+}
+
+func (m *managerImpl) ListAllSegmentsBeforeTime(
+	ctxt context.Context, sourceID string, timestamp time.Time,
+) ([]common.VideoSegment, error) {
+	var results []common.VideoSegment
+	return results, m.db.Transaction(func(tx *gorm.DB) error {
+		var entries []videoSegment
+		if tmp := tx.
+			Where("source = ?", sourceID).
+			Where("stop <= ?", timestamp).
 			Order("id").
 			Find(&entries); tmp.Error != nil {
 			return tmp.Error
