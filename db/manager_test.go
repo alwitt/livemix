@@ -53,6 +53,10 @@ func TestDBManagerVideoSource(t *testing.T) {
 		assert.Nil(err)
 		assert.Equal(source1, entry.Name)
 		assert.Equal(getURI(source1), entry.PlaylistURI)
+		entry, err = uut.GetVideoSourceByName(utCtxt, source1)
+		assert.Nil(err)
+		assert.Equal(source1, entry.Name)
+		assert.Equal(getURI(source1), entry.PlaylistURI)
 	}
 
 	// Case 2: create another with same name
@@ -298,6 +302,48 @@ func TestDBManagerVideoSegment(t *testing.T) {
 		assert.Equal(segStart0, seg.StartTime)
 		assert.Equal(segStop0, seg.EndTime)
 		assert.Equal(fmt.Sprintf("file:///%s", segment0), seg.URI)
+	}
+
+	// Case 5: batch create segments
+	segments := []string{
+		fmt.Sprintf("seg-2-%s.ts", uuid.NewString()),
+		fmt.Sprintf("seg-3-%s.ts", uuid.NewString()),
+	}
+	segmentEntries := []hls.Segment{}
+	segStart := segStop1
+	segStop := segStart.Add(segDuration)
+	for _, segName := range segments {
+		segmentEntries = append(segmentEntries, hls.Segment{
+			Name:      segName,
+			StartTime: segStart,
+			EndTime:   segStop,
+			Length:    segDuration.Seconds(),
+			URI:       fmt.Sprintf("file:///%s", segName),
+		})
+		segStart = segStop
+		segStop = segStart.Add(segDuration)
+	}
+	segIDs, err := uut.BulkRegisterSegments(utCtxt, sourceID, segmentEntries)
+	assert.Nil(err)
+	assert.Len(segIDs, 2)
+	for _, segName := range segments {
+		_, ok := segIDs[segName]
+		assert.True(ok)
+	}
+
+	// Case 6: batch delete segments
+	{
+		deleteIDs := []string{}
+		for _, segID := range segIDs {
+			deleteIDs = append(deleteIDs, segID)
+		}
+		assert.Nil(uut.BulkDeleteSegment(utCtxt, deleteIDs))
+	}
+	{
+		entries, err := uut.ListAllSegments(utCtxt, sourceID)
+		assert.Nil(err)
+		assert.Len(entries, 1)
+		assert.Equal(segmentID0, entries[0].ID)
 	}
 
 	// Case #: delete video source
