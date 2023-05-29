@@ -54,20 +54,19 @@ after that.
 	@param source common.VideoSource - the HLS source to tracker
 	@param dbClient db.Manager - DB access client
 	@param trackingWindow time.Duration - see note
+	@returns new SourceHLSTracker
 */
 func NewSourceHLSTracker(
 	source common.VideoSource, dbClient db.PersistenceManager, trackingWindow time.Duration,
 ) (SourceHLSTracker, error) {
-	logTags := log.Fields{
-		"module":       "tracker",
-		"component":    "hls-source-tracker",
-		"instance":     source.Name,
-		"playlist-uri": source.PlaylistURI,
-	}
-
 	return &sourceHLSTrackerImpl{
 		Component: goutils.Component{
-			LogTags: logTags,
+			LogTags: log.Fields{
+				"module":       "tracker",
+				"component":    "hls-source-tracker",
+				"instance":     source.Name,
+				"playlist-uri": source.PlaylistURI,
+			},
 			LogTagModifiers: []goutils.LogMetadataModifier{
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
