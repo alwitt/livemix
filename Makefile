@@ -12,6 +12,10 @@ fix: .prepare ## Lint and fix vialoations
 	@go fmt ./...
 	@golangci-lint run --fix ./...
 
+.PHONY: mock
+mock: .prepare ## Generate test mock interfaces
+	@mockery --dir db --name PersistenceManager
+
 .PHONY: test
 test: .prepare ## Run unittests
 	@go test --count 1 -timeout 30s -short ./...
