@@ -14,7 +14,7 @@ type Segment struct {
 	// StartTime when segment was first seen
 	StartTime time.Time `json:"start" validate:"required" gorm:"column:start;not null"`
 	// EndTime end of segment timestamp
-	EndTime time.Time `json:"end" validate:"required" gorm:"column:stop;not null"`
+	EndTime time.Time `json:"end" validate:"required" gorm:"column:end;not null;index:segment_time_index"`
 	// Length segment length in time
 	Length float64 `json:"length" validate:"required" gorm:"column:length;not null"`
 	// URI video segment storage URI

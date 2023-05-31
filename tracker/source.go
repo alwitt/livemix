@@ -13,7 +13,7 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-// SourceHLSTracker monitor status of a single HLS video source
+// SourceHLSTracker track status of a single HLS video source based on its playlist
 type SourceHLSTracker interface {
 	/*
 		Update update status of the HLS source based on information in the current playlist.

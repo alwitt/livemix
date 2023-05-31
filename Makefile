@@ -15,6 +15,7 @@ fix: .prepare ## Lint and fix vialoations
 .PHONY: mock
 mock: .prepare ## Generate test mock interfaces
 	@mockery --dir db --name PersistenceManager
+	@mockery --dir utils --name SegmentReader
 
 .PHONY: test
 test: .prepare ## Run unittests
@@ -22,7 +23,7 @@ test: .prepare ## Run unittests
 
 .PHONY: one-test
 one-test: .prepare ## Run one unittest
-	go test --count 1 -v -timeout 30s -run ^$(FILTER) github.com/alwitt/livemix/...
+	@go test --count 1 -v -timeout 30s -run ^$(FILTER) github.com/alwitt/livemix/...
 
 .PHONY: build
 build: lint ## Build the application

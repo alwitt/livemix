@@ -468,7 +468,7 @@ func (m *persistenceManagerImpl) ListAllSegments(ctxt context.Context, sourceID 
 	var results []common.VideoSegment
 	return results, m.db.Transaction(func(tx *gorm.DB) error {
 		var entries []videoSegment
-		if tmp := tx.Where("source = ?", sourceID).Order("id").Find(&entries); tmp.Error != nil {
+		if tmp := tx.Where("source = ?", sourceID).Order("end").Find(&entries); tmp.Error != nil {
 			return tmp.Error
 		}
 		for _, entry := range entries {
@@ -498,8 +498,8 @@ func (m *persistenceManagerImpl) ListAllSegmentsAfterTime(
 		var entries []videoSegment
 		if tmp := tx.
 			Where("source = ?", sourceID).
-			Where("stop >= ?", timestamp).
-			Order("id").
+			Where("end >= ?", timestamp).
+			Order("end").
 			Find(&entries); tmp.Error != nil {
 			return tmp.Error
 		}
@@ -518,8 +518,8 @@ func (m *persistenceManagerImpl) ListAllSegmentsBeforeTime(
 		var entries []videoSegment
 		if tmp := tx.
 			Where("source = ?", sourceID).
-			Where("stop <= ?", timestamp).
-			Order("id").
+			Where("end <= ?", timestamp).
+			Order("end").
 			Find(&entries); tmp.Error != nil {
 			return tmp.Error
 		}

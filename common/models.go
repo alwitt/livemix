@@ -26,3 +26,9 @@ type VideoSegment struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+// VideoSegmentWithData a single HLS TS segment with its data
+type VideoSegmentWithData struct {
+	VideoSegment
+	Content []byte
+}

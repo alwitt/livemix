@@ -31,6 +31,14 @@ type SourceHLSSegmentCache interface {
 	PurgeSegments(ctxt context.Context, segmentIDs []string) error
 
 	/*
+		ListCachedSegments fetch currently cached segments
+
+			@param ctxt context.Context - execution context
+			@returns list of cached segment IDs
+	*/
+	ListCachedSegments(ctxt context.Context) ([]string, error)
+
+	/*
 		ListMissingSegments given a list of segment IDs, return which IDs are unknown
 
 			@param ctxt context.Context - execution context
@@ -100,6 +108,18 @@ func (c *sourceHLSSegmentCacheImpl) PurgeSegments(
 	}
 
 	return nil
+}
+
+func (c *sourceHLSSegmentCacheImpl) ListCachedSegments(ctxt context.Context) ([]string, error) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	result := []string{}
+	for segmentID := range c.cache {
+		result = append(result, segmentID)
+	}
+
+	return result, nil
 }
 
 func (c *sourceHLSSegmentCacheImpl) ListMissingSegments(
