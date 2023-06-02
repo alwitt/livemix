@@ -50,7 +50,7 @@ type sourceHLSMonitorImpl struct {
 	goutils.Component
 	tracker        SourceHLSTracker
 	trackingWindow time.Duration
-	cache          SourceHLSSegmentCache
+	cache          utils.VideoSegmentCache
 	segmentReader  utils.SegmentReader
 	ongoingReads   map[string]segmentReadBatch
 	forwardSegment SegmentForwardCallback
@@ -76,7 +76,7 @@ after that.
 	@param source common.VideoSource - the HLS source to tracker
 	@param dbClient db.Manager - DB access client
 	@param trackingWindow time.Duration - see note
-	@param segmentCache SourceHLSSegmentCache - HLS video segment cache
+	@param segmentCache utils.VideoSegmentCache - HLS video segment cache
 	@param reader utils.SegmentReader - HLS video segment data reader
 	@param forwardSegment SegmentForwardCallback - callback to send out read video segments
 	@returns new SourceHLSMonitor
@@ -86,7 +86,7 @@ func NewSourceHLSMonitor(
 	source common.VideoSource,
 	dbClient db.PersistenceManager,
 	trackingWindow time.Duration,
-	segmentCache SourceHLSSegmentCache,
+	segmentCache utils.VideoSegmentCache,
 	reader utils.SegmentReader,
 	forwardSegment SegmentForwardCallback,
 ) (SourceHLSMonitor, error) {

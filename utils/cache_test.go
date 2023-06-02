@@ -1,4 +1,4 @@
-package tracker
+package utils
 
 import (
 	"context"
@@ -14,7 +14,7 @@ func TestLocalSegmentCacheBasicSanity(t *testing.T) {
 
 	utCtxt := context.Background()
 
-	uut, err := NewLocalSourceHLSSegmentCache(utCtxt, time.Minute)
+	uut, err := NewLocalVideoSegmentCache(utCtxt, time.Minute)
 	assert.Nil(err)
 
 	// Case 0: no segments cached
@@ -70,7 +70,7 @@ func TestLocalSegmentCacheManualCachePurgeTrigger(t *testing.T) {
 
 	utCtxt := context.Background()
 
-	uut, err := NewLocalSourceHLSSegmentCache(utCtxt, time.Minute)
+	uut, err := NewLocalVideoSegmentCache(utCtxt, time.Minute)
 	assert.Nil(err)
 
 	startTime := time.Now().UTC()
@@ -127,7 +127,7 @@ func TestLocalSegmentCacheAutoCachePurge(t *testing.T) {
 
 	utCtxt := context.Background()
 
-	uut, err := NewLocalSourceHLSSegmentCache(utCtxt, time.Millisecond*50)
+	uut, err := NewLocalVideoSegmentCache(utCtxt, time.Millisecond*50)
 	assert.Nil(err)
 
 	// Setup test entries

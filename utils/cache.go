@@ -1,4 +1,4 @@
-package tracker
+package utils
 
 import (
 	"context"
@@ -10,9 +10,8 @@ import (
 	"github.com/apex/log"
 )
 
-// SourceHLSSegmentCache video segment cache for a single HLS video source updated
-// in sync with SourceHLSTracker
-type SourceHLSSegmentCache interface {
+// VideoSegmentCache video segment cache
+type VideoSegmentCache interface {
 	/*
 		CacheSegment add video segment to cache
 
@@ -69,16 +68,16 @@ type inProcessSegmentCacheImpl struct {
 }
 
 /*
-NewLocalSourceHLSSegmentCache define new local in process single HLS source video segment cache
+NewLocalVideoSegmentCache define new local in process single HLS source video segment cache
 
 	@param parentContext context.Context - parent context from which a worker context is defined
 		for the data retention enforcement process
 	@param retentionCheckInterval time.Duration - cache entry retention enforce interval
 	@returns new SourceHLSSegmentCache
 */
-func NewLocalSourceHLSSegmentCache(
+func NewLocalVideoSegmentCache(
 	parentContext context.Context, retentionCheckInterval time.Duration,
-) (SourceHLSSegmentCache, error) {
+) (VideoSegmentCache, error) {
 	logTags := log.Fields{
 		"module":    "utils",
 		"component": "video-segment-cache",
