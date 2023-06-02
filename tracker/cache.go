@@ -31,23 +31,6 @@ type SourceHLSSegmentCache interface {
 	PurgeSegments(ctxt context.Context, segmentIDs []string) error
 
 	/*
-		ListCachedSegments fetch currently cached segments
-
-			@param ctxt context.Context - execution context
-			@returns list of cached segment IDs
-	*/
-	ListCachedSegments(ctxt context.Context) ([]string, error)
-
-	/*
-		ListMissingSegments given a list of segment IDs, return which IDs are unknown
-
-			@param ctxt context.Context - execution context
-			@param expectedSegmentIDs []string - list of segment IDs to check
-			@returns list of unknown IDs
-	*/
-	ListMissingSegments(ctxt context.Context, expectedSegmentIDs []string) ([]string, error)
-
-	/*
 		GetSegment fetch video segment from cache
 
 			@param ctxt context.Context - execution context
@@ -55,23 +38,33 @@ type SourceHLSSegmentCache interface {
 			@returns MPEG-TS file content
 	*/
 	GetSegment(ctxt context.Context, segmentID string) ([]byte, error)
+
+	/*
+		GetSegments fetch group of video segments from cache. The returned entries are what is
+		currently available within the cache.
+
+			@param ctxt context.Context - execution context
+			@param segmentIDs []string - segment reference IDs
+			@returns set of MPEG-TS file content
+	*/
+	GetSegments(ctxt context.Context, segmentIDs []string) (map[string][]byte, error)
 }
 
-// sourceHLSSegmentCacheImpl implements SourceHLSSegmentCache
-type sourceHLSSegmentCacheImpl struct {
+// inProcessSegmentCacheImpl implements SourceHLSSegmentCache
+type inProcessSegmentCacheImpl struct {
 	goutils.Component
 	cache map[string][]byte
 	lock  sync.RWMutex
 }
 
 /*
-NewSourceHLSSegmentCache define new single HLS source video segment cache
+NewLocalSourceHLSSegmentCache define new local in process single HLS source video segment cache
 
 	@param source common.VideoSource - the HLS source to tracker
 	@returns new SourceHLSSegmentCache
 */
-func NewSourceHLSSegmentCache(source common.VideoSource) (SourceHLSSegmentCache, error) {
-	return &sourceHLSSegmentCacheImpl{
+func NewLocalSourceHLSSegmentCache(source common.VideoSource) (SourceHLSSegmentCache, error) {
+	return &inProcessSegmentCacheImpl{
 		Component: goutils.Component{
 			LogTags: log.Fields{
 				"module":       "tracker",
@@ -88,7 +81,7 @@ func NewSourceHLSSegmentCache(source common.VideoSource) (SourceHLSSegmentCache,
 	}, nil
 }
 
-func (c *sourceHLSSegmentCacheImpl) CacheSegment(
+func (c *inProcessSegmentCacheImpl) CacheSegment(
 	ctxt context.Context, segmentID string, content []byte,
 ) error {
 	c.lock.Lock()
@@ -97,7 +90,7 @@ func (c *sourceHLSSegmentCacheImpl) CacheSegment(
 	return nil
 }
 
-func (c *sourceHLSSegmentCacheImpl) PurgeSegments(
+func (c *inProcessSegmentCacheImpl) PurgeSegments(
 	ctxt context.Context, segmentIDs []string,
 ) error {
 	c.lock.Lock()
@@ -110,35 +103,7 @@ func (c *sourceHLSSegmentCacheImpl) PurgeSegments(
 	return nil
 }
 
-func (c *sourceHLSSegmentCacheImpl) ListCachedSegments(ctxt context.Context) ([]string, error) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	result := []string{}
-	for segmentID := range c.cache {
-		result = append(result, segmentID)
-	}
-
-	return result, nil
-}
-
-func (c *sourceHLSSegmentCacheImpl) ListMissingSegments(
-	ctxt context.Context, expectedSegmentIDs []string,
-) ([]string, error) {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-
-	missing := []string{}
-	for _, segmentID := range expectedSegmentIDs {
-		if _, ok := c.cache[segmentID]; !ok {
-			missing = append(missing, segmentID)
-		}
-	}
-
-	return missing, nil
-}
-
-func (c *sourceHLSSegmentCacheImpl) GetSegment(
+func (c *inProcessSegmentCacheImpl) GetSegment(
 	ctxt context.Context, segmentID string,
 ) ([]byte, error) {
 	c.lock.RLock()
@@ -148,4 +113,20 @@ func (c *sourceHLSSegmentCacheImpl) GetSegment(
 		return nil, fmt.Errorf("segment ID '%s' is unknown", segmentID)
 	}
 	return content, nil
+}
+
+func (c *inProcessSegmentCacheImpl) GetSegments(
+	ctxt context.Context, segmentIDs []string,
+) (map[string][]byte, error) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	result := map[string][]byte{}
+	for _, segmentID := range segmentIDs {
+		if segment, ok := c.cache[segmentID]; ok {
+			result[segmentID] = segment
+		}
+	}
+
+	return result, nil
 }

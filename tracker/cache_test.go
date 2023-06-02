@@ -20,7 +20,7 @@ func TestSegmentCacheBasicSanity(t *testing.T) {
 	}
 	testSource.PlaylistURI = fmt.Sprintf("file:///%s", testSource.Name)
 
-	uut, err := tracker.NewSourceHLSSegmentCache(testSource)
+	uut, err := tracker.NewLocalSourceHLSSegmentCache(testSource)
 	assert.Nil(err)
 
 	utCtxt := context.Background()
@@ -29,10 +29,6 @@ func TestSegmentCacheBasicSanity(t *testing.T) {
 	{
 		_, err := uut.GetSegment(utCtxt, uuid.NewString())
 		assert.NotNil(err)
-		checkIDs := []string{uuid.NewString(), uuid.NewString()}
-		missing, err := uut.ListMissingSegments(utCtxt, checkIDs)
-		assert.Nil(err)
-		assert.EqualValues(checkIDs, missing)
 	}
 
 	// Case 1: add segment
@@ -43,11 +39,8 @@ func TestSegmentCacheBasicSanity(t *testing.T) {
 		content, err := uut.GetSegment(utCtxt, segment0)
 		assert.Nil(err)
 		assert.Equal(content0, content)
-		checkIDs := []string{segment0, uuid.NewString()}
-		missing, err := uut.ListMissingSegments(utCtxt, checkIDs)
-		assert.Nil(err)
-		assert.Len(missing, 1)
-		assert.Equal(checkIDs[1], missing[0])
+		_, err = uut.GetSegment(utCtxt, uuid.NewString())
+		assert.NotNil(err)
 	}
 
 	// Case 2: update segment content
@@ -73,9 +66,9 @@ func TestSegmentCacheBasicSanity(t *testing.T) {
 	assert.Nil(uut.PurgeSegments(utCtxt, []string{segment0}))
 	{
 		checkIDs := []string{segment0, segment2}
-		missing, err := uut.ListMissingSegments(utCtxt, checkIDs)
+		cached, err := uut.GetSegments(utCtxt, checkIDs)
 		assert.Nil(err)
-		assert.Len(missing, 1)
-		assert.Equal(segment0, missing[0])
+		assert.Len(cached, 1)
+		assert.Contains(cached, segment2)
 	}
 }
