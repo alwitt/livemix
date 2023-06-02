@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/alwitt/goutils"
-	"github.com/alwitt/livemix/common"
 	"github.com/apex/log"
 )
 
@@ -19,8 +19,9 @@ type SourceHLSSegmentCache interface {
 			@param ctxt context.Context - execution context
 			@param segmentID string - segment reference ID
 			@param content []byte - byte array containing content of the MPEG-TS file
+			@param ttl time.Duration - data retention in seconds before the entry expires
 	*/
-	CacheSegment(ctxt context.Context, segmentID string, content []byte) error
+	CacheSegment(ctxt context.Context, segmentID string, content []byte, ttl time.Duration) error
 
 	/*
 		PurgeSegment delete video segment from cache
@@ -50,43 +51,81 @@ type SourceHLSSegmentCache interface {
 	GetSegments(ctxt context.Context, segmentIDs []string) (map[string][]byte, error)
 }
 
+// inProcessCacheEntry wrapper structure holding content with retention support
+type inProcessCacheEntry struct {
+	expireAt time.Time
+	content  []byte
+}
+
 // inProcessSegmentCacheImpl implements SourceHLSSegmentCache
 type inProcessSegmentCacheImpl struct {
 	goutils.Component
-	cache map[string][]byte
-	lock  sync.RWMutex
+	cache                      map[string]inProcessCacheEntry
+	lock                       sync.RWMutex
+	retentionCheckTimer        goutils.IntervalTimer
+	retentionExecContext       context.Context
+	retentionExecContextCancel context.CancelFunc
+	wg                         sync.WaitGroup
 }
 
 /*
 NewLocalSourceHLSSegmentCache define new local in process single HLS source video segment cache
 
-	@param source common.VideoSource - the HLS source to tracker
+	@param parentContext context.Context - parent context from which a worker context is defined
+		for the data retention enforcement process
+	@param retentionCheckInterval time.Duration - cache entry retention enforce interval
 	@returns new SourceHLSSegmentCache
 */
-func NewLocalSourceHLSSegmentCache(source common.VideoSource) (SourceHLSSegmentCache, error) {
-	return &inProcessSegmentCacheImpl{
+func NewLocalSourceHLSSegmentCache(
+	parentContext context.Context, retentionCheckInterval time.Duration,
+) (SourceHLSSegmentCache, error) {
+	logTags := log.Fields{
+		"module":    "utils",
+		"component": "video-segment-cache",
+		"instance":  "in-process",
+	}
+
+	workerCtxt, cancel := context.WithCancel(parentContext)
+
+	instance := &inProcessSegmentCacheImpl{
 		Component: goutils.Component{
-			LogTags: log.Fields{
-				"module":       "tracker",
-				"component":    "hls-source-segment-cache",
-				"instance":     source.Name,
-				"playlist-uri": source.PlaylistURI,
-			},
+			LogTags: logTags,
 			LogTagModifiers: []goutils.LogMetadataModifier{
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
 		},
-		cache: make(map[string][]byte),
-		lock:  sync.RWMutex{},
-	}, nil
+		cache:                      make(map[string]inProcessCacheEntry),
+		lock:                       sync.RWMutex{},
+		retentionExecContext:       workerCtxt,
+		retentionExecContextCancel: cancel,
+		wg:                         sync.WaitGroup{},
+	}
+
+	timer, err := goutils.GetIntervalTimerInstance(parentContext, &instance.wg, logTags)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Unable to define support timer")
+		return nil, err
+	}
+	instance.retentionCheckTimer = timer
+
+	// Start interval timer to trigger the cache retention enforcement logic
+	if err := timer.Start(retentionCheckInterval, func() error {
+		currentTime := time.Now().UTC()
+		return instance.purgeExpiredEntry(workerCtxt, currentTime)
+	}, false); err != nil {
+		log.WithError(err).WithFields(logTags).Error("Unable to start support timer")
+		return nil, err
+	}
+
+	return instance, nil
 }
 
 func (c *inProcessSegmentCacheImpl) CacheSegment(
-	ctxt context.Context, segmentID string, content []byte,
+	ctxt context.Context, segmentID string, content []byte, ttl time.Duration,
 ) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	c.cache[segmentID] = content
+	c.cache[segmentID] = inProcessCacheEntry{expireAt: time.Now().UTC().Add(ttl), content: content}
 	return nil
 }
 
@@ -112,7 +151,7 @@ func (c *inProcessSegmentCacheImpl) GetSegment(
 	if !ok {
 		return nil, fmt.Errorf("segment ID '%s' is unknown", segmentID)
 	}
-	return content, nil
+	return content.content, nil
 }
 
 func (c *inProcessSegmentCacheImpl) GetSegments(
@@ -124,9 +163,32 @@ func (c *inProcessSegmentCacheImpl) GetSegments(
 	result := map[string][]byte{}
 	for _, segmentID := range segmentIDs {
 		if segment, ok := c.cache[segmentID]; ok {
-			result[segmentID] = segment
+			result[segmentID] = segment.content
 		}
 	}
 
 	return result, nil
+}
+
+// purgeExpiredEntry purge expired cache entries
+func (c *inProcessSegmentCacheImpl) purgeExpiredEntry(
+	ctxt context.Context, currentTime time.Time,
+) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	// Check for expired entries
+	purgeIDs := []string{}
+	for segmentID, entry := range c.cache {
+		if entry.expireAt.Before(currentTime) {
+			purgeIDs = append(purgeIDs, segmentID)
+		}
+	}
+
+	// Purge expired entries
+	for _, purgeID := range purgeIDs {
+		delete(c.cache, purgeID)
+	}
+
+	return nil
 }

@@ -49,6 +49,7 @@ type segmentReadBatch struct {
 type sourceHLSMonitorImpl struct {
 	goutils.Component
 	tracker        SourceHLSTracker
+	trackingWindow time.Duration
 	cache          SourceHLSSegmentCache
 	segmentReader  utils.SegmentReader
 	ongoingReads   map[string]segmentReadBatch
@@ -125,6 +126,7 @@ func NewSourceHLSMonitor(
 			},
 		},
 		tracker:          tracker,
+		trackingWindow:   trackingWindow,
 		cache:            segmentCache,
 		segmentReader:    reader,
 		ongoingReads:     make(map[string]segmentReadBatch),
@@ -269,7 +271,7 @@ func (m *sourceHLSMonitorImpl) ReportSegmentRead(
 	logTags := m.GetLogTagsForContext(m.workerContext)
 
 	// Update the cache with read segment content
-	if err := m.cache.CacheSegment(ctxt, segmentID, content); err != nil {
+	if err := m.cache.CacheSegment(ctxt, segmentID, content, m.trackingWindow); err != nil {
 		log.
 			WithError(err).
 			WithFields(logTags).
