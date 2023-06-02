@@ -111,7 +111,8 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 		playlist0 := definePlaylist(
 			uuid.NewString(), testSource.PlaylistURI, currentTime, segmentNames0,
 		)
-		assert.NotNil(uut.Update(utCtxt, playlist0, playlist0.CreatedAt))
+		_, err := uut.Update(utCtxt, playlist0, playlist0.CreatedAt)
+		assert.NotNil(err)
 	}
 
 	// Case 1: registering new segments, with no previous segments
@@ -138,13 +139,20 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 			assert.EqualValues(playlist0.Segments, segList)
 		}).Return(segmentIDs0, nil).Once()
 		mockDB.On(
-			"ListAllSegmentsBeforeTime",
+			"ListAllSegments",
 			mock.AnythingOfType("*context.emptyCtx"),
 			testSource.ID,
-			playlist0.CreatedAt,
 		).Return(defineSegmentList(currentTime, segmentIDs0, segmentNames0), nil).Once()
 
-		assert.Nil(uut.Update(utCtxt, playlist0, playlist0.CreatedAt))
+		newSegs, err := uut.Update(utCtxt, playlist0, playlist0.CreatedAt)
+		assert.Nil(err)
+		assert.Len(newSegs, 3)
+		// Verify the returned segments
+		for _, oneSeg := range newSegs {
+			segID, ok := segmentIDs0[oneSeg.Name]
+			assert.True(ok)
+			assert.Equal(segID, oneSeg.ID)
+		}
 	}
 
 	// Case 2: registering new segments, with previous segments
@@ -183,13 +191,20 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 			assert.EqualValues(playlist1.Segments[3], segList[0])
 		}).Return(map[string]string{segmentName: segmentIDs1[segmentName]}, nil).Once()
 		mockDB.On(
-			"ListAllSegmentsBeforeTime",
+			"ListAllSegments",
 			mock.AnythingOfType("*context.emptyCtx"),
 			testSource.ID,
-			playlist1.CreatedAt,
 		).Return(defineSegmentList(currentTime, segmentIDs1, segmentNames1), nil).Once()
 
-		assert.Nil(uut.Update(utCtxt, playlist1, playlist1.CreatedAt))
+		newSegs, err := uut.Update(utCtxt, playlist1, playlist1.CreatedAt)
+		assert.Nil(err)
+		assert.Len(newSegs, 1)
+		// Verify the returned segments
+		for _, oneSeg := range newSegs {
+			segID, ok := segmentIDs1[oneSeg.Name]
+			assert.True(ok)
+			assert.Equal(segID, oneSeg.ID)
+		}
 	}
 
 	// Case 3: registering new segments, with previous segments, oldest segment timeout
@@ -228,11 +243,10 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 			assert.EqualValues(playlist2.Segments[4], segList[0])
 		}).Return(map[string]string{segmentName: segmentIDs2[segmentName]}, nil).Once()
 		mockDB.On(
-			"ListAllSegmentsBeforeTime",
+			"ListAllSegments",
 			mock.AnythingOfType("*context.emptyCtx"),
 			testSource.ID,
-			playlist2.CreatedAt,
-		).Return(defineSegmentList(currentTime, segmentIDs2, segmentNames1), nil).Once()
+		).Return(defineSegmentList(currentTime, segmentIDs2, segmentNames2), nil).Once()
 		mockDB.On(
 			"BulkDeleteSegment",
 			mock.AnythingOfType("*context.emptyCtx"),
@@ -243,6 +257,14 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 			assert.Equal(segmentIDs0[segmentNames0[0]], toDeleteIDs[0])
 		}).Return(nil).Once()
 
-		assert.Nil(uut.Update(utCtxt, playlist2, playlist2.CreatedAt))
+		newSegs, err := uut.Update(utCtxt, playlist2, playlist2.CreatedAt)
+		assert.Nil(err)
+		assert.Len(newSegs, 1)
+		// Verify the returned segments
+		for _, oneSeg := range newSegs {
+			segID, ok := segmentIDs2[oneSeg.Name]
+			assert.True(ok)
+			assert.Equal(segID, oneSeg.ID)
+		}
 	}
 }

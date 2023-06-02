@@ -23,8 +23,11 @@ type SourceHLSTracker interface {
 			@param ctxt context.Context - execution context
 			@param currentPlaylist hls.Playlist - the current playlist for the video source
 			@param timestamp time.Time - timestamp of when this update is called
+			@returns the set of new segment described in the playlist
 	*/
-	Update(ctxt context.Context, currentPlaylist hls.Playlist, timestamp time.Time) error
+	Update(
+		ctxt context.Context, currentPlaylist hls.Playlist, timestamp time.Time,
+	) ([]common.VideoSegment, error)
 
 	/*
 		GetTrackedSegments fetch the list of tracked segments
@@ -80,12 +83,12 @@ func NewSourceHLSTracker(
 
 func (t *sourceHLSTrackerImpl) Update(
 	ctxt context.Context, currentPlaylist hls.Playlist, timestamp time.Time,
-) error {
+) ([]common.VideoSegment, error) {
 	logTags := t.GetLogTagsForContext(ctxt)
 
 	// Verify the playlist came from the expected source
 	if currentPlaylist.Name != t.source.Name || currentPlaylist.URI.String() != t.source.PlaylistURI {
-		return fmt.Errorf(
+		return nil, fmt.Errorf(
 			"playlist not from tracked HLS source: %s =/= %s",
 			currentPlaylist.URI.String(),
 			t.source.PlaylistURI,
@@ -96,32 +99,40 @@ func (t *sourceHLSTrackerImpl) Update(
 	allSegments, err := t.dbClient.ListAllSegmentsBeforeTime(ctxt, t.source.ID, timestamp)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to fetch associated segments")
-		return err
+		return nil, err
 	}
-	segmentByName := map[string]common.VideoSegment{}
+	allSegmentsByName := map[string]common.VideoSegment{}
 	for _, oneSegment := range allSegments {
-		segmentByName[oneSegment.Name] = oneSegment
+		allSegmentsByName[oneSegment.Name] = oneSegment
 	}
 
 	// Add new segments to DB
 	newSegments := []hls.Segment{}
 	for _, newSegment := range currentPlaylist.Segments {
-		if _, ok := segmentByName[newSegment.Name]; ok {
+		if _, ok := allSegmentsByName[newSegment.Name]; ok {
 			continue
 		}
 		newSegments = append(newSegments, newSegment)
 		log.WithFields(logTags).WithField("segment", newSegment.String()).Debug("Observed new segment")
 	}
-	if _, err = t.dbClient.BulkRegisterSegments(ctxt, t.source.ID, newSegments); err != nil {
+	newSegmentIDs, err := t.dbClient.BulkRegisterSegments(ctxt, t.source.ID, newSegments)
+	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to record new segments")
-		return err
+		return nil, err
 	}
 
 	// Get all currently known segments again
-	allSegments, err = t.dbClient.ListAllSegmentsBeforeTime(ctxt, t.source.ID, timestamp)
+	allSegments, err = t.dbClient.ListAllSegments(ctxt, t.source.ID)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to fetch associated segments")
-		return err
+		return nil, err
+	}
+	// Put aside the entries for the new segments to return
+	newSegmentsComplete := []common.VideoSegment{}
+	for _, oneSegment := range allSegments {
+		if _, ok := newSegmentIDs[oneSegment.Name]; ok {
+			newSegmentsComplete = append(newSegmentsComplete, oneSegment)
+		}
 	}
 
 	// Remove segments older than the tracking window
@@ -140,11 +151,11 @@ func (t *sourceHLSTrackerImpl) Update(
 	if len(deleteSegments) > 0 {
 		if err := t.dbClient.BulkDeleteSegment(ctxt, deleteSegments); err != nil {
 			log.WithError(err).WithFields(logTags).Error("Failed to drop expired segment")
-			return err
+			return nil, err
 		}
 	}
 
-	return nil
+	return newSegmentsComplete, nil
 }
 
 func (t *sourceHLSTrackerImpl) GetTrackedSegments(ctxt context.Context) ([]common.VideoSegment, error) {

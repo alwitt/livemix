@@ -204,52 +204,21 @@ func (m *sourceHLSMonitorImpl) coreUpdate(
 	logTags := m.GetLogTagsForContext(m.workerContext)
 
 	// Update through the tracker
-	if err := m.tracker.Update(m.workerContext, currentPlaylist, timestamp); err != nil {
+	newSegments, err := m.tracker.Update(m.workerContext, currentPlaylist, timestamp)
+	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Source tracker update failed")
 		return err
 	}
-
-	// Figure out what video segments are missing and need to be read
-	trackedSegments, err := m.tracker.GetTrackedSegments(m.workerContext)
-	if err != nil {
-		log.WithError(err).WithFields(logTags).Error("Could not get tracked segment list from tracker")
-		return err
-	}
-
-	// Check cache to see which segment is missing
-	trackedSegmentIDs := []string{}
-	for _, oneSegment := range trackedSegments {
-		trackedSegmentIDs = append(trackedSegmentIDs, oneSegment.ID)
-	}
-	missingSegments, err := m.cache.ListMissingSegments(m.workerContext, trackedSegmentIDs)
-	if err != nil {
-		log.
-			WithError(err).
-			WithFields(logTags).
-			Error("Could not check segment cache for missing segments")
-		return err
-	}
-
-	if len(missingSegments) == 0 {
+	if len(newSegments) == 0 {
 		log.WithFields(logTags).Info("The playlist did not define any new segments")
 		return nil
 	}
 
-	missingSegmentByID := map[string]bool{}
-	for _, segmentID := range missingSegments {
-		missingSegmentByID[segmentID] = true
-	}
-
-	// For the missing segments, define a new read batch
+	// For the new segments, define a new read batch
 	readBatchID := ulid.Make().String()
 	newReadBatch := segmentReadBatch{
-		targetSegments: make([]common.VideoSegment, 0, len(missingSegments)),
+		targetSegments: newSegments,
 		readContent:    make(map[string][]byte),
-	}
-	for _, segment := range trackedSegments {
-		if _, ok := missingSegmentByID[segment.ID]; ok {
-			newReadBatch.targetSegments = append(newReadBatch.targetSegments, segment)
-		}
 	}
 
 	// Callback function for the segment reader to pass back the segment
@@ -281,30 +250,6 @@ func (m *sourceHLSMonitorImpl) coreUpdate(
 	}
 	m.ongoingReads[readBatchID] = newReadBatch
 	log.WithFields(logTags).WithField("read-batch-id", readBatchID).Debug("Started new read batch")
-
-	// Determine which segments need to be deleted from the cache
-	cachedSegments, err := m.cache.ListCachedSegments(m.workerContext)
-	if err != nil {
-		log.WithError(err).WithFields(logTags).Error("Failed to fetch cached segment list")
-		return err
-	}
-	// Any segment that is not being watch by the tracker is to be purged from cache
-	purgeSegments := []string{}
-	{
-		trackedSegmentIDsMap := map[string]string{}
-		for _, segmentID := range trackedSegmentIDs {
-			trackedSegmentIDsMap[segmentID] = segmentID
-		}
-		for _, segmentID := range cachedSegments {
-			if _, ok := trackedSegmentIDsMap[segmentID]; !ok {
-				purgeSegments = append(purgeSegments, segmentID)
-			}
-		}
-	}
-	if err := m.cache.PurgeSegments(m.workerContext, purgeSegments); err != nil {
-		log.WithError(err).WithFields(logTags).Error("Cache purge failed")
-		return err
-	}
 
 	return nil
 }
