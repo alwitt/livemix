@@ -31,13 +31,13 @@ type VideoSegmentCache interface {
 	PurgeSegments(ctxt context.Context, segmentIDs []string) error
 
 	/*
-		GetSegment fetch video segment from cache
+		GetLiveStreamSegment fetch video segment from cache
 
 			@param ctxt context.Context - execution context
 			@param segmentID string - segment reference ID
 			@returns MPEG-TS file content
 	*/
-	GetSegment(ctxt context.Context, segmentID string) ([]byte, error)
+	GetLiveStreamSegment(ctxt context.Context, segmentID string) ([]byte, error)
 
 	/*
 		GetSegments fetch group of video segments from cache. The returned entries are what is
@@ -141,7 +141,7 @@ func (c *inProcessSegmentCacheImpl) PurgeSegments(
 	return nil
 }
 
-func (c *inProcessSegmentCacheImpl) GetSegment(
+func (c *inProcessSegmentCacheImpl) GetLiveStreamSegment(
 	ctxt context.Context, segmentID string,
 ) ([]byte, error) {
 	c.lock.RLock()

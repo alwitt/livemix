@@ -123,13 +123,13 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 
 		// Setup mocks
 		mockDB.On(
-			"ListAllSegmentsBeforeTime",
+			"ListAllLiveStreamSegmentsBeforeTime",
 			mock.AnythingOfType("*context.emptyCtx"),
 			testSource.ID,
 			playlist0.CreatedAt,
 		).Return([]common.VideoSegment{}, nil).Once()
 		mockDB.On(
-			"BulkRegisterSegments",
+			"BulkRegisterLiveStreamSegments",
 			mock.AnythingOfType("*context.emptyCtx"),
 			testSource.ID,
 			mock.AnythingOfType("[]hls.Segment"),
@@ -139,7 +139,7 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 			assert.EqualValues(playlist0.Segments, segList)
 		}).Return(segmentIDs0, nil).Once()
 		mockDB.On(
-			"ListAllSegments",
+			"ListAllLiveStreamSegments",
 			mock.AnythingOfType("*context.emptyCtx"),
 			testSource.ID,
 		).Return(defineSegmentList(currentTime, segmentIDs0, segmentNames0), nil).Once()
@@ -175,13 +175,13 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 
 		// Setup mocks
 		mockDB.On(
-			"ListAllSegmentsBeforeTime",
+			"ListAllLiveStreamSegmentsBeforeTime",
 			mock.AnythingOfType("*context.emptyCtx"),
 			testSource.ID,
 			playlist1.CreatedAt,
 		).Return(defineSegmentList(currentTime, segmentIDs0, segmentNames0), nil).Once()
 		mockDB.On(
-			"BulkRegisterSegments",
+			"BulkRegisterLiveStreamSegments",
 			mock.AnythingOfType("*context.emptyCtx"),
 			testSource.ID,
 			mock.AnythingOfType("[]hls.Segment"),
@@ -191,7 +191,7 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 			assert.EqualValues(playlist1.Segments[3], segList[0])
 		}).Return(map[string]string{segmentName: segmentIDs1[segmentName]}, nil).Once()
 		mockDB.On(
-			"ListAllSegments",
+			"ListAllLiveStreamSegments",
 			mock.AnythingOfType("*context.emptyCtx"),
 			testSource.ID,
 		).Return(defineSegmentList(currentTime, segmentIDs1, segmentNames1), nil).Once()
@@ -227,13 +227,13 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 
 		// Setup mocks
 		mockDB.On(
-			"ListAllSegmentsBeforeTime",
+			"ListAllLiveStreamSegmentsBeforeTime",
 			mock.AnythingOfType("*context.emptyCtx"),
 			testSource.ID,
 			playlist2.CreatedAt,
 		).Return(defineSegmentList(currentTime, segmentIDs1, segmentNames1), nil).Once()
 		mockDB.On(
-			"BulkRegisterSegments",
+			"BulkRegisterLiveStreamSegments",
 			mock.AnythingOfType("*context.emptyCtx"),
 			testSource.ID,
 			mock.AnythingOfType("[]hls.Segment"),
@@ -243,12 +243,12 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 			assert.EqualValues(playlist2.Segments[4], segList[0])
 		}).Return(map[string]string{segmentName: segmentIDs2[segmentName]}, nil).Once()
 		mockDB.On(
-			"ListAllSegments",
+			"ListAllLiveStreamSegments",
 			mock.AnythingOfType("*context.emptyCtx"),
 			testSource.ID,
 		).Return(defineSegmentList(currentTime, segmentIDs2, segmentNames2), nil).Once()
 		mockDB.On(
-			"BulkDeleteSegment",
+			"BulkDeleteLiveStreamSegment",
 			mock.AnythingOfType("*context.emptyCtx"),
 			mock.AnythingOfType("[]string"),
 		).Run(func(args mock.Arguments) {

@@ -19,7 +19,7 @@ func TestLocalSegmentCacheBasicSanity(t *testing.T) {
 
 	// Case 0: no segments cached
 	{
-		_, err := uut.GetSegment(utCtxt, uuid.NewString())
+		_, err := uut.GetLiveStreamSegment(utCtxt, uuid.NewString())
 		assert.NotNil(err)
 	}
 
@@ -28,10 +28,10 @@ func TestLocalSegmentCacheBasicSanity(t *testing.T) {
 	content0 := []byte(uuid.NewString())
 	assert.Nil(uut.CacheSegment(utCtxt, segment0, content0, time.Second))
 	{
-		content, err := uut.GetSegment(utCtxt, segment0)
+		content, err := uut.GetLiveStreamSegment(utCtxt, segment0)
 		assert.Nil(err)
 		assert.Equal(content0, content)
-		_, err = uut.GetSegment(utCtxt, uuid.NewString())
+		_, err = uut.GetLiveStreamSegment(utCtxt, uuid.NewString())
 		assert.NotNil(err)
 	}
 
@@ -39,7 +39,7 @@ func TestLocalSegmentCacheBasicSanity(t *testing.T) {
 	content1 := []byte(uuid.NewString())
 	assert.Nil(uut.CacheSegment(utCtxt, segment0, content1, time.Second))
 	{
-		content, err := uut.GetSegment(utCtxt, segment0)
+		content, err := uut.GetLiveStreamSegment(utCtxt, segment0)
 		assert.Nil(err)
 		assert.Equal(content1, content)
 	}
@@ -49,7 +49,7 @@ func TestLocalSegmentCacheBasicSanity(t *testing.T) {
 	content2 := []byte(uuid.NewString())
 	assert.Nil(uut.CacheSegment(utCtxt, segment2, content2, time.Second))
 	{
-		content, err := uut.GetSegment(utCtxt, segment2)
+		content, err := uut.GetLiveStreamSegment(utCtxt, segment2)
 		assert.Nil(err)
 		assert.Equal(content2, content)
 	}
@@ -103,7 +103,7 @@ func TestLocalSegmentCacheManualCachePurgeTrigger(t *testing.T) {
 		entries, err := uut.GetSegments(utCtxt, []string{entry0, entry1, entry2})
 		assert.Nil(err)
 		assert.Len(entries, 2)
-		_, err = uut.GetSegment(utCtxt, entry0)
+		_, err = uut.GetLiveStreamSegment(utCtxt, entry0)
 		assert.NotNil(err)
 	}
 
@@ -113,11 +113,11 @@ func TestLocalSegmentCacheManualCachePurgeTrigger(t *testing.T) {
 		entries, err := uut.GetSegments(utCtxt, []string{entry0, entry1, entry2})
 		assert.Nil(err)
 		assert.Len(entries, 1)
-		_, err = uut.GetSegment(utCtxt, entry0)
+		_, err = uut.GetLiveStreamSegment(utCtxt, entry0)
 		assert.NotNil(err)
-		_, err = uut.GetSegment(utCtxt, entry1)
+		_, err = uut.GetLiveStreamSegment(utCtxt, entry1)
 		assert.NotNil(err)
-		_, err = uut.GetSegment(utCtxt, entry2)
+		_, err = uut.GetLiveStreamSegment(utCtxt, entry2)
 		assert.Nil(err)
 	}
 }
@@ -154,7 +154,7 @@ func TestLocalSegmentCacheAutoCachePurge(t *testing.T) {
 		entries, err := uut.GetSegments(utCtxt, []string{entry0, entry1, entry2})
 		assert.Nil(err)
 		assert.Len(entries, 2)
-		_, err = uut.GetSegment(utCtxt, entry0)
+		_, err = uut.GetLiveStreamSegment(utCtxt, entry0)
 		assert.NotNil(err)
 	}
 
@@ -164,11 +164,11 @@ func TestLocalSegmentCacheAutoCachePurge(t *testing.T) {
 		entries, err := uut.GetSegments(utCtxt, []string{entry0, entry1, entry2})
 		assert.Nil(err)
 		assert.Len(entries, 1)
-		_, err = uut.GetSegment(utCtxt, entry0)
+		_, err = uut.GetLiveStreamSegment(utCtxt, entry0)
 		assert.NotNil(err)
-		_, err = uut.GetSegment(utCtxt, entry1)
+		_, err = uut.GetLiveStreamSegment(utCtxt, entry1)
 		assert.NotNil(err)
-		_, err = uut.GetSegment(utCtxt, entry2)
+		_, err = uut.GetLiveStreamSegment(utCtxt, entry2)
 		assert.Nil(err)
 	}
 }

@@ -102,50 +102,52 @@ type PersistenceManager interface {
 	DeleteVideoSource(ctxt context.Context, id string) error
 
 	// =====================================================================================
-	// Video segments
+	// Live Stream Video segments
 
 	/*
-		RegisterSegment record a new segment with a source
+		RegisterLiveStreamSegment record a new segment with a source
 
 			@param ctxt context.Context - execution context
 			@param sourceID string - video source ID
 			@param segment hls.Segment - video segment parameters
 			@returns new segment entry ID
 	*/
-	RegisterSegment(ctxt context.Context, sourceID string, segment hls.Segment) (string, error)
+	RegisterLiveStreamSegment(
+		ctxt context.Context, sourceID string, segment hls.Segment,
+	) (string, error)
 
 	/*
-		BulkRegisterSegments register multiple segment in bulk
+		BulkRegisterLiveStreamSegments register multiple segment in bulk
 
 			@param ctxt context.Context - execution context
 			@param sourceID string - video source ID
 			@param segments []hls.Segment - set of video segments to insert
 			@returns new segment entry IDs
 	*/
-	BulkRegisterSegments(
+	BulkRegisterLiveStreamSegments(
 		ctxt context.Context, sourceID string, segments []hls.Segment,
 	) (map[string]string, error)
 
 	/*
-		ListAllSegments fetch all video segments
+		ListAllLiveStreamSegments fetch all video segments
 
 			@param ctxt context.Context - execution context
 			@param sourceID string - video source ID
 			@returns list of segments
 	*/
-	ListAllSegments(ctxt context.Context, sourceID string) ([]common.VideoSegment, error)
+	ListAllLiveStreamSegments(ctxt context.Context, sourceID string) ([]common.VideoSegment, error)
 
 	/*
-		GetVideoSegment get a video segment
+		GetLiveStreamSegment get a video segment
 
 			@param ctxt context.Context - execution context
 			@param id string - video segment ID
 			@returns segment
 	*/
-	GetSegment(ctxt context.Context, id string) (common.VideoSegment, error)
+	GetLiveStreamSegment(ctxt context.Context, id string) (common.VideoSegment, error)
 
 	/*
-		ListAllSegmentsAfterTime fetch all video segments which have a stop timestamp
+		ListAllLiveStreamSegmentsAfterTime fetch all video segments which have a stop timestamp
 		after a timestamp
 
 			@param ctxt context.Context - execution context
@@ -153,12 +155,12 @@ type PersistenceManager interface {
 			@param timestamp time.Time - timestamp to check against
 			@returns list of segments
 	*/
-	ListAllSegmentsAfterTime(
+	ListAllLiveStreamSegmentsAfterTime(
 		ctxt context.Context, sourceID string, timestamp time.Time,
 	) ([]common.VideoSegment, error)
 
 	/*
-		ListAllSegmentsBeforeTime fetch all video segments which have a stop timestamp
+		ListAllLiveStreamSegmentsBeforeTime fetch all video segments which have a stop timestamp
 		before a timestamp
 
 			@param ctxt context.Context - execution context
@@ -166,25 +168,25 @@ type PersistenceManager interface {
 			@param timestamp time.Time - timestamp to check against
 			@returns list of segments
 	*/
-	ListAllSegmentsBeforeTime(
+	ListAllLiveStreamSegmentsBeforeTime(
 		ctxt context.Context, sourceID string, timestamp time.Time,
 	) ([]common.VideoSegment, error)
 
 	/*
-		DeleteSegment delete a segment
+		DeleteLiveStreamSegment delete a segment
 
 			@param ctxt context.Context - execution context
 			@param id string - video segment ID
 	*/
-	DeleteSegment(ctxt context.Context, id string) error
+	DeleteLiveStreamSegment(ctxt context.Context, id string) error
 
 	/*
-		BulkDeleteSegment delete a group of segments
+		BulkDeleteLiveStreamSegment delete a group of segments
 
 			@param ctxt context.Context - execution context
 			@param ids []string - video segment IDs
 	*/
-	BulkDeleteSegment(ctxt context.Context, ids []string) error
+	BulkDeleteLiveStreamSegment(ctxt context.Context, ids []string) error
 }
 
 // persistenceManagerImpl implements PersistenceManager
@@ -214,7 +216,7 @@ func NewManager(dbDialector gorm.Dialector, logLevel logger.LogLevel) (Persisten
 	if err := db.AutoMigrate(&videoSource{}); err != nil {
 		return nil, err
 	}
-	if err := db.AutoMigrate(&videoSegment{}); err != nil {
+	if err := db.AutoMigrate(&liveStreamVideoSegment{}); err != nil {
 		return nil, err
 	}
 
@@ -313,7 +315,9 @@ func (m *persistenceManagerImpl) RecordKnownVideoSource(
 	})
 }
 
-func (m *persistenceManagerImpl) GetVideoSource(ctxt context.Context, id string) (common.VideoSource, error) {
+func (m *persistenceManagerImpl) GetVideoSource(
+	ctxt context.Context, id string,
+) (common.VideoSource, error) {
 	var result common.VideoSource
 	return result, m.db.Transaction(func(tx *gorm.DB) error {
 		var entry videoSource
@@ -325,7 +329,9 @@ func (m *persistenceManagerImpl) GetVideoSource(ctxt context.Context, id string)
 	})
 }
 
-func (m *persistenceManagerImpl) GetVideoSourceByName(ctxt context.Context, name string) (common.VideoSource, error) {
+func (m *persistenceManagerImpl) GetVideoSourceByName(
+	ctxt context.Context, name string,
+) (common.VideoSource, error) {
 	var result common.VideoSource
 	return result, m.db.Transaction(func(tx *gorm.DB) error {
 		var entry videoSource
@@ -351,7 +357,9 @@ func (m *persistenceManagerImpl) ListVideoSources(ctxt context.Context) ([]commo
 	})
 }
 
-func (m *persistenceManagerImpl) UpdateVideoSource(ctxt context.Context, newSetting common.VideoSource) error {
+func (m *persistenceManagerImpl) UpdateVideoSource(
+	ctxt context.Context, newSetting common.VideoSource,
+) error {
 	return m.db.Transaction(func(tx *gorm.DB) error {
 		logTags := m.GetLogTagsForContext(ctxt)
 		if tmp := tx.Where(&videoSource{VideoSource: common.VideoSource{
@@ -378,7 +386,7 @@ func (m *persistenceManagerImpl) UpdateVideoSource(ctxt context.Context, newSett
 func (m *persistenceManagerImpl) DeleteVideoSource(ctxt context.Context, id string) error {
 	return m.db.Transaction(func(tx *gorm.DB) error {
 		logTags := m.GetLogTagsForContext(ctxt)
-		if tmp := tx.Where("source = ?", id).Delete(&videoSegment{}); tmp.Error != nil {
+		if tmp := tx.Where("source = ?", id).Delete(&liveStreamVideoSegment{}); tmp.Error != nil {
 			return tmp.Error
 		}
 		if tmp := tx.Delete(&videoSource{VideoSource: common.VideoSource{ID: id}}); tmp.Error != nil {
@@ -392,7 +400,7 @@ func (m *persistenceManagerImpl) DeleteVideoSource(ctxt context.Context, id stri
 // =====================================================================================
 // Video segments
 
-func (m *persistenceManagerImpl) RegisterSegment(
+func (m *persistenceManagerImpl) RegisterLiveStreamSegment(
 	ctxt context.Context, sourceID string, segment hls.Segment,
 ) (string, error) {
 	var newID string
@@ -401,7 +409,7 @@ func (m *persistenceManagerImpl) RegisterSegment(
 
 		newID = ulid.Make().String()
 
-		newEntry := videoSegment{
+		newEntry := liveStreamVideoSegment{
 			VideoSegment: common.VideoSegment{
 				ID:       newID,
 				Segment:  segment,
@@ -429,16 +437,16 @@ func (m *persistenceManagerImpl) RegisterSegment(
 	})
 }
 
-func (m *persistenceManagerImpl) BulkRegisterSegments(
+func (m *persistenceManagerImpl) BulkRegisterLiveStreamSegments(
 	ctxt context.Context, sourceID string, segments []hls.Segment,
 ) (map[string]string, error) {
 	newIDs := map[string]string{}
 	return newIDs, m.db.Transaction(func(tx *gorm.DB) error {
-		newEntries := []videoSegment{}
+		newEntries := []liveStreamVideoSegment{}
 		// Prepare entries for batch insert
 		for _, segment := range segments {
 			newID := ulid.Make().String()
-			newEntry := videoSegment{
+			newEntry := liveStreamVideoSegment{
 				VideoSegment: common.VideoSegment{
 					ID:       newID,
 					Segment:  segment,
@@ -462,12 +470,12 @@ func (m *persistenceManagerImpl) BulkRegisterSegments(
 	})
 }
 
-func (m *persistenceManagerImpl) ListAllSegments(ctxt context.Context, sourceID string) (
+func (m *persistenceManagerImpl) ListAllLiveStreamSegments(ctxt context.Context, sourceID string) (
 	[]common.VideoSegment, error,
 ) {
 	var results []common.VideoSegment
 	return results, m.db.Transaction(func(tx *gorm.DB) error {
-		var entries []videoSegment
+		var entries []liveStreamVideoSegment
 		if tmp := tx.Where("source = ?", sourceID).Order("end").Find(&entries); tmp.Error != nil {
 			return tmp.Error
 		}
@@ -478,10 +486,12 @@ func (m *persistenceManagerImpl) ListAllSegments(ctxt context.Context, sourceID 
 	})
 }
 
-func (m *persistenceManagerImpl) GetSegment(ctxt context.Context, id string) (common.VideoSegment, error) {
+func (m *persistenceManagerImpl) GetLiveStreamSegment(
+	ctxt context.Context, id string,
+) (common.VideoSegment, error) {
 	var result common.VideoSegment
 	return result, m.db.Transaction(func(tx *gorm.DB) error {
-		var entry videoSegment
+		var entry liveStreamVideoSegment
 		if tmp := tx.Where("id = ?", id).First(&entry); tmp.Error != nil {
 			return tmp.Error
 		}
@@ -490,12 +500,12 @@ func (m *persistenceManagerImpl) GetSegment(ctxt context.Context, id string) (co
 	})
 }
 
-func (m *persistenceManagerImpl) ListAllSegmentsAfterTime(
+func (m *persistenceManagerImpl) ListAllLiveStreamSegmentsAfterTime(
 	ctxt context.Context, sourceID string, timestamp time.Time,
 ) ([]common.VideoSegment, error) {
 	var results []common.VideoSegment
 	return results, m.db.Transaction(func(tx *gorm.DB) error {
-		var entries []videoSegment
+		var entries []liveStreamVideoSegment
 		if tmp := tx.
 			Where("source = ?", sourceID).
 			Where("end >= ?", timestamp).
@@ -510,12 +520,12 @@ func (m *persistenceManagerImpl) ListAllSegmentsAfterTime(
 	})
 }
 
-func (m *persistenceManagerImpl) ListAllSegmentsBeforeTime(
+func (m *persistenceManagerImpl) ListAllLiveStreamSegmentsBeforeTime(
 	ctxt context.Context, sourceID string, timestamp time.Time,
 ) ([]common.VideoSegment, error) {
 	var results []common.VideoSegment
 	return results, m.db.Transaction(func(tx *gorm.DB) error {
-		var entries []videoSegment
+		var entries []liveStreamVideoSegment
 		if tmp := tx.
 			Where("source = ?", sourceID).
 			Where("end <= ?", timestamp).
@@ -530,18 +540,18 @@ func (m *persistenceManagerImpl) ListAllSegmentsBeforeTime(
 	})
 }
 
-func (m *persistenceManagerImpl) DeleteSegment(ctxt context.Context, id string) error {
+func (m *persistenceManagerImpl) DeleteLiveStreamSegment(ctxt context.Context, id string) error {
 	return m.db.Transaction(func(tx *gorm.DB) error {
-		if tmp := tx.Where("id = ?", id).Delete(&videoSegment{}); tmp.Error != nil {
+		if tmp := tx.Where("id = ?", id).Delete(&liveStreamVideoSegment{}); tmp.Error != nil {
 			return tmp.Error
 		}
 		return nil
 	})
 }
 
-func (m *persistenceManagerImpl) BulkDeleteSegment(ctxt context.Context, ids []string) error {
+func (m *persistenceManagerImpl) BulkDeleteLiveStreamSegment(ctxt context.Context, ids []string) error {
 	return m.db.Transaction(func(tx *gorm.DB) error {
-		if tmp := tx.Where("id in ?", ids).Delete(&videoSegment{}); tmp.Error != nil {
+		if tmp := tx.Where("id in ?", ids).Delete(&liveStreamVideoSegment{}); tmp.Error != nil {
 			return tmp.Error
 		}
 		return nil

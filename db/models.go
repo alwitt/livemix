@@ -8,7 +8,7 @@ import (
 type videoSource struct {
 	common.VideoSource
 	// Segments associated video segments
-	Segments []videoSegment `gorm:"foreignKey:SourceID" validate:"-"`
+	Segments []liveStreamVideoSegment `gorm:"foreignKey:SourceID" validate:"-"`
 }
 
 // TableName hard code table name
@@ -16,13 +16,14 @@ func (videoSource) TableName() string {
 	return "video_sources"
 }
 
-// videoSegment a single HLS TS segment
-type videoSegment struct {
+// liveStreamVideoSegment MPEG-TS video segment belonging to a live stream which the system
+// will clear out periodically.
+type liveStreamVideoSegment struct {
 	common.VideoSegment
 	Source videoSource `gorm:"constraint:OnDelete:CASCADE;foreignKey:SourceID" validate:"-"`
 }
 
 // TableName hard code table name
-func (videoSegment) TableName() string {
-	return "video_segments"
+func (liveStreamVideoSegment) TableName() string {
+	return "live_video_segments"
 }

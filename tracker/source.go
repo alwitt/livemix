@@ -96,7 +96,7 @@ func (t *sourceHLSTrackerImpl) Update(
 	}
 
 	// Get all currently known segments
-	allSegments, err := t.dbClient.ListAllSegmentsBeforeTime(ctxt, t.source.ID, timestamp)
+	allSegments, err := t.dbClient.ListAllLiveStreamSegmentsBeforeTime(ctxt, t.source.ID, timestamp)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to fetch associated segments")
 		return nil, err
@@ -115,14 +115,14 @@ func (t *sourceHLSTrackerImpl) Update(
 		newSegments = append(newSegments, newSegment)
 		log.WithFields(logTags).WithField("segment", newSegment.String()).Debug("Observed new segment")
 	}
-	newSegmentIDs, err := t.dbClient.BulkRegisterSegments(ctxt, t.source.ID, newSegments)
+	newSegmentIDs, err := t.dbClient.BulkRegisterLiveStreamSegments(ctxt, t.source.ID, newSegments)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to record new segments")
 		return nil, err
 	}
 
 	// Get all currently known segments again
-	allSegments, err = t.dbClient.ListAllSegments(ctxt, t.source.ID)
+	allSegments, err = t.dbClient.ListAllLiveStreamSegments(ctxt, t.source.ID)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to fetch associated segments")
 		return nil, err
@@ -149,7 +149,7 @@ func (t *sourceHLSTrackerImpl) Update(
 		}
 	}
 	if len(deleteSegments) > 0 {
-		if err := t.dbClient.BulkDeleteSegment(ctxt, deleteSegments); err != nil {
+		if err := t.dbClient.BulkDeleteLiveStreamSegment(ctxt, deleteSegments); err != nil {
 			log.WithError(err).WithFields(logTags).Error("Failed to drop expired segment")
 			return nil, err
 		}
@@ -159,5 +159,5 @@ func (t *sourceHLSTrackerImpl) Update(
 }
 
 func (t *sourceHLSTrackerImpl) GetTrackedSegments(ctxt context.Context) ([]common.VideoSegment, error) {
-	return t.dbClient.ListAllSegments(ctxt, t.source.ID)
+	return t.dbClient.ListAllLiveStreamSegments(ctxt, t.source.ID)
 }

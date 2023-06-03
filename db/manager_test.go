@@ -161,9 +161,9 @@ func TestDBManagerVideoSegment(t *testing.T) {
 
 	// Case 0: no segments
 	{
-		_, err := uut.GetSegment(utCtxt, uuid.NewString())
+		_, err := uut.GetLiveStreamSegment(utCtxt, uuid.NewString())
 		assert.NotNil(err)
-		entries, err := uut.ListAllSegments(utCtxt, sourceID)
+		entries, err := uut.ListAllLiveStreamSegments(utCtxt, sourceID)
 		assert.Nil(err)
 		assert.Empty(entries)
 	}
@@ -175,7 +175,7 @@ func TestDBManagerVideoSegment(t *testing.T) {
 	segment0 := fmt.Sprintf("seg-0-%s.ts", uuid.NewString())
 	segStart0 := startTime
 	segStop0 := segStart0.Add(segDuration)
-	segmentID0, err := uut.RegisterSegment(utCtxt, sourceID, hls.Segment{
+	segmentID0, err := uut.RegisterLiveStreamSegment(utCtxt, sourceID, hls.Segment{
 		Name:      segment0,
 		StartTime: segStart0,
 		EndTime:   segStop0,
@@ -184,13 +184,13 @@ func TestDBManagerVideoSegment(t *testing.T) {
 	})
 	assert.Nil(err)
 	{
-		seg, err := uut.GetSegment(utCtxt, segmentID0)
+		seg, err := uut.GetLiveStreamSegment(utCtxt, segmentID0)
 		assert.Nil(err)
 		assert.Equal(segment0, seg.Name)
 		assert.Equal(segStart0, seg.StartTime)
 		assert.Equal(segStop0, seg.EndTime)
 		assert.Equal(fmt.Sprintf("file:///%s", segment0), seg.URI)
-		entries, err := uut.ListAllSegments(utCtxt, sourceID)
+		entries, err := uut.ListAllLiveStreamSegments(utCtxt, sourceID)
 		assert.Nil(err)
 		assert.Len(entries, 1)
 		seg = entries[0]
@@ -204,7 +204,7 @@ func TestDBManagerVideoSegment(t *testing.T) {
 	segment1 := fmt.Sprintf("seg-1-%s.ts", uuid.NewString())
 	segStart1 := segStop0
 	segStop1 := segStart1.Add(segDuration)
-	segmentID1, err := uut.RegisterSegment(utCtxt, sourceID, hls.Segment{
+	segmentID1, err := uut.RegisterLiveStreamSegment(utCtxt, sourceID, hls.Segment{
 		Name:      segment1,
 		StartTime: segStart1,
 		EndTime:   segStop1,
@@ -213,7 +213,7 @@ func TestDBManagerVideoSegment(t *testing.T) {
 	})
 	assert.Nil(err)
 	{
-		entries, err := uut.ListAllSegments(utCtxt, sourceID)
+		entries, err := uut.ListAllLiveStreamSegments(utCtxt, sourceID)
 		assert.Nil(err)
 		assert.Len(entries, 2)
 		segMap := map[string]common.VideoSegment{}
@@ -231,7 +231,7 @@ func TestDBManagerVideoSegment(t *testing.T) {
 	// Case 3: fetch segment by timestamp
 	{
 		targetTime := startTime.Add(segDuration).Add(segDuration / 2)
-		entries, err := uut.ListAllSegmentsAfterTime(utCtxt, sourceID, targetTime)
+		entries, err := uut.ListAllLiveStreamSegmentsAfterTime(utCtxt, sourceID, targetTime)
 		assert.Nil(err)
 		assert.Len(entries, 1)
 		segMap := map[string]common.VideoSegment{}
@@ -247,7 +247,7 @@ func TestDBManagerVideoSegment(t *testing.T) {
 	}
 	{
 		targetTime := startTime.Add(segDuration / 2)
-		entries, err := uut.ListAllSegmentsAfterTime(utCtxt, sourceID, targetTime)
+		entries, err := uut.ListAllLiveStreamSegmentsAfterTime(utCtxt, sourceID, targetTime)
 		assert.Nil(err)
 		assert.Len(entries, 2)
 		segMap := map[string]common.VideoSegment{}
@@ -264,7 +264,7 @@ func TestDBManagerVideoSegment(t *testing.T) {
 	}
 	{
 		targetTime := startTime.Add(segDuration).Add(segDuration / 2)
-		entries, err := uut.ListAllSegmentsBeforeTime(utCtxt, sourceID, targetTime)
+		entries, err := uut.ListAllLiveStreamSegmentsBeforeTime(utCtxt, sourceID, targetTime)
 		assert.Nil(err)
 		assert.Len(entries, 1)
 		segMap := map[string]common.VideoSegment{}
@@ -280,7 +280,7 @@ func TestDBManagerVideoSegment(t *testing.T) {
 	}
 	{
 		targetTime := startTime.Add(segDuration * 2).Add(segDuration / 2)
-		entries, err := uut.ListAllSegmentsBeforeTime(utCtxt, sourceID, targetTime)
+		entries, err := uut.ListAllLiveStreamSegmentsBeforeTime(utCtxt, sourceID, targetTime)
 		assert.Nil(err)
 		assert.Len(entries, 2)
 		segMap := map[string]common.VideoSegment{}
@@ -292,9 +292,9 @@ func TestDBManagerVideoSegment(t *testing.T) {
 	}
 
 	// Case 4: delete segment
-	assert.Nil(uut.DeleteSegment(utCtxt, segmentID1))
+	assert.Nil(uut.DeleteLiveStreamSegment(utCtxt, segmentID1))
 	{
-		entries, err := uut.ListAllSegments(utCtxt, sourceID)
+		entries, err := uut.ListAllLiveStreamSegments(utCtxt, sourceID)
 		assert.Nil(err)
 		assert.Len(entries, 1)
 		seg := entries[0]
@@ -323,7 +323,7 @@ func TestDBManagerVideoSegment(t *testing.T) {
 		segStart = segStop
 		segStop = segStart.Add(segDuration)
 	}
-	segIDs, err := uut.BulkRegisterSegments(utCtxt, sourceID, segmentEntries)
+	segIDs, err := uut.BulkRegisterLiveStreamSegments(utCtxt, sourceID, segmentEntries)
 	assert.Nil(err)
 	assert.Len(segIDs, 2)
 	for _, segName := range segments {
@@ -337,10 +337,10 @@ func TestDBManagerVideoSegment(t *testing.T) {
 		for _, segID := range segIDs {
 			deleteIDs = append(deleteIDs, segID)
 		}
-		assert.Nil(uut.BulkDeleteSegment(utCtxt, deleteIDs))
+		assert.Nil(uut.BulkDeleteLiveStreamSegment(utCtxt, deleteIDs))
 	}
 	{
-		entries, err := uut.ListAllSegments(utCtxt, sourceID)
+		entries, err := uut.ListAllLiveStreamSegments(utCtxt, sourceID)
 		assert.Nil(err)
 		assert.Len(entries, 1)
 		assert.Equal(segmentID0, entries[0].ID)
@@ -349,7 +349,7 @@ func TestDBManagerVideoSegment(t *testing.T) {
 	// Case #: delete video source
 	assert.Nil(uut.DeleteVideoSource(utCtxt, sourceID))
 	{
-		entries, err := uut.ListAllSegments(utCtxt, sourceID)
+		entries, err := uut.ListAllLiveStreamSegments(utCtxt, sourceID)
 		assert.Nil(err)
 		assert.Len(entries, 0)
 	}
