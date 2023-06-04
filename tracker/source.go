@@ -96,7 +96,7 @@ func (t *sourceHLSTrackerImpl) Update(
 	}
 
 	// Get all currently known segments
-	allSegments, err := t.dbClient.ListAllLiveStreamSegmentsBeforeTime(ctxt, t.source.ID, timestamp)
+	allSegments, err := t.dbClient.ListAllLiveStreamSegments(ctxt, t.source.ID)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to fetch associated segments")
 		return nil, err

@@ -160,16 +160,15 @@ type PersistenceManager interface {
 	) ([]common.VideoSegment, error)
 
 	/*
-		ListAllLiveStreamSegmentsBeforeTime fetch all video segments which have a stop timestamp
-		before a timestamp
+		GetLatestLiveStreamSegments get the latest N video segments
 
 			@param ctxt context.Context - execution context
 			@param sourceID string - video source ID
-			@param timestamp time.Time - timestamp to check against
+			@param count int - number of segments to get
 			@returns list of segments
 	*/
-	ListAllLiveStreamSegmentsBeforeTime(
-		ctxt context.Context, sourceID string, timestamp time.Time,
+	GetLatestLiveStreamSegments(
+		ctxt context.Context, sourceID string, count int,
 	) ([]common.VideoSegment, error)
 
 	/*
@@ -398,7 +397,7 @@ func (m *persistenceManagerImpl) DeleteVideoSource(ctxt context.Context, id stri
 }
 
 // =====================================================================================
-// Video segments
+// Live Stream Video segments
 
 func (m *persistenceManagerImpl) RegisterLiveStreamSegment(
 	ctxt context.Context, sourceID string, segment hls.Segment,
@@ -520,21 +519,22 @@ func (m *persistenceManagerImpl) ListAllLiveStreamSegmentsAfterTime(
 	})
 }
 
-func (m *persistenceManagerImpl) ListAllLiveStreamSegmentsBeforeTime(
-	ctxt context.Context, sourceID string, timestamp time.Time,
+func (m *persistenceManagerImpl) GetLatestLiveStreamSegments(
+	ctxt context.Context, sourceID string, count int,
 ) ([]common.VideoSegment, error) {
 	var results []common.VideoSegment
 	return results, m.db.Transaction(func(tx *gorm.DB) error {
 		var entries []liveStreamVideoSegment
 		if tmp := tx.
 			Where("source = ?", sourceID).
-			Where("end <= ?", timestamp).
-			Order("end").
+			Order("end desc").
+			Limit(count).
 			Find(&entries); tmp.Error != nil {
 			return tmp.Error
 		}
-		for _, entry := range entries {
-			results = append(results, entry.VideoSegment)
+		results = make([]common.VideoSegment, len(entries))
+		for idx, entry := range entries {
+			results[len(entries)-idx-1] = entry.VideoSegment
 		}
 		return nil
 	})

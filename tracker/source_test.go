@@ -123,10 +123,9 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 
 		// Setup mocks
 		mockDB.On(
-			"ListAllLiveStreamSegmentsBeforeTime",
+			"ListAllLiveStreamSegments",
 			mock.AnythingOfType("*context.emptyCtx"),
 			testSource.ID,
-			playlist0.CreatedAt,
 		).Return([]common.VideoSegment{}, nil).Once()
 		mockDB.On(
 			"BulkRegisterLiveStreamSegments",
@@ -175,10 +174,9 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 
 		// Setup mocks
 		mockDB.On(
-			"ListAllLiveStreamSegmentsBeforeTime",
+			"ListAllLiveStreamSegments",
 			mock.AnythingOfType("*context.emptyCtx"),
 			testSource.ID,
-			playlist1.CreatedAt,
 		).Return(defineSegmentList(currentTime, segmentIDs0, segmentNames0), nil).Once()
 		mockDB.On(
 			"BulkRegisterLiveStreamSegments",
@@ -227,10 +225,9 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 
 		// Setup mocks
 		mockDB.On(
-			"ListAllLiveStreamSegmentsBeforeTime",
+			"ListAllLiveStreamSegments",
 			mock.AnythingOfType("*context.emptyCtx"),
 			testSource.ID,
-			playlist2.CreatedAt,
 		).Return(defineSegmentList(currentTime, segmentIDs1, segmentNames1), nil).Once()
 		mockDB.On(
 			"BulkRegisterLiveStreamSegments",

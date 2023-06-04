@@ -228,7 +228,8 @@ func TestDBManagerVideoSegment(t *testing.T) {
 		assert.Equal(fmt.Sprintf("file:///%s", segment1), seg.URI)
 	}
 
-	// Case 3: fetch segment by timestamp
+	// Case 3: fetch segment conditionally
+	// By time
 	{
 		targetTime := startTime.Add(segDuration).Add(segDuration / 2)
 		entries, err := uut.ListAllLiveStreamSegmentsAfterTime(utCtxt, sourceID, targetTime)
@@ -262,33 +263,21 @@ func TestDBManagerVideoSegment(t *testing.T) {
 		assert.Equal(segStop0, seg.EndTime)
 		assert.Equal(fmt.Sprintf("file:///%s", segment0), seg.URI)
 	}
+	// Get latest
 	{
-		targetTime := startTime.Add(segDuration).Add(segDuration / 2)
-		entries, err := uut.ListAllLiveStreamSegmentsBeforeTime(utCtxt, sourceID, targetTime)
-		assert.Nil(err)
-		assert.Len(entries, 1)
-		segMap := map[string]common.VideoSegment{}
-		for _, segment := range entries {
-			segMap[segment.ID] = segment
-		}
-		assert.Contains(segMap, segmentID0)
-		seg := segMap[segmentID0]
-		assert.Equal(segment0, seg.Name)
-		assert.Equal(segStart0, seg.StartTime)
-		assert.Equal(segStop0, seg.EndTime)
-		assert.Equal(fmt.Sprintf("file:///%s", segment0), seg.URI)
-	}
-	{
-		targetTime := startTime.Add(segDuration * 2).Add(segDuration / 2)
-		entries, err := uut.ListAllLiveStreamSegmentsBeforeTime(utCtxt, sourceID, targetTime)
+		entries, err := uut.GetLatestLiveStreamSegments(utCtxt, sourceID, 2)
 		assert.Nil(err)
 		assert.Len(entries, 2)
-		segMap := map[string]common.VideoSegment{}
-		for _, segment := range entries {
-			segMap[segment.ID] = segment
-		}
-		assert.Contains(segMap, segmentID0)
-		assert.Contains(segMap, segmentID1)
+		assert.Equal(segmentID0, entries[0].ID)
+		assert.Equal(segmentID1, entries[1].ID)
+		entries, err = uut.GetLatestLiveStreamSegments(utCtxt, sourceID, 1)
+		assert.Nil(err)
+		assert.Len(entries, 1)
+		assert.Equal(segmentID1, entries[0].ID)
+		assert.Equal(segment1, entries[0].Name)
+		assert.Equal(segStart1, entries[0].StartTime)
+		assert.Equal(segStop1, entries[0].EndTime)
+		assert.Equal(fmt.Sprintf("file:///%s", segment1), entries[0].URI)
 	}
 
 	// Case 4: delete segment
