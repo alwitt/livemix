@@ -184,7 +184,7 @@ func TestDBManagerVideoSegment(t *testing.T) {
 	})
 	assert.Nil(err)
 	{
-		seg, err := uut.GetLiveStreamSegment(utCtxt, segmentID0)
+		seg, err := uut.GetLiveStreamSegmentByName(utCtxt, segment0)
 		assert.Nil(err)
 		assert.Equal(segment0, seg.Name)
 		assert.Equal(segStart0, seg.StartTime)

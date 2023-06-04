@@ -16,6 +16,7 @@ fix: .prepare ## Lint and fix vialoations
 mock: .prepare ## Generate test mock interfaces
 	@mockery --dir db --name PersistenceManager
 	@mockery --dir utils --name SegmentReader
+	@mockery --dir utils --name VideoSegmentCache
 
 .PHONY: test
 test: .prepare ## Run unittests

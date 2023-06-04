@@ -147,6 +147,15 @@ type PersistenceManager interface {
 	GetLiveStreamSegment(ctxt context.Context, id string) (common.VideoSegment, error)
 
 	/*
+		GetLiveStreamSegmentByName get a video segment by name
+
+			@param ctxt context.Context - execution context
+			@param name string - video segment name
+			@returns segment
+	*/
+	GetLiveStreamSegmentByName(ctxt context.Context, name string) (common.VideoSegment, error)
+
+	/*
 		ListAllLiveStreamSegmentsAfterTime fetch all video segments which have a stop timestamp
 		after a timestamp
 
@@ -492,6 +501,20 @@ func (m *persistenceManagerImpl) GetLiveStreamSegment(
 	return result, m.db.Transaction(func(tx *gorm.DB) error {
 		var entry liveStreamVideoSegment
 		if tmp := tx.Where("id = ?", id).First(&entry); tmp.Error != nil {
+			return tmp.Error
+		}
+		result = entry.VideoSegment
+		return nil
+	})
+}
+
+func (m *persistenceManagerImpl) GetLiveStreamSegmentByName(
+	ctxt context.Context, name string,
+) (common.VideoSegment, error) {
+	var result common.VideoSegment
+	return result, m.db.Transaction(func(tx *gorm.DB) error {
+		var entry liveStreamVideoSegment
+		if tmp := tx.Where("name = ?", name).First(&entry); tmp.Error != nil {
 			return tmp.Error
 		}
 		result = entry.VideoSegment

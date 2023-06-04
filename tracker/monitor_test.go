@@ -149,7 +149,7 @@ func TestSourceHLSMonitor(t *testing.T) {
 		segURL := fmt.Sprintf("file:///%s", segmentName)
 		segID, ok := segmentNameToID[segURL]
 		assert.True(ok)
-		content, err := testCache.GetLiveStreamSegment(utCtxt, segID)
+		content, err := testCache.GetSegment(utCtxt, segID)
 		assert.Nil(err)
 		assert.EqualValues(segmentData[segURL], content)
 	}
@@ -187,7 +187,7 @@ func TestSourceHLSMonitor(t *testing.T) {
 		segURL := fmt.Sprintf("file:///%s", segmentName)
 		segID, ok := segmentNameToID[segURL]
 		assert.True(ok)
-		content, err := testCache.GetLiveStreamSegment(utCtxt, segID)
+		content, err := testCache.GetSegment(utCtxt, segID)
 		assert.Nil(err)
 		assert.EqualValues(segmentData[segURL], content)
 	}
