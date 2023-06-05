@@ -2,8 +2,10 @@ package hls
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -75,4 +77,36 @@ func (p Playlist) BuildSegmentURI(segmentName string) string {
 	newURI := *p.URI
 	newURI.Path = objectPath
 	return newURI.String()
+}
+
+/*
+String toString function for Playlist
+
+	@returns the string representation of a HLS Playlist
+*/
+func (p Playlist) String() (string, error) {
+	builder := strings.Builder{}
+	// Write the playlist headers
+	for _, oneLine := range []string{
+		"#EXTM3U",
+		fmt.Sprintf("#EXT-X-VERSION:%d", p.Version),
+		fmt.Sprintf("#EXT-X-TARGETDURATION:%f", p.TargetSegDuration),
+	} {
+		if _, err := builder.WriteString(fmt.Sprintf("%s\n", oneLine)); err != nil {
+			return "", err
+		}
+	}
+	// Write the segments
+	for _, oneSegment := range p.Segments {
+		if _, err := builder.WriteString(
+			fmt.Sprintf("#EXTINF:%f,\n%s\n", oneSegment.Length, oneSegment.Name),
+		); err != nil {
+			return "", err
+		}
+	}
+	// End the playlist
+	if _, err := builder.WriteString("#EXT-X-ENDLIST\n"); err != nil {
+		return "", err
+	}
+	return builder.String(), nil
 }
