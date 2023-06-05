@@ -17,6 +17,8 @@ mock: .prepare ## Generate test mock interfaces
 	@mockery --dir db --name PersistenceManager
 	@mockery --dir utils --name SegmentReader
 	@mockery --dir utils --name VideoSegmentCache
+	@mockery --dir vod --name PlaylistBuilder
+	@mockery --dir vod --name SegmentManager
 
 .PHONY: test
 test: .prepare ## Run unittests
