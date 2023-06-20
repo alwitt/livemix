@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/alwitt/goutils"
 	"github.com/gorilla/mux"
 )
 
@@ -16,4 +17,9 @@ func RegisterPathPrefix(parent *mux.Router, prefix string, handler MethodHandler
 		router.Methods(method).Path("").HandlerFunc(handler)
 	}
 	return router
+}
+
+// RequestResponseClient mirrors the goutils.RequestResponseClient
+type RequestResponseClient interface {
+	goutils.RequestResponseClient
 }

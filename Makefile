@@ -19,6 +19,7 @@ mock: .prepare ## Generate test mock interfaces
 	@mockery --dir utils --name VideoSegmentCache
 	@mockery --dir vod --name PlaylistBuilder
 	@mockery --dir vod --name SegmentManager
+	@mockery --dir api --name RequestResponseClient
 
 .PHONY: test
 test: .prepare ## Run unittests
