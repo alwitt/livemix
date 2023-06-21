@@ -1,4 +1,4 @@
-package api_test
+package edge_test
 
 import (
 	"context"
@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/alwitt/goutils"
-	"github.com/alwitt/livemix/api"
 	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/common/ipc"
+	"github.com/alwitt/livemix/edge"
 	"github.com/alwitt/livemix/mocks"
 	"github.com/apex/log"
 	"github.com/google/uuid"
@@ -26,7 +26,7 @@ func TestEdgeToControlGetVideoSourceInfoRequest(t *testing.T) {
 
 	edgeName := "unit-tester"
 	controlName := "ut-controller"
-	uut, err := api.NewEdgeToControlRRClient(edgeName, controlName, mockRRClient, time.Second)
+	uut, err := edge.NewControlRequestClient(edgeName, controlName, mockRRClient, time.Second)
 	assert.Nil(err)
 
 	// --------------------------------------------------------------------------
@@ -81,7 +81,7 @@ func TestEdgeToControlGetVideoSourceInfoRequestTimeout(t *testing.T) {
 
 	edgeName := "unit-tester"
 	controlName := "ut-controller"
-	uut, err := api.NewEdgeToControlRRClient(edgeName, controlName, mockRRClient, time.Second)
+	uut, err := edge.NewControlRequestClient(edgeName, controlName, mockRRClient, time.Second)
 	assert.Nil(err)
 
 	// --------------------------------------------------------------------------

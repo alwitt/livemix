@@ -1,4 +1,4 @@
-package api
+package edge
 
 import (
 	"context"
@@ -13,8 +13,8 @@ import (
 	"github.com/apex/log"
 )
 
-// EdgeToControlRRClient request-response client for edge to call control
-type EdgeToControlRRClient interface {
+// ControlRequestClient request-response client for edge to call control
+type ControlRequestClient interface {
 	/*
 		GetVideoSourceInfo query control for a video source's information
 
@@ -25,8 +25,8 @@ type EdgeToControlRRClient interface {
 	GetVideoSourceInfo(ctxt context.Context, sourceName string) (common.VideoSource, error)
 }
 
-// edgeToControlRRClientImpl implements EdgeToControlRRClient
-type edgeToControlRRClientImpl struct {
+// controlRequestClientImpl implements ControlRequestClient
+type controlRequestClientImpl struct {
 	goutils.Component
 	controlRRTargetID string
 	client            goutils.RequestResponseClient
@@ -34,16 +34,24 @@ type edgeToControlRRClientImpl struct {
 }
 
 /*
-NewEdgeToControlRRClient define a new edge to control request-response client
+NewControlRequestClient define a new edge to control request-response client
 
+	@param clientName string - name of this client instance
+	@param controlRRTargetID string - control's target ID for request-response targeting
 	@param coreClient goutils.RequestResponseClient - core request-response client
+	@param requestTimeout time.Duration - request-response request timeout
 	@returns new client
 */
-func NewEdgeToControlRRClient(clientName string, controlRRTargetID string, coreClient goutils.RequestResponseClient, requestTimeout time.Duration) (EdgeToControlRRClient, error) {
+func NewControlRequestClient(
+	clientName string,
+	controlRRTargetID string,
+	coreClient goutils.RequestResponseClient,
+	requestTimeout time.Duration,
+) (ControlRequestClient, error) {
 	logTags := log.Fields{
 		"module": "api", "component": "edge-to-control-rr-client", "instance": clientName,
 	}
-	return &edgeToControlRRClientImpl{
+	return &controlRequestClientImpl{
 		Component: goutils.Component{
 			LogTags: logTags,
 			LogTagModifiers: []goutils.LogMetadataModifier{
@@ -56,7 +64,7 @@ func NewEdgeToControlRRClient(clientName string, controlRRTargetID string, coreC
 	}, nil
 }
 
-func (c *edgeToControlRRClientImpl) GetVideoSourceInfo(
+func (c *controlRequestClientImpl) GetVideoSourceInfo(
 	ctxt context.Context, sourceName string,
 ) (common.VideoSource, error) {
 	logTags := c.GetLogTagsForContext(ctxt)
@@ -171,6 +179,7 @@ func (c *edgeToControlRRClientImpl) GetVideoSourceInfo(
 			Errorf("Unable to parse video source '%s' info", sourceName)
 		return common.VideoSource{}, err
 	}
+	// TODO FIXME: add validation check
 	videoInfo, ok := parsed.(ipc.GetVideoSourceByNameResponse)
 	if !ok {
 		err := fmt.Errorf("received unexpected response message (%s)", reflect.TypeOf(parsed))
