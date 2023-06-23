@@ -9,6 +9,7 @@ import (
 	"github.com/alwitt/goutils"
 	"github.com/alwitt/livemix/common/ipc"
 	"github.com/apex/log"
+	"github.com/go-playground/validator/v10"
 )
 
 // EdgeRequestClient request-response client for control to call edge
@@ -24,8 +25,9 @@ type EdgeRequestClient interface {
 // edgeRequestClientImpl implements EdgeRequestClient
 type edgeRequestClientImpl struct {
 	goutils.Component
-	client goutils.RequestResponseClient
-	core   SystemManager
+	client    goutils.RequestResponseClient
+	core      SystemManager
+	validator *validator.Validate
 }
 
 /*
@@ -51,8 +53,9 @@ func NewEdgeRequestClient(
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
 		},
-		client: coreClient,
-		core:   nil,
+		client:    coreClient,
+		core:      nil,
+		validator: validator.New(),
 	}
 
 	// Install inbound request handling
@@ -97,41 +100,17 @@ func (c *edgeRequestClientImpl) processInboundRequest(
 
 	switch reflect.TypeOf(parsed) {
 	case reflect.TypeOf(ipc.GetVideoSourceByNameRequest{}):
-		// TODO FIXME: add validation check
 		request := parsed.(ipc.GetVideoSourceByNameRequest)
-		// Process video source info request
-		sourceInfo, err := c.core.GetVideoSourceByName(ctxt, request.TargetName)
-		if err != nil {
+		if err := c.validator.Struct(&request); err != nil {
 			log.
 				WithError(err).
 				WithFields(logTag).
 				WithField("request-sender", msg.SenderID).
 				WithField("request-id", msg.RequestID).
-				Errorf("Read video source '%s' info", request.TargetName)
+				Error("Can't process invalid 'GetVideoSourceByNameRequest' from edge")
 			return err
 		}
-		// Built the response
-		response := ipc.NewGetVideoSourceByNameResponse(sourceInfo)
-		respMsg, err := json.Marshal(&response)
-		if err != nil {
-			log.
-				WithError(err).
-				WithFields(logTag).
-				WithField("request-sender", msg.SenderID).
-				WithField("request-id", msg.RequestID).
-				Errorf("Failed to prepare video source '%s' info response", request.TargetName)
-			return err
-		}
-		// Send the response
-		if err := c.client.Respond(ctxt, msg, respMsg, nil, false); err != nil {
-			log.
-				WithError(err).
-				WithFields(logTag).
-				WithField("request-sender", msg.SenderID).
-				WithField("request-id", msg.RequestID).
-				Errorf("Failed to send video source '%s' info response", request.TargetName)
-			return err
-		}
+		return c.processInboundVideoSourceInfoRequest(ctxt, &request, msg)
 
 	default:
 		err := fmt.Errorf("unknown supported request type '%s'", reflect.TypeOf(parsed))
@@ -141,6 +120,44 @@ func (c *edgeRequestClientImpl) processInboundRequest(
 			WithField("request-sender", msg.SenderID).
 			WithField("request-id", msg.RequestID).
 			Error("Unable to parse request payload")
+		return err
+	}
+}
+
+func (c *edgeRequestClientImpl) processInboundVideoSourceInfoRequest(ctxt context.Context, request *ipc.GetVideoSourceByNameRequest, origMsg goutils.ReqRespMessage) error {
+	logTag := c.GetLogTagsForContext(ctxt)
+
+	// Process video source info request
+	sourceInfo, err := c.core.GetVideoSourceByName(ctxt, request.TargetName)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTag).
+			WithField("request-sender", origMsg.SenderID).
+			WithField("request-id", origMsg.RequestID).
+			Errorf("Read video source '%s' info", request.TargetName)
+		return err
+	}
+	// Built the response
+	response := ipc.NewGetVideoSourceByNameResponse(sourceInfo)
+	respMsg, err := json.Marshal(&response)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTag).
+			WithField("request-sender", origMsg.SenderID).
+			WithField("request-id", origMsg.RequestID).
+			Errorf("Failed to prepare video source '%s' info response", request.TargetName)
+		return err
+	}
+	// Send the response
+	if err := c.client.Respond(ctxt, origMsg, respMsg, nil, false); err != nil {
+		log.
+			WithError(err).
+			WithFields(logTag).
+			WithField("request-sender", origMsg.SenderID).
+			WithField("request-id", origMsg.RequestID).
+			Errorf("Failed to send video source '%s' info response", request.TargetName)
 		return err
 	}
 

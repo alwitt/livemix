@@ -11,6 +11,7 @@ import (
 	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/common/ipc"
 	"github.com/apex/log"
+	"github.com/go-playground/validator/v10"
 )
 
 // ControlRequestClient request-response client for edge to call control
@@ -31,6 +32,7 @@ type controlRequestClientImpl struct {
 	controlRRTargetID string
 	client            goutils.RequestResponseClient
 	requestTimeout    time.Duration
+	validator         *validator.Validate
 }
 
 /*
@@ -61,6 +63,7 @@ func NewControlRequestClient(
 		controlRRTargetID: controlRRTargetID,
 		client:            coreClient,
 		requestTimeout:    requestTimeout,
+		validator:         validator.New(),
 	}, nil
 }
 
@@ -179,7 +182,6 @@ func (c *controlRequestClientImpl) GetVideoSourceInfo(
 			Errorf("Unable to parse video source '%s' info", sourceName)
 		return common.VideoSource{}, err
 	}
-	// TODO FIXME: add validation check
 	videoInfo, ok := parsed.(ipc.GetVideoSourceByNameResponse)
 	if !ok {
 		err := fmt.Errorf("received unexpected response message (%s)", reflect.TypeOf(parsed))
@@ -187,6 +189,13 @@ func (c *controlRequestClientImpl) GetVideoSourceInfo(
 			WithError(err).
 			WithFields(logTags).
 			Errorf("Unable to parse video source '%s' info", sourceName)
+		return common.VideoSource{}, err
+	}
+	if err := c.validator.Struct(&videoInfo); err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Can't process invalid 'GetVideoSourceByNameResponse' from control")
 		return common.VideoSource{}, err
 	}
 
