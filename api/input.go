@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -70,7 +69,9 @@ func NewPlaylistReceiveHandler(
 // @Accept plain
 // @Produce json
 // @Param X-Request-ID header string false "Request ID"
+// @Param Video-Source-Name header string true "Video source name this playlist belongs to"
 // @Param MPEG-TS-URI-Prefix header string true "URI prefix for the MPEG-TS segments. The assumption is that all segments listed in the playlist are relative to this prefix."
+// @Param playlist body string true "Playlist list content"
 // @Success 200 {object} goutils.RestAPIBaseResponse "success"
 // @Failure 400 {object} goutils.RestAPIBaseResponse "error"
 // @Failure 403 {object} goutils.RestAPIBaseResponse "error"
@@ -86,6 +87,16 @@ func (h PlaylistReceiveHandler) NewPlaylist(w http.ResponseWriter, r *http.Reque
 			log.WithError(err).WithFields(logTags).Error("Failed to form response")
 		}
 	}()
+
+	// Get video source name
+	videoSourceName := r.Header.Get("Video-Source-Name")
+	if videoSourceName == "" {
+		msg := "request missing Video-Source-Name"
+		log.WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
+		return
+	}
 
 	// Get the MPEG-TS prefix
 	tsFileURIPrefix := r.Header.Get("MPEG-TS-URI-Prefix")
@@ -117,12 +128,13 @@ func (h PlaylistReceiveHandler) NewPlaylist(w http.ResponseWriter, r *http.Reque
 	for _, oneLine := range strings.Split(string(content), "\n") {
 		playlistRaw = append(playlistRaw, strings.TrimSpace(oneLine))
 	}
-	dummyPlaylistURI := fmt.Sprintf("%s/vid.m3u8", tsFileURIPrefix)
 
 	currentTime := time.Now().UTC()
 
 	// Parse the playlist
-	playlist, err := h.parser.ParsePlaylist(r.Context(), dummyPlaylistURI, playlistRaw, currentTime)
+	playlist, err := h.parser.ParsePlaylist(
+		r.Context(), playlistRaw, currentTime, videoSourceName, tsFileURIPrefix,
+	)
 	if err != nil {
 		msg := "unable to parse sent playlist"
 		log.WithError(err).WithFields(logTags).Error(msg)

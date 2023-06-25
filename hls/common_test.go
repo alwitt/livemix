@@ -38,7 +38,7 @@ func TestPlaylistToString(t *testing.T) {
 		sourceLinked = builder.String()
 	}
 	parser := hls.NewPlaylistParser()
-	parsed, err := parser.ParsePlaylist(utCtxt, "file:///vid/testing.m3u8", source, currentTime)
+	parsed, err := parser.ParsePlaylist(utCtxt, source, currentTime, "testing", "file:///vid")
 	assert.Nil(err)
 
 	// Convert the playlist back to string

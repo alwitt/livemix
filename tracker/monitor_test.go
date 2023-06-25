@@ -31,9 +31,7 @@ func TestSourceHLSMonitor(t *testing.T) {
 	assert.Nil(err)
 
 	testSourceName := fmt.Sprintf("vid-%s.m3u8", uuid.NewString())
-	testSourceID, err := dbClient.DefineVideoSource(
-		utCtxt, testSourceName, fmt.Sprintf("file:///%s", testSourceName), nil,
-	)
+	testSourceID, err := dbClient.DefineVideoSource(utCtxt, testSourceName, nil, nil)
 	assert.Nil(err)
 	testSource, err := dbClient.GetVideoSource(utCtxt, testSourceID)
 	assert.Nil(err)
@@ -59,15 +57,11 @@ func TestSourceHLSMonitor(t *testing.T) {
 
 	// Helper function to define a playlist with segments
 	definePlaylist := func(startTime time.Time, segments []string) hls.Playlist {
-		parsedURI, err := url.Parse(testSource.PlaylistURI)
-		assert.Nil(err)
-
 		// Define playlist
 		result := hls.Playlist{
 			Name:              testSource.Name,
 			CreatedAt:         startTime.Add(segmentLength * (time.Duration(len(segments)))),
 			Version:           3,
-			URI:               parsedURI,
 			TargetSegDuration: segmentLength.Seconds(),
 			Segments:          []hls.Segment{},
 		}

@@ -63,7 +63,7 @@ func NewLiveStreamHandler(
 // @Summary Query files for a HLS live stream
 // @Description Query files for a HLS live stream, which include both the `m3u8` playlist
 // file and `ts` MPEG-TS file.
-// @tags vod,live
+// @tags vod,live,edge,cloud
 // @Produce plain
 // @Param X-Request-ID header string false "Request ID"
 // @Param videoSourceID path string true "Video source ID"

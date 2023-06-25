@@ -23,12 +23,12 @@ type SystemManager interface {
 
 			@param ctxt context.Context - execution context
 			@param name string - source name
-			@param playlistURI string - video source playlist URI
+			@param playlistURI *string - video source playlist URI
 			@param description *string - optionally, source description
 			@returns new source entry ID
 	*/
 	DefineVideoSource(
-		ctxt context.Context, name, playlistURI string, description *string,
+		ctxt context.Context, name string, playlistURI, description *string,
 	) (string, error)
 
 	/*

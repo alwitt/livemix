@@ -73,6 +73,7 @@ func TestPlaylistReceiver(t *testing.T) {
 		)
 		req, err := http.NewRequest("POST", "/v1/playlist", bytes.NewBufferString(payload))
 		assert.Nil(err)
+		req.Header.Add("Video-Source-Name", "testing")
 		req.Header.Add("MPEG-TS-URI-Prefix", "file:///vid")
 
 		// Setup HTTP handling
@@ -86,14 +87,15 @@ func TestPlaylistReceiver(t *testing.T) {
 		router.ServeHTTP(respRecorder, req)
 
 		assert.Equal(http.StatusOK, respRecorder.Code)
-		assert.Equal("vid.m3u8", parsedPlaylist.Name)
+		assert.Equal("testing", parsedPlaylist.Name)
 		assert.Equal(62.0, parsedPlaylist.TargetSegDuration)
 		assert.Equal(3, parsedPlaylist.Version)
-		assert.Equal("file:///vid/vid.m3u8", parsedPlaylist.URI.String())
 		assert.Len(parsedPlaylist.Segments, 2)
 		assert.Equal("vid-0.ts", parsedPlaylist.Segments[0].Name)
+		assert.Equal("file:///vid/vid-0.ts", parsedPlaylist.Segments[0].URI)
 		assert.Equal(62.5, parsedPlaylist.Segments[0].Length)
 		assert.Equal("vid-1.ts", parsedPlaylist.Segments[1].Name)
+		assert.Equal("file:///vid/vid-1.ts", parsedPlaylist.Segments[1].URI)
 		assert.Equal(23.5, parsedPlaylist.Segments[1].Length)
 	}
 }

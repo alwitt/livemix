@@ -80,7 +80,6 @@ func (b *playlistBuilderImpl) GetLiveStreamPlaylist(
 		Name:              target.Name,
 		CreatedAt:         timestamp,
 		Version:           3,
-		URI:               nil,
 		TargetSegDuration: b.segmentDuration.Seconds(),
 		Segments:          make([]hls.Segment, len(segments)),
 	}

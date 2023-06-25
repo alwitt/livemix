@@ -31,13 +31,18 @@ type PlaylistParser interface {
 		#EXT-X-ENDLIST
 
 			@param ctxt context.Context - execution context
-			@param uri string - HLS playlist URI
 			@param content []string - HLS playlist content
 			@param timestamp time.Time - When the playlist is generated
+			@param playlistName string - alias name assigned to associated with the playlist
+			@param segmentBaseURI string - base URI of individual segments
 			@returns parsed playlist
 	*/
 	ParsePlaylist(
-		ctxt context.Context, uri string, content []string, timestamp time.Time,
+		ctxt context.Context,
+		content []string,
+		timestamp time.Time,
+		playlistName string,
+		segmentBaseURI string,
 	) (Playlist, error)
 }
 
@@ -64,8 +69,21 @@ type playlistParserImpl struct {
 	validator *validator.Validate
 }
 
+// buildSegmentURI construct a complete segment URI starting with a base URI and segment name
+func buildSegmentURI(baseURI *url.URL, segmentName string) string {
+	objectPath := filepath.Join(baseURI.EscapedPath(), segmentName)
+	// Build new URI
+	newURI := *baseURI
+	newURI.Path = objectPath
+	return newURI.String()
+}
+
 func (p playlistParserImpl) ParsePlaylist(
-	ctxt context.Context, uri string, content []string, timestamp time.Time,
+	ctxt context.Context,
+	content []string,
+	timestamp time.Time,
+	playlistName string,
+	segmentBaseURI string,
 ) (Playlist, error) {
 	const (
 		hlsParseIdle int = iota
@@ -77,19 +95,16 @@ func (p playlistParserImpl) ParsePlaylist(
 
 	logTags := p.GetLogTagsForContext(ctxt)
 
-	playlist := Playlist{CreatedAt: timestamp}
+	playlist := Playlist{Name: playlistName, CreatedAt: timestamp}
 
-	// Process the URI
-	parsedURI, err := url.Parse(uri)
+	parsedBaseSegmentURI, err := url.Parse(segmentBaseURI)
 	if err != nil {
-		log.WithError(err).WithFields(logTags).WithField("uri", uri).Error("HLS m3u8 URI parse failure")
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("segment-base-uri", segmentBaseURI).
+			Error("Base segment URI parse failure")
 		return playlist, err
-	}
-	playlist.URI = parsedURI
-	// Get playlist name
-	{
-		_, fileName := filepath.Split(parsedURI.EscapedPath())
-		playlist.Name = fileName
 	}
 
 	// Parse the playlist contents
@@ -194,12 +209,12 @@ func (p playlistParserImpl) ParsePlaylist(
 		currentTime = currentTime.Add(-playlist.Segments[itr].GetDuration())
 		playlist.Segments[itr].StartTime = currentTime
 		// Update the segment URI
-		playlist.Segments[itr].URI = playlist.BuildSegmentURI(playlist.Segments[itr].Name)
+		playlist.Segments[itr].URI = buildSegmentURI(parsedBaseSegmentURI, playlist.Segments[itr].Name)
 	}
 
 	// Validate the complete playlist
 	if err := p.validator.Struct(&playlist); err != nil {
-		log.WithError(err).WithFields(logTags).WithField("uri", uri).Error("HLS playlist is invalid")
+		log.WithError(err).WithFields(logTags).Error("HLS playlist is invalid")
 		return playlist, err
 	}
 

@@ -21,7 +21,7 @@ func TestHLSParsing(t *testing.T) {
 
 	// Case 1: blank file
 	{
-		_, err := uut.ParsePlaylist(utCtxt, "file:///vid/testing.m3u8", []string{}, currentTime)
+		_, err := uut.ParsePlaylist(utCtxt, []string{}, currentTime, "testing", "file:///vid")
 		assert.NotNil(err)
 	}
 
@@ -31,7 +31,7 @@ func TestHLSParsing(t *testing.T) {
 			"hello world",
 			"#EXT-X-VERSION:3",
 		}
-		_, err := uut.ParsePlaylist(utCtxt, "file:///vid/testing.m3u8", testfile, currentTime)
+		_, err := uut.ParsePlaylist(utCtxt, testfile, currentTime, "testing", "file:///vid")
 		assert.NotNil(err)
 	}
 
@@ -41,7 +41,7 @@ func TestHLSParsing(t *testing.T) {
 			"#EXTM3U",
 			"#EXT-X-ENDLIST",
 		}
-		_, err := uut.ParsePlaylist(utCtxt, "file:///vid/testing.m3u8", testfile, currentTime)
+		_, err := uut.ParsePlaylist(utCtxt, testfile, currentTime, "testing", "file:///vid")
 		assert.NotNil(err)
 	}
 
@@ -54,7 +54,7 @@ func TestHLSParsing(t *testing.T) {
 			"#EXT-X-MEDIA-SEQUENCE:0",
 			"#EXT-X-ENDLIST",
 		}
-		_, err := uut.ParsePlaylist(utCtxt, "file:///vid/testing.m3u8", testfile, currentTime)
+		_, err := uut.ParsePlaylist(utCtxt, testfile, currentTime, "testing", "file:///vid")
 		assert.NotNil(err)
 	}
 
@@ -67,7 +67,7 @@ func TestHLSParsing(t *testing.T) {
 			"vid-0.ts",
 			"#EXT-X-ENDLIST",
 		}
-		_, err := uut.ParsePlaylist(utCtxt, "file:///vid/testing.m3u8", testfile, currentTime)
+		_, err := uut.ParsePlaylist(utCtxt, testfile, currentTime, "testing", "file:///vid")
 		assert.NotNil(err)
 	}
 
@@ -81,7 +81,7 @@ func TestHLSParsing(t *testing.T) {
 			"#EXTINF:62.500000,",
 			"vid-0.ts",
 		}
-		_, err := uut.ParsePlaylist(utCtxt, "file:///vid/testing.m3u8", testfile, currentTime)
+		_, err := uut.ParsePlaylist(utCtxt, testfile, currentTime, "testing", "file:///vid")
 		assert.Nil(err)
 	}
 
@@ -96,11 +96,9 @@ func TestHLSParsing(t *testing.T) {
 			"vid-0.ts",
 			"#EXT-X-ENDLIST",
 		}
-		parsed, err := uut.ParsePlaylist(utCtxt, "file:///vid/testing.m3u8", testfile, currentTime)
+		parsed, err := uut.ParsePlaylist(utCtxt, testfile, currentTime, "testing", "file:///vid")
 		assert.Nilf(err, "Got %s", err)
-		assert.Equal("file:///vid/testing.m3u8", parsed.URI.String())
-		assert.Equal("testing.m3u8", parsed.Name)
-		assert.Equal("/vid/", parsed.GetDIRPath())
+		assert.Equal("testing", parsed.Name)
 		assert.Equal(3, parsed.Version)
 		assert.InDelta(62.0, parsed.TargetSegDuration, 1e-6)
 		assert.Len(parsed.Segments, 1)
@@ -122,11 +120,9 @@ func TestHLSParsing(t *testing.T) {
 			"vid-1.ts",
 			"#EXT-X-ENDLIST",
 		}
-		parsed, err := uut.ParsePlaylist(utCtxt, "file:///vid/testing.m3u8", testfile, currentTime)
+		parsed, err := uut.ParsePlaylist(utCtxt, testfile, currentTime, "testing", "file:///vid")
 		assert.Nilf(err, "Got %s", err)
-		assert.Equal("file:///vid/testing.m3u8", parsed.URI.String())
-		assert.Equal("testing.m3u8", parsed.Name)
-		assert.Equal("/vid/", parsed.GetDIRPath())
+		assert.Equal("testing", parsed.Name)
 		assert.Equal(3, parsed.Version)
 		assert.InDelta(62.0, parsed.TargetSegDuration, 1e-6)
 		assert.Len(parsed.Segments, 2)

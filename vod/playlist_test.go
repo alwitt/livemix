@@ -28,7 +28,10 @@ func TestBuildLiveStreamPlaylist(t *testing.T) {
 		ID:   uuid.NewString(),
 		Name: fmt.Sprintf("vid-%s.m3u8", uuid.NewString()),
 	}
-	testSource.PlaylistURI = fmt.Sprintf("file:///%s", testSource.Name)
+	testSource.PlaylistURI = func() *string {
+		t := fmt.Sprintf("file:///%s", testSource.Name)
+		return &t
+	}()
 
 	segmentLength := time.Second * 5
 

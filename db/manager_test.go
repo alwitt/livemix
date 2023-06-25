@@ -39,8 +39,9 @@ func TestDBManagerVideoSource(t *testing.T) {
 		assert.Len(result, 0)
 	}
 
-	getURI := func(name string) string {
-		return fmt.Sprintf("file:///%s.m3u8", name)
+	getURI := func(name string) *string {
+		u := fmt.Sprintf("file:///%s.m3u8", name)
+		return &u
 	}
 
 	// Case 1: create video source
@@ -52,11 +53,11 @@ func TestDBManagerVideoSource(t *testing.T) {
 		entry, err := uut.GetVideoSource(utCtxt, sourceID1)
 		assert.Nil(err)
 		assert.Equal(source1, entry.Name)
-		assert.Equal(getURI(source1), entry.PlaylistURI)
+		assert.Equal(*getURI(source1), *entry.PlaylistURI)
 		entry, err = uut.GetVideoSourceByName(utCtxt, source1)
 		assert.Nil(err)
 		assert.Equal(source1, entry.Name)
-		assert.Equal(getURI(source1), entry.PlaylistURI)
+		assert.Equal(*getURI(source1), *entry.PlaylistURI)
 	}
 
 	// Case 2: create another with same name
@@ -83,7 +84,7 @@ func TestDBManagerVideoSource(t *testing.T) {
 		entry, ok := asMap[sourceID2]
 		assert.True(ok)
 		assert.Equal(source2, entry.Name)
-		assert.Equal(getURI(source2), entry.PlaylistURI)
+		assert.Equal(*getURI(source2), *entry.PlaylistURI)
 	}
 
 	// Case 4: update entry
@@ -95,7 +96,7 @@ func TestDBManagerVideoSource(t *testing.T) {
 		entry, err := uut.GetVideoSource(utCtxt, sourceID1)
 		assert.Nil(err)
 		assert.Equal(newName, entry.Name)
-		assert.Equal(getURI(source1), entry.PlaylistURI)
+		assert.Equal(*getURI(source1), *entry.PlaylistURI)
 	}
 
 	// Case 5: recreate existing entry
@@ -113,7 +114,7 @@ func TestDBManagerVideoSource(t *testing.T) {
 		entry, ok := asMap[sourceID2]
 		assert.True(ok)
 		assert.Equal(source3, entry.Name)
-		assert.Equal(getURI(source3), entry.PlaylistURI)
+		assert.Equal(*getURI(source3), *entry.PlaylistURI)
 	}
 
 	// Case 6: delete entry
@@ -134,7 +135,7 @@ func TestDBManagerVideoSource(t *testing.T) {
 		entry, ok := asMap[sourceID2]
 		assert.True(ok)
 		assert.Equal(source3, entry.Name)
-		assert.Equal(getURI(source3), entry.PlaylistURI)
+		assert.Equal(*getURI(source3), *entry.PlaylistURI)
 	}
 }
 
@@ -155,7 +156,7 @@ func TestDBManagerVideoSegment(t *testing.T) {
 
 	// Create a source
 	sourceID, err := uut.DefineVideoSource(
-		utCtxt, uuid.NewString(), fmt.Sprintf("file:///%s.m3u8", uuid.NewString()), nil,
+		utCtxt, uuid.NewString(), nil, nil,
 	)
 	assert.Nil(err)
 

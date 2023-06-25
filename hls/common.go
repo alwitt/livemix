@@ -3,8 +3,6 @@ package hls
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -46,37 +44,10 @@ type Playlist struct {
 	CreatedAt time.Time `json:"created_at" validate:"required"`
 	// Version EXT-X-VERSION value
 	Version int `json:"version"`
-	// URI video playlist file URI
-	URI *url.URL `json:"path" validate:"required,uri"`
 	// TargetSegDuration target segment duration
 	TargetSegDuration float64 `json:"duration" validate:"required"`
 	// Segments list of TS segments associated with this playlist
 	Segments []Segment `json:"segments" validate:"required,gt=0,dive"`
-}
-
-/*
-GetDIRPath helper function to get the DIR where the playlist is
-
-	@returns DIR path
-*/
-func (p Playlist) GetDIRPath() string {
-	dirPath, _ := filepath.Split(p.URI.EscapedPath())
-	return dirPath
-}
-
-/*
-BuildSegmentURI helper function to get the segment URI
-
-	@param segmentName string - name of the segment object
-	@return segment URI
-*/
-func (p Playlist) BuildSegmentURI(segmentName string) string {
-	dirPath, _ := filepath.Split(p.URI.EscapedPath())
-	objectPath := filepath.Join(dirPath, segmentName)
-	// Build new URI
-	newURI := *p.URI
-	newURI.Path = objectPath
-	return newURI.String()
 }
 
 /*

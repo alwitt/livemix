@@ -33,12 +33,12 @@ type PersistenceManager interface {
 
 			@param ctxt context.Context - execution context
 			@param name string - source name
-			@param playlistURI string - video source playlist URI
+			@param playlistURI *string - video source playlist URI
 			@param description *string - optionally, source description
 			@returns new source entry ID
 	*/
 	DefineVideoSource(
-		ctxt context.Context, name, playlistURI string, description *string,
+		ctxt context.Context, name string, playlistURI, description *string,
 	) (string, error)
 
 	/*
@@ -47,11 +47,11 @@ type PersistenceManager interface {
 			@param ctxt context.Context - execution context
 			@param id string - source entry ID
 			@param name string - source name
-			@param playlistURI string - video source playlist URI
+			@param playlistURI *string - video source playlist URI
 			@param description *string - optionally, source description
 	*/
 	RecordKnownVideoSource(
-		ctxt context.Context, id, name, playlistURI string, description *string,
+		ctxt context.Context, id, name string, playlistURI, description *string,
 	) error
 
 	/*
@@ -252,7 +252,7 @@ func (m *persistenceManagerImpl) Ready(ctxt context.Context) error {
 // Video sources
 
 func (m *persistenceManagerImpl) DefineVideoSource(
-	ctxt context.Context, name, playlistURI string, description *string,
+	ctxt context.Context, name string, playlistURI, description *string,
 ) (string, error) {
 	newEntryID := ""
 	return newEntryID, m.db.Transaction(func(tx *gorm.DB) error {
@@ -290,7 +290,7 @@ func (m *persistenceManagerImpl) DefineVideoSource(
 }
 
 func (m *persistenceManagerImpl) RecordKnownVideoSource(
-	ctxt context.Context, id, name, playlistURI string, description *string,
+	ctxt context.Context, id, name string, playlistURI, description *string,
 ) error {
 	return m.db.Transaction(func(tx *gorm.DB) error {
 		logTags := m.GetLogTagsForContext(ctxt)

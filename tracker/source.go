@@ -87,11 +87,9 @@ func (t *sourceHLSTrackerImpl) Update(
 	logTags := t.GetLogTagsForContext(ctxt)
 
 	// Verify the playlist came from the expected source
-	if currentPlaylist.Name != t.source.Name || currentPlaylist.URI.String() != t.source.PlaylistURI {
+	if currentPlaylist.Name != t.source.Name {
 		return nil, fmt.Errorf(
-			"playlist not from tracked HLS source: %s =/= %s",
-			currentPlaylist.URI.String(),
-			t.source.PlaylistURI,
+			"playlist not from tracked HLS source: %s =/= %s", currentPlaylist.Name, t.source.Name,
 		)
 	}
 

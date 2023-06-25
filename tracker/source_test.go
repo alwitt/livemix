@@ -3,7 +3,6 @@ package tracker_test
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"testing"
 	"time"
 
@@ -28,7 +27,10 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 		ID:   uuid.NewString(),
 		Name: fmt.Sprintf("vid-%s.m3u8", uuid.NewString()),
 	}
-	testSource.PlaylistURI = fmt.Sprintf("file:///%s", testSource.Name)
+	testSource.PlaylistURI = func() *string {
+		t := fmt.Sprintf("file:///%s", testSource.Name)
+		return &t
+	}()
 
 	trackingWindow := time.Second * 15
 
@@ -40,16 +42,12 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 	segmentLength := time.Second * 5
 
 	// Helper function to define a playlist with segments
-	definePlaylist := func(name, uri string, startTime time.Time, segments []string) hls.Playlist {
-		parsedURI, err := url.Parse(uri)
-		assert.Nil(err)
-
+	definePlaylist := func(name string, startTime time.Time, segments []string) hls.Playlist {
 		// Define playlist
 		result := hls.Playlist{
 			Name:              name,
 			CreatedAt:         startTime.Add(segmentLength * (time.Duration(len(segments)))),
 			Version:           3,
-			URI:               parsedURI,
 			TargetSegDuration: segmentLength.Seconds(),
 			Segments:          []hls.Segment{},
 		}
@@ -108,18 +106,14 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 		segmentIDs0[segmentName] = ulid.Make().String()
 	}
 	{
-		playlist0 := definePlaylist(
-			uuid.NewString(), testSource.PlaylistURI, currentTime, segmentNames0,
-		)
+		playlist0 := definePlaylist(uuid.NewString(), currentTime, segmentNames0)
 		_, err := uut.Update(utCtxt, playlist0, playlist0.CreatedAt)
 		assert.NotNil(err)
 	}
 
 	// Case 1: registering new segments, with no previous segments
 	{
-		playlist0 := definePlaylist(
-			testSource.Name, testSource.PlaylistURI, currentTime, segmentNames0,
-		)
+		playlist0 := definePlaylist(testSource.Name, currentTime, segmentNames0)
 
 		// Setup mocks
 		mockDB.On(
@@ -167,9 +161,7 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 			segmentIDs1[segName] = segID
 		}
 
-		playlist1 := definePlaylist(
-			testSource.Name, testSource.PlaylistURI, currentTime, segmentNames1,
-		)
+		playlist1 := definePlaylist(testSource.Name, currentTime, segmentNames1)
 		assert.Len(playlist1.Segments, 4)
 
 		// Setup mocks
@@ -218,9 +210,7 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 			segmentIDs2[segName] = segID
 		}
 
-		playlist2 := definePlaylist(
-			testSource.Name, testSource.PlaylistURI, currentTime, segmentNames2,
-		)
+		playlist2 := definePlaylist(testSource.Name, currentTime, segmentNames2)
 		assert.Len(playlist2.Segments, 5)
 
 		// Setup mocks
