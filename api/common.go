@@ -7,11 +7,11 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// MethodHandlers DICT of method-endpoint handler
-type MethodHandlers map[string]http.HandlerFunc
+// methodHandlers DICT of method-endpoint handler
+type methodHandlers map[string]http.HandlerFunc
 
-// RegisterPathPrefix registers new method handler for a path prefix
-func RegisterPathPrefix(parent *mux.Router, prefix string, handler MethodHandlers) *mux.Router {
+// registerPathPrefix registers new method handler for a path prefix
+func registerPathPrefix(parent *mux.Router, prefix string, handler methodHandlers) *mux.Router {
 	router := parent.PathPrefix(prefix).Subrouter()
 	for method, handler := range handler {
 		router.Methods(method).Path("").HandlerFunc(handler)
