@@ -1,3 +1,5 @@
+SHELL = bash
+
 all: build
 
 .PHONY: lint
@@ -41,6 +43,10 @@ compose: ## Prepare the development docker stack
 .PHONY: clean
 clean: ## Clean up development environment
 	@docker-compose -f docker/docker-compose.yaml down
+
+.PHONY: ctrl
+ctrl: build ## Run local development system control node application
+	. .env; ./stream-hub.bin -l debug ctrl -c tmp/dev-ctrl-node-cfg.yaml -p postgres
 
 .prepare: ## Prepare the project for local development
 	@pip3 install --user pre-commit

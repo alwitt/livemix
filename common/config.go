@@ -102,9 +102,9 @@ type PubSubSubcriptionConfig struct {
 
 // ReqRespClientConfig PubSub request-response client config
 type ReqRespClientConfig struct {
-	// GCPProject the GCP project operate in
+	// GCPProject the GCP project to operate in
 	GCPProject string `mapstructure:"gcpProject" json:"gcpProject" validate:"required"`
-	// InboudRequestTopic the PubSub topic this client listen on for inboud request
+	// InboudRequestTopic the PubSub topic this client listen on for inbound request
 	InboudRequestTopic PubSubSubcriptionConfig `mapstructure:"self" json:"self" validate:"required,dive"`
 	// SupportWorkerCount number of support workers to spawn to process inbound requests
 	SupportWorkerCount int `mapstructure:"supportWorkerCount" json:"supportWorkerCount" validate:"required"`
@@ -119,7 +119,7 @@ type ReqRespClientConfig struct {
 type SystemManagementConfig struct {
 	// APIServer management REST API server config
 	APIServer APIServerConfig `mapstructure:"api" json:"api" validate:"required,dive"`
-	// RRClient PibSub request-response client config
+	// RRClient PubSub request-response client config
 	RRClient ReqRespClientConfig `mapstructure:"requestResponse" json:"requestResponse" validate:"required,dive"`
 }
 
