@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -126,7 +127,16 @@ func (h PlaylistReceiveHandler) NewPlaylist(w http.ResponseWriter, r *http.Reque
 	// Prepare the playlist for parsing
 	playlistRaw := []string{}
 	for _, oneLine := range strings.Split(string(content), "\n") {
-		playlistRaw = append(playlistRaw, strings.TrimSpace(oneLine))
+		if len(oneLine) > 0 && oneLine[0] != '\n' {
+			playlistRaw = append(playlistRaw, oneLine)
+		}
+	}
+	{
+		b := strings.Builder{}
+		for idx, oneLine := range playlistRaw {
+			b.WriteString(fmt.Sprintf("[%d] '%s'\n", idx, oneLine))
+		}
+		log.WithFields(logTags).Debugf("Received playlist:\n%s\n", b.String())
 	}
 
 	currentTime := time.Now().UTC()

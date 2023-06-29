@@ -144,7 +144,7 @@ func DefineEdgeNode(
 		theNode.segmentReader,
 		func(ctxt context.Context, segment common.VideoSegmentWithData) error {
 			// TODO FIXME: once forwarders are implemented replace this
-			log.WithField("segment", segment.String()).Debug("Processed new segment")
+			log.WithField("segment", segment.String()).Info("Processed new segment")
 			return nil
 		},
 	)

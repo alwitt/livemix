@@ -189,7 +189,7 @@ func (r *segmentReader) readSegmentFromFile(
 		WithFields(logTags).
 		WithField("segment-url", segment.String()).
 		WithField("length", len(content)).
-		Error("Read segment file")
+		Debug("Read segment file")
 
 	if err := returnCB(r.workerContext, segmentID, content); err != nil {
 		log.

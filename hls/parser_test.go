@@ -81,8 +81,15 @@ func TestHLSParsing(t *testing.T) {
 			"#EXTINF:62.500000,",
 			"vid-0.ts",
 		}
-		_, err := uut.ParsePlaylist(utCtxt, testfile, currentTime, "testing", "file:///vid")
+		parsed, err := uut.ParsePlaylist(utCtxt, testfile, currentTime, "testing", "file:///vid")
 		assert.Nil(err)
+		assert.Equal("testing", parsed.Name)
+		assert.Equal(3, parsed.Version)
+		assert.InDelta(62.0, parsed.TargetSegDuration, 1e-6)
+		assert.Len(parsed.Segments, 1)
+		assert.Equal("vid-0.ts", parsed.Segments[0].Name)
+		assert.Equal("file:///vid/vid-0.ts", parsed.Segments[0].URI)
+		assert.InDelta(62.5, parsed.Segments[0].Length, 1e-6)
 	}
 
 	// Case 7: Everything accounted for

@@ -182,17 +182,15 @@ func (p playlistParserImpl) ParsePlaylist(
 				return playlist, err
 			}
 
-		case hlsParseReadAllSegments:
-			err := fmt.Errorf("playlist has more data after #EXT-X-ENDLIST")
-			logTags["current"] = oneLine
-			log.WithError(err).WithFields(logTags).Error("HLS playlist parse failure")
-			return playlist, err
-
 		default:
 			err := fmt.Errorf("parsing state broke")
 			logTags["current"] = oneLine
 			log.WithError(err).WithFields(logTags).Error("HLS playlist parse failure")
 			return playlist, err
+		}
+
+		if parseState == hlsParseReadAllSegments {
+			break
 		}
 	}
 
