@@ -23,6 +23,10 @@ type ctrlNodeCliArgs struct {
 	DBPassword string
 }
 
+type edgeNodeCliArgs struct {
+	ConfigFile string `validate:"required,file"`
+}
+
 type cliArgs struct {
 	JSONLog      bool
 	LogLevel     string `validate:"required,oneof=debug info warn error"`
@@ -31,6 +35,8 @@ type cliArgs struct {
 }
 
 var ctrlNodeArgs ctrlNodeCliArgs
+
+var edgeNodeArgs edgeNodeCliArgs
 
 var cmdArgs cliArgs
 
@@ -112,6 +118,22 @@ func main() {
 				},
 				Action: startControlNode,
 			},
+			{
+				Name:        "edge",
+				Usage:       "Run video proxy edge node",
+				Description: "Start the edge node to monitor and proxy a video source",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:        "config-file",
+						Usage:       "Application config file",
+						Aliases:     []string{"c"},
+						EnvVars:     []string{"CONFIG_FILE"},
+						Destination: &edgeNodeArgs.ConfigFile,
+						Required:    true,
+					},
+				},
+				Action: startEdgeNode,
+			},
 		},
 	}
 
@@ -151,9 +173,7 @@ func startControlNode(c *cli.Context) error {
 	setupLogging()
 
 	// ================================================================================
-	// Setup logging
-
-	// Verify system control node config
+	// Process system control node config
 	if err := validate.Struct(&ctrlNodeArgs); err != nil {
 		log.
 			WithError(err).
@@ -245,6 +265,123 @@ func startControlNode(c *cli.Context) error {
 			defer wg.Done()
 			if err := svr.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				log.WithError(err).Error("System Management API HTTP server failure")
+			}
+		}()
+	}
+
+	// ------------------------------------------------------------------------------------
+	// Wait for termination
+
+	cc := make(chan os.Signal, 1)
+	// We'll accept graceful shutdowns when quit via SIGINT (Ctrl+C)
+	// SIGKILL, SIGQUIT or SIGTERM (Ctrl+/) will not be caught.
+	signal.Notify(cc, os.Interrupt)
+	<-cc
+
+	return nil
+}
+
+func startEdgeNode(c *cli.Context) error {
+	validate := validator.New()
+
+	// Validate general config
+	if err := validate.Struct(&cmdArgs); err != nil {
+		return err
+	}
+
+	setupLogging()
+
+	// ================================================================================
+	// Process edge node config
+	if err := validate.Struct(&edgeNodeArgs); err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Invalid parameters provided to start edge node")
+		return err
+	}
+
+	// Process the config file
+	common.InstallDefaultEdgeNodeConfigValues()
+	var configs common.EdgeNodeConfig
+	viper.SetConfigFile(edgeNodeArgs.ConfigFile)
+	if err := viper.ReadInConfig(); err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to load edge node config")
+		return err
+	}
+	if err := viper.Unmarshal(&configs); err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to parse edge node config")
+		return err
+	}
+
+	// Validate edge node config
+	if err := validate.Struct(&configs); err != nil {
+		log.WithError(err).WithFields(logTags).Error("Edge node config file is not valid")
+		return err
+	}
+
+	{
+		t, _ := json.MarshalIndent(&configs, "", "  ")
+		log.WithFields(logTags).Debugf("Running with config:\n%s", string(t))
+	}
+
+	// ================================================================================
+	// Define edge node
+
+	runtimeCtxt, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	edgeNode, err := bin.DefineEdgeNode(runtimeCtxt, cmdArgs.Hostname, configs)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Unable to define and start edge node")
+		return err
+	}
+	defer func() {
+		if err := edgeNode.Cleanup(runtimeCtxt); err != nil {
+			log.WithError(err).WithFields(logTags).Error("Failure during edge node clean up")
+		}
+	}()
+
+	// ================================================================================
+	// Start HTTP servers
+
+	wg := sync.WaitGroup{}
+	defer wg.Wait()
+	apiServers := map[string]*http.Server{}
+	cleanUpTasks := map[string]func(context.Context) error{}
+
+	defer func() {
+		// Shutdown the servers
+		for svrInstance, svr := range apiServers {
+			ctx, cancel := context.WithTimeout(runtimeCtxt, time.Second*10)
+			defer cancel()
+			if err := svr.Shutdown(ctx); err != nil {
+				log.
+					WithError(err).
+					WithFields(logTags).
+					Errorf("Failure during HTTP Server %s shutdown", svrInstance)
+			}
+		}
+		// Perform other clean up tasks
+		for taskName, task := range cleanUpTasks {
+			ctx, cancel := context.WithTimeout(runtimeCtxt, time.Second*10)
+			defer cancel()
+			if err := task(ctx); err != nil {
+				log.WithError(err).WithFields(logTags).Errorf("Clean up task '%s' failed", taskName)
+			}
+		}
+	}()
+
+	// Start playlist receiver HTTP server
+	{
+		svr := edgeNode.PlaylistReceiveServer
+		apiServers["playlist-rx"] = svr
+		// Start the server
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := svr.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.WithError(err).Error("Playlist receiver HTTP server failure")
 			}
 		}()
 	}

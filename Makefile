@@ -48,6 +48,10 @@ clean: ## Clean up development environment
 ctrl: build ## Run local development system control node application
 	. .env; ./stream-hub.bin -l debug ctrl -c tmp/dev-ctrl-node-cfg.yaml -p postgres
 
+.PHONY: edge
+edge: build ## Run local development edge node application
+	. .env; ./stream-hub.bin -l debug edge -c tmp/dev-edge-node-cfg.yaml
+
 .prepare: ## Prepare the project for local development
 	@pip3 install --user pre-commit
 	@pre-commit install

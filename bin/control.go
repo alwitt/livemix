@@ -3,7 +3,6 @@ package bin
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"github.com/alwitt/goutils"
 	"github.com/alwitt/livemix/api"
@@ -76,70 +75,16 @@ func DefineControlNode(
 	// This will change in the future.
 
 	// Prepare core request-response client
-	var rrClient goutils.RequestResponseClient
-	{
-		rawPSClient, err := goutils.CreateBasicGCPPubSubClient(
-			parentCtxt, config.Management.RRClient.GCPProject,
-		)
-		if err != nil {
-			log.WithError(err).Error("Failed to create core PubSub client")
-			return theNode, err
-		}
-
-		// Define PubSub client
-		psClient, err := goutils.GetNewPubSubClientInstance(rawPSClient, log.Fields{
-			"module":    "go-utils",
-			"component": "pubsub-client",
-			"project":   config.Management.RRClient.GCPProject,
-		})
-		if err != nil {
-			log.WithError(err).Error("Failed to create PubSub client")
-			return theNode, err
-		}
-
-		// Sync PubSub client with currently existing topics and subscriptions
-		if err := psClient.UpdateLocalTopicCache(parentCtxt); err != nil {
-			log.WithError(err).Error("Errored when syncing existing topics in GCP project")
-			return theNode, err
-		}
-		if err := psClient.UpdateLocalSubscriptionCache(parentCtxt); err != nil {
-			log.WithError(err).Error("Errored when syncing existing subscriptions in GCP project")
-			return theNode, err
-		}
-
-		// Define PubSub request-response client
-		rrClient, err = goutils.GetNewPubSubRequestResponseClientInstance(
-			parentCtxt, goutils.PubSubRequestResponseClientParam{
-				TargetID: config.Management.RRClient.InboudRequestTopic.Topic,
-				Name:     nodeName,
-				PSClient: psClient,
-				MsgRetentionTTL: time.Second * time.Duration(
-					config.Management.RRClient.InboudRequestTopic.MsgTTLInSec,
-				),
-				LogTags: log.Fields{
-					"module":    "go-utils",
-					"component": "pubsub-req-resp-client",
-					"project":   config.Management.RRClient.GCPProject,
-				},
-				CustomLogModifiers: []goutils.LogMetadataModifier{
-					goutils.ModifyLogMetadataByRestRequestParam,
-				},
-				TimeoutEnforceInt: time.Second * time.Duration(
-					config.Management.RRClient.RequestTimeoutEnforceIntInSec,
-				),
-			},
-		)
-		if err != nil {
-			log.WithError(err).Error("Failed to create PubSub request-response client")
-			return theNode, err
-		}
-
-		theNode.psClient = psClient
-		theNode.rrClient = rrClient
+	theNode.psClient, theNode.rrClient, err = buildReqRespClients(
+		parentCtxt, nodeName, config.Management.RRClient,
+	)
+	if err != nil {
+		log.WithError(err).Error("PubSub request-response client initialization failed")
+		return theNode, err
 	}
 
 	// Define controller-to-edge request-response client
-	ctrlToEdgeRRClient, err := control.NewEdgeRequestClient(parentCtxt, nodeName, rrClient)
+	ctrlToEdgeRRClient, err := control.NewEdgeRequestClient(parentCtxt, nodeName, theNode.rrClient)
 	if err != nil {
 		log.WithError(err).Error("Failed to create controller-to-edge request-response client")
 		return theNode, err

@@ -1,6 +1,11 @@
 package common
 
-import "github.com/spf13/viper"
+import (
+	"fmt"
+	"time"
+
+	"github.com/spf13/viper"
+)
 
 // ===============================================================================
 // Common Submodule Config
@@ -89,6 +94,12 @@ type PostgresConfig struct {
 	SSL PostgresSSLConfig `mapstructure:"ssl" json:"ssl" validate:"required,dive"`
 }
 
+// SqliteConfig sqlite config
+type SqliteConfig struct {
+	// DBFile the sqlite DB file path
+	DBFile string `mapstructure:"db" json:"db" validate:"required"`
+}
+
 // ===============================================================================
 // GCP PubSub Configuration Structures
 
@@ -112,6 +123,24 @@ type ReqRespClientConfig struct {
 	RequestTimeoutEnforceIntInSec uint32 `mapstructure:"requestTimeoutEnforceIntInSec" json:"requestTimeoutEnforceIntInSec" validate:"gte=15,lte=120"`
 }
 
+// EdgeReqRespClientConfig PubSub request-response client config for edge-to-control requests
+type EdgeReqRespClientConfig struct {
+	ReqRespClientConfig `mapstructure:",squash"`
+	// ControlRRTopic the PubSub topic for reaching system control
+	ControlRRTopic string `mapstructure:"systemControlTopic" json:"systemControlTopic" validate:"required"`
+	// MaxOutboundRequestDurationInSec the max duration for outbound request in secs
+	MaxOutboundRequestDurationInSec uint32 `mapstructure:"outboundRequestDurationInSec" json:"outboundRequestDurationInSec" validate:"gte=5,lte=60"`
+}
+
+// ===============================================================================
+// Video Segment Cache Configuration Structures
+
+// RAMSegmentCacheConfig in-memory video segment cache config
+type RAMSegmentCacheConfig struct {
+	// RetentionCheckIntInSec cache entry retention check interval in secs
+	RetentionCheckIntInSec uint32 `mapstructure:"retentionCheckIntInSec" json:"retentionCheckIntInSec" validate:"gte=10,lte=300"`
+}
+
 // ===============================================================================
 // Major System Component Configuration Structures
 
@@ -121,6 +150,18 @@ type SystemManagementConfig struct {
 	APIServer APIServerConfig `mapstructure:"api" json:"api" validate:"required,dive"`
 	// RRClient PubSub request-response client config
 	RRClient ReqRespClientConfig `mapstructure:"requestResponse" json:"requestResponse" validate:"required,dive"`
+}
+
+// HLSMonitorConfig HLS video source monitoring config
+type HLSMonitorConfig struct {
+	// APIServer HLS playlist receiver REST API server config
+	APIServer APIServerConfig `mapstructure:"api" json:"api" validate:"required,dive"`
+	// TrackingWindowInSec tracking window is the duration in time a video segment is tracked.
+	// After observing a new segment, that segment is remembered for the duration of a
+	// tracking window, and forgotten after that.
+	TrackingWindowInSec uint32 `mapstructure:"trackingWindow" json:"trackingWindow" validate:"gte=10,lte=300"`
+	// SegmentReaderWorkerCount number of worker threads in the video segment reader
+	SegmentReaderWorkerCount int `mapstructure:"segmentReaderWorkerCount" json:"segmentReaderWorkerCount" validate:"gte=2,lte=64"`
 }
 
 // ===============================================================================
@@ -136,8 +177,16 @@ type ControlNodeConfig struct {
 
 // EdgeNodeConfig define edge node settings and behavior
 type EdgeNodeConfig struct {
-	// LiveStreamServer local live stream server config
-	LiveStreamServer APIServerConfig `mapstructure:"localLiveStream" json:"localLiveStream" validate:"required,dive"`
+	// VideoSourceName name of the video source this edge is monitoring
+	VideoSourceName string `mapstructure:"videoSource" json:"videoSource" validate:"required"`
+	// SegmentCache video segment cache config
+	SegmentCache RAMSegmentCacheConfig `mapstructure:"cache" json:"cache" validate:"required,dive"`
+	// Sqlite sqlite DB configuration
+	Sqlite SqliteConfig `mapstructure:"sqlite" json:"sqlite" validate:"required,dive"`
+	// MonitorConfig HLS video source monitoring config
+	MonitorConfig HLSMonitorConfig `mapstructure:"monitor" json:"monitor" validate:"required,dive"`
+	// RRClient PubSub request-response client config
+	RRClient EdgeReqRespClientConfig `mapstructure:"requestResponse" json:"requestResponse" validate:"required,dive"`
 }
 
 // ===============================================================================
@@ -167,4 +216,34 @@ func InstallDefaultControlNodeConfigValues() {
 	viper.SetDefault("management.requestResponse.self.msgTTL", 600)
 	viper.SetDefault("management.requestResponse.supportWorkerCount", 4)
 	viper.SetDefault("management.requestResponse.requestTimeoutEnforceIntInSec", 30)
+}
+
+// InstallDefaultEdgeNodeConfigValues installs default config parameters in viper for edge node
+func InstallDefaultEdgeNodeConfigValues() {
+	// Default cache config
+	viper.SetDefault("cache.retentionCheckIntInSec", 60)
+
+	// Default sqlite config
+	viper.SetDefault("sqlite.db", fmt.Sprintf("/tmp/livemix-edge-%d.db", time.Now().Unix()))
+
+	// Default video source monitor config
+	viper.SetDefault("monitor.segmentReaderWorkerCount", 4)
+	// Default playlist receiver REST API server config
+	viper.SetDefault("monitor.api.enabled", true)
+	viper.SetDefault("monitor.api.service.listenOn", "0.0.0.0")
+	viper.SetDefault("monitor.api.service.appPort", 8080)
+	viper.SetDefault("monitor.api.service.timeoutSecs.read", 60)
+	viper.SetDefault("monitor.api.service.timeoutSecs.write", 60)
+	viper.SetDefault("monitor.api.service.timeoutSecs.idle", 60)
+	viper.SetDefault("monitor.api.apis.endPoint.pathPrefix", "/")
+	viper.SetDefault("monitor.api.apis.requestLogging.requestIDHeader", "X-Request-ID")
+	viper.SetDefault("monitor.api.apis.requestLogging.skipHeaders", []string{
+		"WWW-Authenticate", "Authorization", "Proxy-Authenticate", "Proxy-Authorization",
+	})
+	// Default edge node request-response client config
+	viper.SetDefault("requestResponse.self.msgTTL", 600)
+	viper.SetDefault("requestResponse.supportWorkerCount", 4)
+	viper.SetDefault("requestResponse.requestTimeoutEnforceIntInSec", 30)
+	viper.SetDefault("requestResponse.systemControlTopic", "system-control-node")
+	viper.SetDefault("requestResponse.outboundRequestDurationInSec", 15)
 }
