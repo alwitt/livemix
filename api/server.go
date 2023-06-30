@@ -8,7 +8,9 @@ import (
 
 	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/control"
+	"github.com/alwitt/livemix/db"
 	"github.com/alwitt/livemix/hls"
+	"github.com/alwitt/livemix/vod"
 	"github.com/gorilla/mux"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -118,6 +120,66 @@ func BuildPlaylistReceiverServer(
 	_ = registerPathPrefix(v1Router, "/playlist", map[string]http.HandlerFunc{
 		"post": httpHandler.NewPlaylistHandler(),
 	})
+
+	// --------------------------------------------------------------------------------
+	// Middleware
+
+	router.Use(func(next http.Handler) http.Handler {
+		return httpHandler.LoggingMiddleware(next.ServeHTTP)
+	})
+
+	// --------------------------------------------------------------------------------
+	// HTTP Server
+
+	serverListen := fmt.Sprintf(
+		"%s:%d", httpCfg.Server.ListenOn, httpCfg.Server.Port,
+	)
+	httpSrv := &http.Server{
+		Addr:         serverListen,
+		WriteTimeout: time.Second * time.Duration(httpCfg.Server.Timeouts.WriteTimeout),
+		ReadTimeout:  time.Second * time.Duration(httpCfg.Server.Timeouts.ReadTimeout),
+		IdleTimeout:  time.Second * time.Duration(httpCfg.Server.Timeouts.IdleTimeout),
+		Handler:      h2c.NewHandler(router, &http2.Server{}),
+	}
+
+	return httpSrv, nil
+}
+
+// ====================================================================================
+// VOD Server
+
+/*
+BuildVODServer create HLS VOD server
+
+	@param httpCfg common.APIServerConfig - HTTP server configuration
+	@param dbClient db.PersistenceManager - DB persistence manager
+	@param segments vod.SegmentManager - video segment manager
+	@returns HTTP server instance
+*/
+func BuildVODServer(
+	httpCfg common.APIServerConfig,
+	dbClient db.PersistenceManager,
+	playlistBuilder vod.PlaylistBuilder,
+	segments vod.SegmentManager,
+) (*http.Server, error) {
+	httpHandler, err := NewLiveStreamHandler(
+		dbClient, playlistBuilder, segments, httpCfg.APIs.RequestLogging,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	router := mux.NewRouter()
+	mainRouter := registerPathPrefix(router, httpCfg.APIs.Endpoint.PathPrefix, nil)
+	v1Router := registerPathPrefix(mainRouter, "/v1", nil)
+
+	// --------------------------------------------------------------------------------
+	// VOD endpoint
+	_ = registerPathPrefix(
+		v1Router, "/vod/live/{videoSourceID}/{fileName}", map[string]http.HandlerFunc{
+			"get": httpHandler.GetVideoFilesHandler(),
+		},
+	)
 
 	// --------------------------------------------------------------------------------
 	// Middleware

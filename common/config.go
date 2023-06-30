@@ -69,6 +69,14 @@ type APIServerConfig struct {
 	APIs APIConfig `mapstructure:"apis" json:"apis" validate:"required_with=Enabled,dive"`
 }
 
+// VideoSourceConfig define a HLS video source being monitored
+type VideoSourceConfig struct {
+	// Name video source system entry name (as recorded by the system control node)
+	Name string `mapstructure:"name" json:"name" validate:"required"`
+	// SegmentDurationInSec the expected duration of each video segment in secs
+	SegmentDurationInSec uint32 `mapstructure:"segmentDurationInSec" json:"segmentDurationInSec" validate:"gte=2"`
+}
+
 // ===============================================================================
 // Persistence Configuration Structures
 
@@ -164,6 +172,18 @@ type HLSMonitorConfig struct {
 	SegmentReaderWorkerCount int `mapstructure:"segmentReaderWorkerCount" json:"segmentReaderWorkerCount" validate:"gte=2,lte=64"`
 }
 
+// VODServerConfig HLS VOD server config
+type VODServerConfig struct {
+	// APIServer HLS VOD REST API server config
+	APIServer APIServerConfig `mapstructure:"api" json:"api" validate:"required,dive"`
+	// LiveVODSegmentCount number of video segments to include when building a live
+	// VOD playlist.
+	LiveVODSegmentCount int `mapstructure:"liveVODSegmentCount" json:"liveVODSegmentCount" validate:"gte=1"`
+	// SegmentCacheTTLInSec when a segment is read from cold storage, store it in
+	// local cache with this TTL in secs.
+	SegmentCacheTTLInSec uint32 `mapstructure:"segmentCacheTTLInSec" json:"segmentCacheTTLInSec" validate:"gte=30,lte=7200"`
+}
+
 // ===============================================================================
 // Complete Configuration Structures
 
@@ -177,14 +197,16 @@ type ControlNodeConfig struct {
 
 // EdgeNodeConfig define edge node settings and behavior
 type EdgeNodeConfig struct {
-	// VideoSourceName name of the video source this edge is monitoring
-	VideoSourceName string `mapstructure:"videoSource" json:"videoSource" validate:"required"`
+	// VideoSourceName the video source this edge is monitoring
+	VideoSourceName VideoSourceConfig `mapstructure:"videoSource" json:"videoSource" validate:"required,dive"`
 	// SegmentCache video segment cache config
 	SegmentCache RAMSegmentCacheConfig `mapstructure:"cache" json:"cache" validate:"required,dive"`
 	// Sqlite sqlite DB configuration
 	Sqlite SqliteConfig `mapstructure:"sqlite" json:"sqlite" validate:"required,dive"`
 	// MonitorConfig HLS video source monitoring config
 	MonitorConfig HLSMonitorConfig `mapstructure:"monitor" json:"monitor" validate:"required,dive"`
+	// VODConfig HLS VOD server config
+	VODConfig VODServerConfig `mapstructure:"vod" json:"vod" validate:"required,dive"`
 	// RRClient PubSub request-response client config
 	RRClient EdgeReqRespClientConfig `mapstructure:"requestResponse" json:"requestResponse" validate:"required,dive"`
 }
@@ -240,6 +262,25 @@ func InstallDefaultEdgeNodeConfigValues() {
 	viper.SetDefault("monitor.api.apis.requestLogging.skipHeaders", []string{
 		"WWW-Authenticate", "Authorization", "Proxy-Authenticate", "Proxy-Authorization",
 	})
+
+	// Default VOD server config
+	// Default REST API server config
+	viper.SetDefault("vod.api.enabled", true)
+	viper.SetDefault("vod.api.service.listenOn", "0.0.0.0")
+	viper.SetDefault("vod.api.service.appPort", 8081)
+	viper.SetDefault("vod.api.service.timeoutSecs.read", 60)
+	viper.SetDefault("vod.api.service.timeoutSecs.write", 60)
+	viper.SetDefault("vod.api.service.timeoutSecs.idle", 60)
+	viper.SetDefault("vod.api.apis.endPoint.pathPrefix", "/")
+	viper.SetDefault("vod.api.apis.requestLogging.requestIDHeader", "X-Request-ID")
+	viper.SetDefault("vod.api.apis.requestLogging.skipHeaders", []string{
+		"WWW-Authenticate", "Authorization", "Proxy-Authenticate", "Proxy-Authorization",
+	})
+	// Default number of segments to include a live VOD playlist
+	viper.SetDefault("vod.liveVODSegmentCount", 2)
+	// Default TTL for storing segment fetched from cold storage in local cache
+	viper.SetDefault("vod.segmentCacheTTLInSec", 300)
+
 	// Default edge node request-response client config
 	viper.SetDefault("requestResponse.self.msgTTL", 600)
 	viper.SetDefault("requestResponse.supportWorkerCount", 4)

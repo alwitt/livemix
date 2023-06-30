@@ -12,6 +12,7 @@ import (
 	"github.com/alwitt/livemix/edge"
 	"github.com/alwitt/livemix/tracker"
 	"github.com/alwitt/livemix/utils"
+	"github.com/alwitt/livemix/vod"
 	"github.com/apex/log"
 	"gorm.io/gorm/logger"
 )
@@ -68,8 +69,9 @@ func DefineEdgeNode(
 			* Load video source info into persistence
 		* Prepare video segment reader
 		* Prepare HLS video source monitor
-		* (i.e. forwarder, etc.)
 		* Prepare video playlist receive server
+		* Prepare segment manager
+		* Prepare VOD playlist builder
 		* Prepare local VOD server
 	*/
 
@@ -116,16 +118,20 @@ func DefineEdgeNode(
 	}
 
 	// Query control for target video source info
-	sourceInfo, err := edgeToCtrlRRClient.GetVideoSourceInfo(parentCtxt, config.VideoSourceName)
+	sourceInfo, err := edgeToCtrlRRClient.GetVideoSourceInfo(parentCtxt, config.VideoSourceName.Name)
 	if err != nil {
-		log.WithError(err).Errorf("Fetching info for video source '%s' failed", config.VideoSourceName)
+		log.
+			WithError(err).
+			Errorf("Fetching info for video source '%s' failed", config.VideoSourceName.Name)
 		return theNode, err
 	}
 	// Record this in persistence
 	if err := dbManager.RecordKnownVideoSource(
 		parentCtxt, sourceInfo.ID, sourceInfo.Name, sourceInfo.PlaylistURI, sourceInfo.Description,
 	); err != nil {
-		log.WithError(err).Errorf("Recording video source '%s' failed", config.VideoSourceName)
+		log.
+			WithError(err).
+			Errorf("Recording video source '%s' failed", config.VideoSourceName.Name)
 		return theNode, err
 	}
 
@@ -163,6 +169,35 @@ func DefineEdgeNode(
 	)
 	if err != nil {
 		log.WithError(err).Error("Failed to create playlist receiver HTTP server")
+		return theNode, err
+	}
+
+	// Define segment manager
+	segmentMgnt, err := vod.NewSegmentManager(
+		cache, theNode.segmentReader, time.Second*time.Duration(config.VODConfig.SegmentCacheTTLInSec),
+	)
+	if err != nil {
+		log.WithError(err).Error("Failed to create video segment manager")
+		return theNode, err
+	}
+
+	// Define live VOD playlist builder
+	plBuilder, err := vod.NewPlaylistBuilder(
+		dbManager,
+		time.Second*time.Duration(config.VideoSourceName.SegmentDurationInSec),
+		config.VODConfig.LiveVODSegmentCount,
+	)
+	if err != nil {
+		log.WithError(err).Error("Failed to create VOD playlist builder")
+		return theNode, err
+	}
+
+	// Define live VOD HTTP server
+	theNode.VODServer, err = api.BuildVODServer(
+		config.VODConfig.APIServer, dbManager, plBuilder, segmentMgnt,
+	)
+	if err != nil {
+		log.WithError(err).Error("Failed to create live VOD HTTP server")
 		return theNode, err
 	}
 

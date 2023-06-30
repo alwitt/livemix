@@ -386,6 +386,20 @@ func startEdgeNode(c *cli.Context) error {
 		}()
 	}
 
+	// Start local live VOD HTTP server
+	{
+		svr := edgeNode.VODServer
+		apiServers["local-live-vod"] = svr
+		// Start the server
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := svr.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.WithError(err).Error("Local live VOD HTTP server failure")
+			}
+		}()
+	}
+
 	// ------------------------------------------------------------------------------------
 	// Wait for termination
 

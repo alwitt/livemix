@@ -127,16 +127,16 @@ func TestLocalSegmentCacheAutoCachePurge(t *testing.T) {
 
 	utCtxt := context.Background()
 
-	uut, err := NewLocalVideoSegmentCache(utCtxt, time.Millisecond*50)
+	uut, err := NewLocalVideoSegmentCache(utCtxt, time.Millisecond*100)
 	assert.Nil(err)
 
 	// Setup test entries
 	entry0 := uuid.NewString()
-	ttl0 := time.Millisecond * 25
+	ttl0 := time.Millisecond * 50
 	entry1 := uuid.NewString()
-	ttl1 := time.Millisecond * 70
+	ttl1 := time.Millisecond * 140
 	entry2 := uuid.NewString()
-	ttl2 := time.Millisecond * 120
+	ttl2 := time.Millisecond * 240
 	assert.Nil(uut.CacheSegment(utCtxt, entry0, []byte(uuid.NewString()), ttl0))
 	assert.Nil(uut.CacheSegment(utCtxt, entry1, []byte(uuid.NewString()), ttl1))
 	assert.Nil(uut.CacheSegment(utCtxt, entry2, []byte(uuid.NewString()), ttl2))
@@ -149,7 +149,7 @@ func TestLocalSegmentCacheAutoCachePurge(t *testing.T) {
 	}
 
 	// Verify first entry is gone
-	time.Sleep(time.Millisecond * 60)
+	time.Sleep(time.Millisecond * 120)
 	{
 		entries, err := uut.GetSegments(utCtxt, []string{entry0, entry1, entry2})
 		assert.Nil(err)
@@ -159,7 +159,7 @@ func TestLocalSegmentCacheAutoCachePurge(t *testing.T) {
 	}
 
 	// Verify second entry is gone
-	time.Sleep(time.Millisecond * 45)
+	time.Sleep(time.Millisecond * 90)
 	{
 		entries, err := uut.GetSegments(utCtxt, []string{entry0, entry1, entry2})
 		assert.Nil(err)
