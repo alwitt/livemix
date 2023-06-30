@@ -21,6 +21,8 @@ func TestPlaylistReceiver(t *testing.T) {
 	assert := assert.New(t)
 	log.SetLevel(log.DebugLevel)
 
+	utCtxt := context.Background()
+
 	parser := hls.NewPlaylistParser()
 
 	parsedPlaylist := hls.Playlist{}
@@ -31,7 +33,7 @@ func TestPlaylistReceiver(t *testing.T) {
 	}
 
 	uut, err := api.NewPlaylistReceiveHandler(
-		parser, receivePlaylist, common.HTTPRequestLogging{
+		utCtxt, parser, receivePlaylist, common.HTTPRequestLogging{
 			RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
 		},
 	)

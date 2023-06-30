@@ -18,6 +18,8 @@ import (
 
 // EdgeNode edge node monitoring one video source
 type EdgeNode struct {
+	nodeRuntimeCtxt       context.Context
+	ctxtCancel            context.CancelFunc
 	psClient              goutils.PubSubClient
 	rrClient              goutils.RequestResponseClient
 	segmentReader         utils.SegmentReader
@@ -32,6 +34,7 @@ Cleanup stop and clean up the edge node
 	@param ctxt context.Context - execution context
 */
 func (n EdgeNode) Cleanup(ctxt context.Context) error {
+	n.ctxtCancel()
 	if err := n.rrClient.Stop(ctxt); err != nil {
 		return err
 	}
@@ -71,6 +74,7 @@ func DefineEdgeNode(
 	*/
 
 	theNode := EdgeNode{}
+	theNode.nodeRuntimeCtxt, theNode.ctxtCancel = context.WithCancel(parentCtxt)
 
 	sqlDSN := db.GetSqliteDialector(config.Sqlite.DBFile)
 
@@ -155,7 +159,7 @@ func DefineEdgeNode(
 
 	// Define playlist receiver HTTP server
 	theNode.PlaylistReceiveServer, err = api.BuildPlaylistReceiverServer(
-		config.MonitorConfig.APIServer, theNode.monitor.Update,
+		theNode.nodeRuntimeCtxt, config.MonitorConfig.APIServer, theNode.monitor.Update,
 	)
 	if err != nil {
 		log.WithError(err).Error("Failed to create playlist receiver HTTP server")

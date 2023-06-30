@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -93,15 +94,16 @@ func BuildSystemManagementServer(
 /*
 BuildPlaylistReceiverServer create edge node playlist receive server
 
+	@param parentCtxt context.Context - REST handler parent context
 	@param httpCfg common.APIServerConfig - HTTP server configuration
 	@param forwardCB PlaylistForwardCB - callback to forward newly received playlists
 	@returns HTTP server instance
 */
 func BuildPlaylistReceiverServer(
-	httpCfg common.APIServerConfig, forwardCB PlaylistForwardCB,
+	parentCtxt context.Context, httpCfg common.APIServerConfig, forwardCB PlaylistForwardCB,
 ) (*http.Server, error) {
 	httpHandler, err := NewPlaylistReceiveHandler(
-		hls.NewPlaylistParser(), forwardCB, httpCfg.APIs.RequestLogging,
+		parentCtxt, hls.NewPlaylistParser(), forwardCB, httpCfg.APIs.RequestLogging,
 	)
 	if err != nil {
 		return nil, err

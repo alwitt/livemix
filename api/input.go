@@ -23,6 +23,7 @@ type PlaylistForwardCB func(context.Context, hls.Playlist, time.Time) error
 // This is only meant to be used by the edge node
 type PlaylistReceiveHandler struct {
 	goutils.RestAPIHandler
+	parentCtxt      context.Context
 	parser          hls.PlaylistParser
 	forwardPlaylist PlaylistForwardCB
 }
@@ -30,6 +31,7 @@ type PlaylistReceiveHandler struct {
 /*
 NewPlaylistReceiveHandler define a new HLS playlist receiver
 
+	@param parentCtxt context.Context - REST handler parent context
 	@param playlistParser hls.PlaylistParser - playlist parser object
 	@param forwardPlaylist - callback function for sending newly received HLS playlist
 		onward for processing
@@ -37,6 +39,7 @@ NewPlaylistReceiveHandler define a new HLS playlist receiver
 	@returns new PlaylistReceiveHandler
 */
 func NewPlaylistReceiveHandler(
+	parentCtxt context.Context,
 	playlistParser hls.PlaylistParser,
 	forwardPlaylist PlaylistForwardCB,
 	logConfig common.HTTPRequestLogging,
@@ -57,7 +60,7 @@ func NewPlaylistReceiveHandler(
 				}
 				return result
 			}(),
-		}, parser: playlistParser, forwardPlaylist: forwardPlaylist,
+		}, parentCtxt: parentCtxt, parser: playlistParser, forwardPlaylist: forwardPlaylist,
 	}, nil
 }
 
@@ -154,7 +157,7 @@ func (h PlaylistReceiveHandler) NewPlaylist(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Forward the playlist for further processing
-	if err := h.forwardPlaylist(r.Context(), playlist, currentTime); err != nil {
+	if err := h.forwardPlaylist(h.parentCtxt, playlist, currentTime); err != nil {
 		msg := "playlist processing failed"
 		log.WithError(err).WithFields(logTags).Error(msg)
 		respCode = http.StatusInternalServerError

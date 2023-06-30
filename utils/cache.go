@@ -173,14 +173,21 @@ func (c *inProcessSegmentCacheImpl) GetSegments(
 func (c *inProcessSegmentCacheImpl) purgeExpiredEntry(
 	ctxt context.Context, currentTime time.Time,
 ) error {
+	logTags := c.GetLogTagsForContext(ctxt)
+
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
+	log.WithFields(logTags).Info("Checking for expired video segments")
 	// Check for expired entries
 	purgeIDs := []string{}
 	for segmentID, entry := range c.cache {
 		if entry.expireAt.Before(currentTime) {
 			purgeIDs = append(purgeIDs, segmentID)
+			log.
+				WithFields(logTags).
+				WithField("segment-id", segmentID).
+				Debug("Video segment expired")
 		}
 	}
 
@@ -188,6 +195,10 @@ func (c *inProcessSegmentCacheImpl) purgeExpiredEntry(
 	for _, purgeID := range purgeIDs {
 		delete(c.cache, purgeID)
 	}
+
+	log.
+		WithFields(logTags).
+		Infof("Purged [%d] expired video segments. [%d] remain in cache", len(purgeIDs), len(c.cache))
 
 	return nil
 }
