@@ -42,7 +42,7 @@ func TestPlaylistToString(t *testing.T) {
 	assert.Nil(err)
 
 	// Convert the playlist back to string
-	toString, err := parsed.String()
+	toString, err := parsed.String(false)
 	assert.Nil(err)
 	assert.Equal(sourceLinked, toString)
 }

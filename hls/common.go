@@ -53,9 +53,10 @@ type Playlist struct {
 /*
 String toString function for Playlist
 
+	@param continuous bool - whether the playlist should skip the `#EXT-X-ENDLIST` header
 	@returns the string representation of a HLS Playlist
 */
-func (p Playlist) String() (string, error) {
+func (p Playlist) String(continuous bool) (string, error) {
 	builder := strings.Builder{}
 	// Write the playlist headers
 	for _, oneLine := range []string{
@@ -76,8 +77,10 @@ func (p Playlist) String() (string, error) {
 		}
 	}
 	// End the playlist
-	if _, err := builder.WriteString("#EXT-X-ENDLIST\n"); err != nil {
-		return "", err
+	if !continuous {
+		if _, err := builder.WriteString("#EXT-X-ENDLIST\n"); err != nil {
+			return "", err
+		}
 	}
 	return builder.String(), nil
 }

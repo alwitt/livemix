@@ -77,10 +77,13 @@ func NewLiveStreamHandler(
 func (h LiveStreamHandler) GetVideoFiles(w http.ResponseWriter, r *http.Request) {
 	var respCode int
 	var response interface{}
+	bypassDefaultResponseWriter := false
 	logTags := h.GetLogTagsForContext(r.Context())
 	defer func() {
-		if err := h.WriteRESTResponse(w, respCode, response, nil); err != nil {
-			log.WithError(err).WithFields(logTags).Error("Failed to form response")
+		if !bypassDefaultResponseWriter {
+			if err := h.WriteRESTResponse(w, respCode, response, nil); err != nil {
+				log.WithError(err).WithFields(logTags).Error("Failed to form response")
+			}
 		}
 	}()
 
@@ -131,7 +134,7 @@ func (h LiveStreamHandler) GetVideoFiles(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		// Serialize the playlist for return
-		playlist, err := currentPlaylist.String()
+		playlist, err := currentPlaylist.String(true)
 		if err != nil {
 			msg := "Playlist serialization failed"
 			log.WithError(err).WithFields(logTags).Error(msg)
@@ -139,14 +142,26 @@ func (h LiveStreamHandler) GetVideoFiles(w http.ResponseWriter, r *http.Request)
 			response = h.GetStdRESTErrorMsg(r.Context(), http.StatusInternalServerError, msg, err.Error())
 			return
 		}
+		log.WithFields(logTags).Infof("New playlist:\n%s\n", playlist)
 		// Send it back
-		if _, err := w.Write([]byte(playlist)); err != nil {
+		written, err := w.Write([]byte(playlist))
+		if err != nil {
 			msg := "Write response failure"
 			log.WithError(err).WithFields(logTags).Error(msg)
 			respCode = http.StatusInternalServerError
 			response = h.GetStdRESTErrorMsg(r.Context(), http.StatusInternalServerError, msg, err.Error())
 			return
 		}
+		if written != len(playlist) {
+			msg := fmt.Sprintf(
+				"Write response length does not match expectation: %d =/= %d", written, len(playlist),
+			)
+			log.WithFields(logTags).Error(msg)
+			respCode = http.StatusInternalServerError
+			response = h.GetStdRESTErrorMsg(r.Context(), http.StatusInternalServerError, msg, msg)
+			return
+		}
+		bypassDefaultResponseWriter = true
 
 	// MPEG-TS Video Segment
 	case "ts":
@@ -187,6 +202,7 @@ func (h LiveStreamHandler) GetVideoFiles(w http.ResponseWriter, r *http.Request)
 			response = h.GetStdRESTErrorMsg(r.Context(), http.StatusInternalServerError, msg, msg)
 			return
 		}
+		bypassDefaultResponseWriter = true
 
 	// Everything else
 	default:

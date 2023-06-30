@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -141,13 +140,9 @@ func TestVodLiveStreamHandler(t *testing.T) {
 		router.ServeHTTP(respRecorder, req)
 
 		assert.Equal(http.StatusOK, respRecorder.Code)
-		t, err := testPlaylist.String()
+		t, err := testPlaylist.String(true)
 		assert.Nil(err)
 		resp := respRecorder.Body.String()
-		{
-			// The response comes with an extra "null" at the end
-			resp = strings.ReplaceAll(resp, "null", "")
-		}
 		assert.Equal(t, resp)
 	}
 
@@ -220,10 +215,6 @@ func TestVodLiveStreamHandler(t *testing.T) {
 		resp, err := io.ReadAll(respRecorder.Result().Body)
 		assert.Nil(err)
 		log.Debugf("Response length %d", len(resp))
-		{
-			// The response comes with an extra "null" at the end
-			resp = resp[0 : len(resp)-4]
-		}
 		assert.Equal(testSegContent, resp)
 	}
 }
