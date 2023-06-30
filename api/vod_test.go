@@ -92,6 +92,7 @@ func TestVodLiveStreamHandler(t *testing.T) {
 			mock.AnythingOfType("*context.valueCtx"),
 			common.VideoSource{ID: sourceID},
 			mock.AnythingOfType("time.Time"),
+			true,
 		).Return(hls.Playlist{}, fmt.Errorf("dummy error")).Once()
 
 		// Request
@@ -134,6 +135,7 @@ func TestVodLiveStreamHandler(t *testing.T) {
 			mock.AnythingOfType("*context.valueCtx"),
 			common.VideoSource{ID: sourceID},
 			mock.AnythingOfType("time.Time"),
+			true,
 		).Return(testPlaylist, nil).Once()
 
 		// Request

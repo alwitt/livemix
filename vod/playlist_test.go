@@ -84,7 +84,10 @@ func TestBuildLiveStreamPlaylist(t *testing.T) {
 	).Return(testSegments, nil).Once()
 
 	playlist, err := uut.GetLiveStreamPlaylist(
-		utCtxt, testSource, startTime.Add(segmentLength*time.Duration(segmentPerPlaylist)),
+		utCtxt,
+		testSource,
+		startTime.Add(segmentLength*time.Duration(segmentPerPlaylist)),
+		true,
 	)
 	assert.Nil(err)
 	assert.Equal(testSource.Name, playlist.Name)
@@ -94,5 +97,16 @@ func TestBuildLiveStreamPlaylist(t *testing.T) {
 	for idx, oneSegment := range playlist.Segments {
 		testSegment := testSegments[idx]
 		assert.EqualValues(testSegment.Segment, oneSegment)
+	}
+
+	// Verify the media sequence number
+	referenceTime, err := vod.GetReferenceTime()
+	assert.Nil(err)
+	{
+		timeDiff := startTime.Sub(referenceTime)
+		timeDiffSec := int(timeDiff.Seconds())
+		segLenSec := int(playlist.TargetSegDuration)
+		mediaSequenceVal := timeDiffSec / segLenSec
+		assert.Equal(mediaSequenceVal, *playlist.MediaSequenceVal)
 	}
 }

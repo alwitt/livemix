@@ -125,7 +125,9 @@ func (h LiveStreamHandler) GetVideoFiles(w http.ResponseWriter, r *http.Request)
 	// HLS Playlist file
 	case "m3u8":
 		// Get the current playlist
-		currentPlaylist, err := h.playlists.GetLiveStreamPlaylist(r.Context(), videoSource, currentTime)
+		currentPlaylist, err := h.playlists.GetLiveStreamPlaylist(
+			r.Context(), videoSource, currentTime, true,
+		)
 		if err != nil {
 			msg := "Failed to construct the playlist"
 			log.WithError(err).WithFields(logTags).Error(msg)
@@ -142,7 +144,7 @@ func (h LiveStreamHandler) GetVideoFiles(w http.ResponseWriter, r *http.Request)
 			response = h.GetStdRESTErrorMsg(r.Context(), http.StatusInternalServerError, msg, err.Error())
 			return
 		}
-		log.WithFields(logTags).Infof("New playlist:\n%s\n", playlist)
+		log.WithFields(logTags).Debugf("New playlist:\n%s\n", playlist)
 		// Send it back
 		written, err := w.Write([]byte(playlist))
 		if err != nil {

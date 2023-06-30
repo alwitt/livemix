@@ -11,6 +11,11 @@ import (
 	"github.com/apex/log"
 )
 
+// GetReferenceTime helper function to get the reference time
+func GetReferenceTime() (time.Time, error) {
+	return time.Parse("2006-Jan-02", "2023-Jan-01")
+}
+
 // PlaylistBuilder construct HLS playlist on demand
 type PlaylistBuilder interface {
 	/*
@@ -19,10 +24,11 @@ type PlaylistBuilder interface {
 			@param ctxt context.Context - execution context
 			@param target common.VideoSource - video source to generate the playlist for
 			@param timestamp time.Time - current time
+			@param addMediaSequence bool - whether to add a media sequence number to the playlist
 			@returns the new playlist valid for the given timestamp
 	*/
 	GetLiveStreamPlaylist(
-		ctxt context.Context, target common.VideoSource, timestamp time.Time,
+		ctxt context.Context, target common.VideoSource, timestamp time.Time, addMediaSequence bool,
 	) (hls.Playlist, error)
 }
 
@@ -34,6 +40,7 @@ type playlistBuilderImpl struct {
 	segmentDuration time.Duration
 	// liveStreamSegCount number of segments to include when building a live stream playlist
 	liveStreamSegCount int
+	referenceTime      time.Time
 }
 
 /*
@@ -47,6 +54,11 @@ NewPlaylistBuilder define new playlist builder
 func NewPlaylistBuilder(
 	dbClient db.PersistenceManager, segmentDuration time.Duration, liveStreamSegCount int,
 ) (PlaylistBuilder, error) {
+	// Define the reference time from which all sequence numbers are built
+	referenceTime, err := GetReferenceTime()
+	if err != nil {
+		return nil, err
+	}
 	return &playlistBuilderImpl{
 		Component: goutils.Component{
 			LogTags: log.Fields{"module": "vod", "component": "playlist-builder"},
@@ -57,11 +69,12 @@ func NewPlaylistBuilder(
 		dbClient:           dbClient,
 		segmentDuration:    segmentDuration,
 		liveStreamSegCount: liveStreamSegCount,
+		referenceTime:      referenceTime,
 	}, nil
 }
 
 func (b *playlistBuilderImpl) GetLiveStreamPlaylist(
-	ctxt context.Context, target common.VideoSource, timestamp time.Time,
+	ctxt context.Context, target common.VideoSource, timestamp time.Time, addMediaSequence bool,
 ) (hls.Playlist, error) {
 	logTags := b.GetLogTagsForContext(ctxt)
 
@@ -85,6 +98,11 @@ func (b *playlistBuilderImpl) GetLiveStreamPlaylist(
 	}
 	for idx, oneSegment := range segments {
 		result.Segments[idx] = oneSegment.Segment
+	}
+
+	// Attach a media sequence value
+	if addMediaSequence {
+		result.AddMediaSequenceVal(b.referenceTime)
 	}
 
 	return result, nil

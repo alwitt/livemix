@@ -22,7 +22,7 @@ func TestPlaylistToString(t *testing.T) {
 		"#EXTM3U",
 		"#EXT-X-VERSION:3",
 		"#EXT-X-TARGETDURATION:62.000000",
-		// "#EXT-X-MEDIA-SEQUENCE:0",
+		"#EXT-X-MEDIA-SEQUENCE:44",
 		"#EXTINF:62.500000,",
 		"vid-0.ts",
 		"#EXTINF:23.500000,",
@@ -40,6 +40,10 @@ func TestPlaylistToString(t *testing.T) {
 	parser := hls.NewPlaylistParser()
 	parsed, err := parser.ParsePlaylist(utCtxt, source, currentTime, "testing", "file:///vid")
 	assert.Nil(err)
+
+	// Add media-sequence separately
+	sequence := 44
+	parsed.MediaSequenceVal = &sequence
 
 	// Convert the playlist back to string
 	toString, err := parsed.String(false)

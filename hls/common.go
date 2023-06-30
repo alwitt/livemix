@@ -46,6 +46,8 @@ type Playlist struct {
 	Version int `json:"version"`
 	// TargetSegDuration target segment duration
 	TargetSegDuration float64 `json:"duration" validate:"required"`
+	// MediaSequenceVal if specified, the "#EXT-X-MEDIA-SEQUENCE:" value
+	MediaSequenceVal *int `json:"start_seq_num,omitempty"`
 	// Segments list of TS segments associated with this playlist
 	Segments []Segment `json:"segments" validate:"required,gt=0,dive"`
 }
@@ -68,6 +70,13 @@ func (p Playlist) String(continuous bool) (string, error) {
 			return "", err
 		}
 	}
+	// If provided, add "#EXT-X-MEDIA-SEQUENCE:"
+	if p.MediaSequenceVal != nil {
+		_, err := builder.WriteString(fmt.Sprintf("#EXT-X-MEDIA-SEQUENCE:%d\n", *p.MediaSequenceVal))
+		if err != nil {
+			return "", err
+		}
+	}
 	// Write the segments
 	for _, oneSegment := range p.Segments {
 		if _, err := builder.WriteString(
@@ -83,4 +92,24 @@ func (p Playlist) String(continuous bool) (string, error) {
 		}
 	}
 	return builder.String(), nil
+}
+
+/*
+AddMediaSequenceVal define a media sequence value for the playlist based on a reference time
+and the start time of the first segment in the playlist.
+
+	@param reference time.Time - reference time to compare against
+*/
+func (p *Playlist) AddMediaSequenceVal(reference time.Time) {
+	if p.Segments == nil {
+		// No action to name
+		p.MediaSequenceVal = nil
+		return
+	}
+	first := p.Segments[0]
+	timeDiff := first.StartTime.Sub(reference)
+	timeDiffSec := int(timeDiff.Seconds())
+	segLenSec := int(p.TargetSegDuration)
+	mediaSequenceVal := timeDiffSec / segLenSec
+	p.MediaSequenceVal = &mediaSequenceVal
 }
