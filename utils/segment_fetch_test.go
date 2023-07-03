@@ -21,7 +21,7 @@ func TestReadingSegmentFromFile(t *testing.T) {
 
 	utCtxt := context.Background()
 
-	uut, err := utils.NewSegmentReader(utCtxt, 1)
+	uut, err := utils.NewSegmentReader(utCtxt, 2)
 	assert.Nil(err)
 
 	// Define test file
