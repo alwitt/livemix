@@ -97,11 +97,18 @@ func TestDBManagerVideoSource(t *testing.T) {
 		assert.Nil(err)
 		assert.Equal(newName, entry.Name)
 		assert.Equal(*getURI(source1), *entry.PlaylistURI)
+		assert.False(entry.Streaming)
+	}
+	assert.Nil(uut.ChangeVideoSourceStreamState(utCtxt, sourceID1, true))
+	{
+		entry, err := uut.GetVideoSource(utCtxt, sourceID1)
+		assert.Nil(err)
+		assert.True(entry.Streaming)
 	}
 
 	// Case 5: recreate existing entry
 	source3 := fmt.Sprintf("src-3-%s", uuid.NewString())
-	assert.Nil(uut.RecordKnownVideoSource(utCtxt, sourceID2, source3, getURI(source3), nil))
+	assert.Nil(uut.RecordKnownVideoSource(utCtxt, sourceID2, source3, getURI(source3), nil, true))
 	{
 		entries, err := uut.ListVideoSources(utCtxt)
 		assert.Nil(err)
@@ -115,6 +122,7 @@ func TestDBManagerVideoSource(t *testing.T) {
 		assert.True(ok)
 		assert.Equal(source3, entry.Name)
 		assert.Equal(*getURI(source3), *entry.PlaylistURI)
+		assert.True(entry.Streaming)
 	}
 
 	// Case 6: delete entry

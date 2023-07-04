@@ -49,9 +49,10 @@ type PersistenceManager interface {
 			@param name string - source name
 			@param playlistURI *string - video source playlist URI
 			@param description *string - optionally, source description
+			@param streaming bool - whether the video source is currently streaming
 	*/
 	RecordKnownVideoSource(
-		ctxt context.Context, id, name string, playlistURI, description *string,
+		ctxt context.Context, id, name string, playlistURI, description *string, streaming bool,
 	) error
 
 	/*
@@ -92,6 +93,15 @@ type PersistenceManager interface {
 			@param newSetting common.VideoSource - new properties
 	*/
 	UpdateVideoSource(ctxt context.Context, newSetting common.VideoSource) error
+
+	/*
+		ChangeVideoSourceStreamState change the streaming state for a video source
+
+			@param ctxt context.Context - execution context
+			@param id string - source ID
+			@param streaming bool - new streaming state
+	*/
+	ChangeVideoSourceStreamState(ctxt context.Context, id string, streaming bool) error
 
 	/*
 		DeleteVideoSource delete a video source
@@ -290,7 +300,7 @@ func (m *persistenceManagerImpl) DefineVideoSource(
 }
 
 func (m *persistenceManagerImpl) RecordKnownVideoSource(
-	ctxt context.Context, id, name string, playlistURI, description *string,
+	ctxt context.Context, id, name string, playlistURI, description *string, streaming bool,
 ) error {
 	return m.db.Transaction(func(tx *gorm.DB) error {
 		logTags := m.GetLogTagsForContext(ctxt)
@@ -302,6 +312,7 @@ func (m *persistenceManagerImpl) RecordKnownVideoSource(
 				Name:        name,
 				Description: description,
 				PlaylistURI: playlistURI,
+				Streaming:   streaming,
 			},
 		}
 
@@ -387,6 +398,21 @@ func (m *persistenceManagerImpl) UpdateVideoSource(
 			WithField("id", newSetting.ID).
 			Info("Updated video source")
 
+		return nil
+	})
+}
+
+func (m *persistenceManagerImpl) ChangeVideoSourceStreamState(
+	ctxt context.Context, id string, streaming bool,
+) error {
+	return m.db.Transaction(func(tx *gorm.DB) error {
+		if tmp := tx.Where(&videoSource{VideoSource: common.VideoSource{
+			ID: id,
+		}}).Updates(&videoSource{VideoSource: common.VideoSource{
+			Streaming: streaming,
+		}}); tmp.Error != nil {
+			return tmp.Error
+		}
 		return nil
 	})
 }

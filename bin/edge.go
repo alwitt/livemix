@@ -127,7 +127,12 @@ func DefineEdgeNode(
 	}
 	// Record this in persistence
 	if err := dbManager.RecordKnownVideoSource(
-		parentCtxt, sourceInfo.ID, sourceInfo.Name, sourceInfo.PlaylistURI, sourceInfo.Description,
+		parentCtxt,
+		sourceInfo.ID,
+		sourceInfo.Name,
+		sourceInfo.PlaylistURI,
+		sourceInfo.Description,
+		sourceInfo.Streaming,
 	); err != nil {
 		log.
 			WithError(err).
