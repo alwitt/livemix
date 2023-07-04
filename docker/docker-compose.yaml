@@ -1,8 +1,8 @@
 version: '3'
 
 services:
-  db:
-    container_name: padlock-dev-db
+  ctrl-db:
+    container_name: livemix-ctrl-db
     hostname: "postgres"
     image: "postgres:15"
     ports:
@@ -11,3 +11,19 @@ services:
       - POSTGRES_DB=postgres
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
+
+  memcached:
+    container_name: livemix-ctrl-memcached
+    hostname: memcached
+    image: memcached:1.6.20-alpine
+    ports:
+      - 127.0.0.1:18080:18080
+    expose:
+      - 8080
+    command:
+      - -m
+      - '256'
+      - -I
+      - 10m
+      - -p
+      - '18080'

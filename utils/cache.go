@@ -8,6 +8,7 @@ import (
 
 	"github.com/alwitt/goutils"
 	"github.com/apex/log"
+	"github.com/bradfitz/gomemcache/memcache"
 )
 
 // VideoSegmentCache video segment cache
@@ -49,6 +50,9 @@ type VideoSegmentCache interface {
 	*/
 	GetSegments(ctxt context.Context, segmentIDs []string) (map[string][]byte, error)
 }
+
+// =====================================================================================
+// In-Process (Local Ram) Video Segment Cache
 
 // inProcessCacheEntry wrapper structure holding content with retention support
 type inProcessCacheEntry struct {
@@ -201,4 +205,165 @@ func (c *inProcessSegmentCacheImpl) purgeExpiredEntry(
 		Infof("Purged [%d] expired video segments. [%d] remain in cache", len(purgeIDs), len(c.cache))
 
 	return nil
+}
+
+// =====================================================================================
+// Memcached Video Segment Cache
+
+// memcachedSegmentCacheImpl implements SourceHLSSegmentCache
+type memcachedSegmentCacheImpl struct {
+	goutils.Component
+	client *memcache.Client
+}
+
+/*
+NewMemcachedVideoSegmentCache define new memcached video segment cache
+
+	@param servers []string - list of memcached servers to connect to
+	@returns new VideoSegmentCache
+*/
+func NewMemcachedVideoSegmentCache(servers []string) (VideoSegmentCache, error) {
+	logTags := log.Fields{
+		"module":    "utils",
+		"component": "video-segment-cache",
+		"instance":  "memcached",
+		"servers":   servers,
+	}
+
+	// Define memcached client
+	mc := memcache.New(servers...)
+	if err := mc.Ping(); err != nil {
+		log.WithError(err).WithFields(logTags).Error("Server Up check failed")
+		return nil, err
+	}
+
+	return &memcachedSegmentCacheImpl{
+		Component: goutils.Component{
+			LogTags: logTags,
+			LogTagModifiers: []goutils.LogMetadataModifier{
+				goutils.ModifyLogMetadataByRestRequestParam,
+			},
+		}, client: mc,
+	}, nil
+}
+
+func (c *memcachedSegmentCacheImpl) CacheSegment(
+	ctxt context.Context, segmentID string, content []byte, ttl time.Duration,
+) error {
+	logTags := c.GetLogTagsForContext(ctxt)
+	ttlSec := int32(ttl.Seconds())
+	log.
+		WithFields(logTags).
+		WithField("segment-id", segmentID).
+		WithField("ttl", ttlSec).
+		Debug("Caching segment")
+	cacheEntry := &memcache.Item{Key: segmentID, Value: content, Expiration: int32(ttl.Seconds())}
+	if err := c.client.Set(cacheEntry); err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("segment-id", segmentID).
+			Error("Segment failed to cache")
+		return err
+	}
+	log.
+		WithFields(logTags).
+		WithField("segment-id", segmentID).
+		WithField("ttl", ttlSec).
+		Debug("Cached segment")
+	return nil
+}
+
+func (c *memcachedSegmentCacheImpl) PurgeSegments(ctxt context.Context, segmentIDs []string) error {
+	logTags := c.GetLogTagsForContext(ctxt)
+	var err error
+	err = nil
+	failedSegs := []string{}
+	purgedSegs := []string{}
+	// Go through each segment
+	for _, segmentID := range segmentIDs {
+		log.
+			WithFields(logTags).
+			WithField("segment-id", segmentID).
+			Debug("Purging segment")
+		if lclErr := c.client.Delete(segmentID); lclErr != nil {
+			failedSegs = append(failedSegs, segmentID)
+			log.
+				WithError(lclErr).
+				WithFields(logTags).
+				WithField("segment-id", segmentID).
+				Error("Segment purge failed")
+		} else {
+			purgedSegs = append(purgedSegs, segmentID)
+		}
+		log.
+			WithFields(logTags).
+			WithField("segment-id", segmentID).
+			Debug("Purged segment")
+	}
+	if len(failedSegs) > 0 {
+		err = fmt.Errorf("failed to purge one or more segments")
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("segment-ids", failedSegs).
+			Error("Failed to purge segments")
+	}
+	log.
+		WithFields(logTags).
+		WithField("segment-ids", purgedSegs).
+		Info("Purged segments")
+	return err
+}
+
+func (c *memcachedSegmentCacheImpl) GetSegment(
+	ctxt context.Context, segmentID string,
+) ([]byte, error) {
+	logTags := c.GetLogTagsForContext(ctxt)
+	log.
+		WithFields(logTags).
+		WithField("segment-id", segmentID).
+		Debug("Reading segment")
+	entry, err := c.client.Get(segmentID)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("segment-id", segmentID).
+			Error("Failed to fetch segment")
+		return nil, err
+	}
+	log.
+		WithFields(logTags).
+		WithField("segment-id", segmentID).
+		Debug("Read segment")
+	return entry.Value, nil
+}
+
+func (c *memcachedSegmentCacheImpl) GetSegments(
+	ctxt context.Context, segmentIDs []string,
+) (map[string][]byte, error) {
+	logTags := c.GetLogTagsForContext(ctxt)
+	log.
+		WithFields(logTags).
+		WithField("segment-ids", segmentIDs).
+		Debug("Reading segments")
+	entries, err := c.client.GetMulti(segmentIDs)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("segment-ids", segmentIDs).
+			Debug("Multi-segment read failed")
+		return nil, err
+	}
+	log.
+		WithFields(logTags).
+		WithField("segment-ids", segmentIDs).
+		Debug("Read segments")
+	result := map[string][]byte{}
+	for segmentID, segment := range entries {
+		result[segmentID] = segment.Value
+	}
+	return result, nil
 }

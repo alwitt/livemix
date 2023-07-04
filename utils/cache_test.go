@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apex/log"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
@@ -170,5 +171,92 @@ func TestLocalSegmentCacheAutoCachePurge(t *testing.T) {
 		assert.NotNil(err)
 		_, err = uut.GetSegment(utCtxt, entry2)
 		assert.Nil(err)
+	}
+}
+
+func TestMemcachedSegmentCacheBasicSanity(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	utCtxt := context.Background()
+
+	uut, err := NewMemcachedVideoSegmentCache([]string{"localhost:18080"})
+	assert.Nil(err)
+
+	// Case 0: no segments cached
+	{
+		_, err := uut.GetSegment(utCtxt, uuid.NewString())
+		assert.NotNil(err)
+	}
+
+	// Case 1: add segment
+	segment0 := uuid.NewString()
+	content0 := []byte(uuid.NewString())
+	assert.Nil(uut.CacheSegment(utCtxt, segment0, content0, time.Second))
+	{
+		content, err := uut.GetSegment(utCtxt, segment0)
+		assert.Nil(err)
+		assert.Equal(content0, content)
+		_, err = uut.GetSegment(utCtxt, uuid.NewString())
+		assert.NotNil(err)
+	}
+
+	// Case 2: update segment content
+	content1 := []byte(uuid.NewString())
+	assert.Nil(uut.CacheSegment(utCtxt, segment0, content1, time.Second))
+	{
+		content, err := uut.GetSegment(utCtxt, segment0)
+		assert.Nil(err)
+		assert.Equal(content1, content)
+	}
+
+	// Case 3: add segment
+	segment2 := uuid.NewString()
+	content2 := []byte(uuid.NewString())
+	assert.Nil(uut.CacheSegment(utCtxt, segment2, content2, time.Second))
+	{
+		content, err := uut.GetSegment(utCtxt, segment2)
+		assert.Nil(err)
+		assert.Equal(content2, content)
+	}
+
+	// Case 4: delete from cache
+	assert.Nil(uut.PurgeSegments(utCtxt, []string{segment0}))
+	{
+		checkIDs := []string{segment0, segment2}
+		cached, err := uut.GetSegments(utCtxt, checkIDs)
+		assert.Nil(err)
+		assert.Len(cached, 1)
+		assert.Contains(cached, segment2)
+	}
+}
+
+func TestMemcachedSegmentCacheAutoCachePurge(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	utCtxt := context.Background()
+
+	uut, err := NewMemcachedVideoSegmentCache([]string{"localhost:18080"})
+	assert.Nil(err)
+
+	// Case 0: add segment
+	segment0 := uuid.NewString()
+	content0 := []byte(uuid.NewString())
+	assert.Nil(uut.CacheSegment(utCtxt, segment0, content0, time.Second))
+	{
+		content, err := uut.GetSegment(utCtxt, segment0)
+		assert.Nil(err)
+		assert.Equal(content0, content)
+		_, err = uut.GetSegment(utCtxt, uuid.NewString())
+		assert.NotNil(err)
+	}
+
+	time.Sleep(time.Millisecond * 1500)
+
+	// Case 1: segment should be gone
+	{
+		_, err = uut.GetSegment(utCtxt, segment0)
+		assert.NotNil(err)
 	}
 }

@@ -149,6 +149,12 @@ type RAMSegmentCacheConfig struct {
 	RetentionCheckIntInSec uint32 `mapstructure:"retentionCheckIntInSec" json:"retentionCheckIntInSec" validate:"gte=10,lte=300"`
 }
 
+// MemcachedSegementCacheConfig memcached video segment cache config
+type MemcachedSegementCacheConfig struct {
+	// Servers list of memcached servers to establish connection with
+	Servers []string `mapstructure:"servers" json:"servers" validate:"required,gte=1"`
+}
+
 // ===============================================================================
 // Major System Component Configuration Structures
 
