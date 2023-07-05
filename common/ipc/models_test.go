@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/common/ipc"
@@ -18,6 +19,8 @@ func TestIPCMessageParsing(t *testing.T) {
 		input     interface{}
 		inputType reflect.Type
 	}
+
+	currentTime := time.Now().UTC()
 
 	testCases := []testCase{
 		{
@@ -39,6 +42,10 @@ func TestIPCMessageParsing(t *testing.T) {
 			input:     ipc.NewGetGeneralResponse(false, uuid.NewString()),
 			inputType: reflect.TypeOf(ipc.GeneralResponse{}),
 		},
+		{
+			input:     ipc.NewVideoSourceStatusReport(uuid.NewString(), currentTime),
+			inputType: reflect.TypeOf(ipc.VideoSourceStatusReport{}),
+		},
 	}
 
 	for idx, oneTest := range testCases {
@@ -47,6 +54,7 @@ func TestIPCMessageParsing(t *testing.T) {
 		assert.Nil(err, "Failed in %d", idx)
 		parsed, err := ipc.ParseRawMessage(asString)
 		assert.Nil(err, "Failed in %d", idx)
+		assert.NotNil(parsed)
 		assert.Equalf(
 			oneTest.inputType,
 			reflect.TypeOf(parsed),

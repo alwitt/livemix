@@ -3,6 +3,7 @@ package ipc
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/alwitt/livemix/common"
 )
@@ -10,15 +11,16 @@ import (
 type baseMessageTypeDT string
 
 const (
-	ipcMessageTypeRequest  baseMessageTypeDT = "request"
-	ipcMessageTypeResponse baseMessageTypeDT = "response"
+	ipcMessageTypeRequest   baseMessageTypeDT = "request"
+	ipcMessageTypeResponse  baseMessageTypeDT = "response"
+	ipcMessageTypeBroadcast baseMessageTypeDT = "broadcast"
 )
 
 // BaseMessage base request-response IPC message payload. All other messages must be built
 // upon this structure.
 type BaseMessage struct {
 	// Type the message type
-	Type baseMessageTypeDT `json:"type" validate:"required,oneof=request response"`
+	Type baseMessageTypeDT `json:"type" validate:"required,oneof=request response broadcast"`
 }
 
 /*
@@ -38,6 +40,8 @@ func ParseRawMessage(rawMsg []byte) (interface{}, error) {
 		return parseRawRequestMessage(rawMsg)
 	case ipcMessageTypeResponse:
 		return parseRawResponseMessage(rawMsg)
+	case ipcMessageTypeBroadcast:
+		return parseRawBroadcastMessage(rawMsg)
 	default:
 		return nil, fmt.Errorf("unknown IPC message type '%s'", asBaseMsg.Type)
 	}
@@ -58,7 +62,7 @@ const (
 type BaseRequest struct {
 	BaseMessage
 	// RequestType the request type
-	RequestType baseRequestTypeDT `json:"request_type" validate:"required,oneof=get_video_source"`
+	RequestType baseRequestTypeDT `json:"request_type" validate:"required,oneof=get_video_source change_stream_state"`
 }
 
 // GetVideoSourceByNameRequest RR request info for video source by name
@@ -159,7 +163,7 @@ const (
 // upon this structure.
 type BaseResponse struct {
 	BaseMessage
-	ResponseType baseResponseTypeDT `json:"response_type" validate:"required,oneof=get_video_source_resp"`
+	ResponseType baseResponseTypeDT `json:"response_type" validate:"required,oneof=general_resp get_video_source_resp"`
 }
 
 // GeneralResponse RR general purpose response
@@ -241,5 +245,79 @@ func parseRawResponseMessage(rawMsg []byte) (interface{}, error) {
 
 	default:
 		return nil, fmt.Errorf("unknown IPC response message type '%s'", asResponseMsg.Type)
+	}
+}
+
+// =====================================================================================
+// IPC Broadcast Messages
+
+type baseBroadcastTypeDT string
+
+const (
+	ipcBroadcastVideoSourceStatus baseBroadcastTypeDT = "report_video_source_status"
+)
+
+// BaseBroadcast base broadcast IPC message payload. All other broadcasts must be built
+// upon this structure
+type BaseBroadcast struct {
+	BaseMessage
+	// BroadcastType the broadcast type
+	BroadcastType baseBroadcastTypeDT `json:"broadcast_type" validate:"required,oneof=report_video_source_status"`
+}
+
+// VideoSourceStatusReport broadcast video source status report
+type VideoSourceStatusReport struct {
+	BaseBroadcast
+	// RequestResponseTargetID the request-response target ID for reaching video source
+	// over request-response network.
+	RequestResponseTargetID string `json:"rr_target_id" validate:"required"`
+	// LocalTimestamp video source local time
+	LocalTimestamp time.Time `json:"local_timestamp"`
+}
+
+/*
+NewVideoSourceStatusReport define new VideoSourceStatusReport message
+
+	@param reqRespTargetID string - the request-response target ID for reaching video source
+	    over request-response network.
+	@param lclTimestamp time.Time - video source local time
+	@returns defined structure
+*/
+func NewVideoSourceStatusReport(
+	reqRespTargetID string, lclTimestamp time.Time,
+) VideoSourceStatusReport {
+	return VideoSourceStatusReport{
+		BaseBroadcast: BaseBroadcast{
+			BaseMessage:   BaseMessage{Type: ipcMessageTypeBroadcast},
+			BroadcastType: ipcBroadcastVideoSourceStatus,
+		},
+		RequestResponseTargetID: reqRespTargetID,
+		LocalTimestamp:          lclTimestamp,
+	}
+}
+
+/*
+parseRawBroadcastMessage parse raw IPC broadcast message
+
+	@param rawMsg []byte - original message
+	@returns parsed message
+*/
+func parseRawBroadcastMessage(rawMsg []byte) (interface{}, error) {
+	var asBroadcastMsg BaseBroadcast
+	if err := json.Unmarshal(rawMsg, &asBroadcastMsg); err != nil {
+		return nil, err
+	}
+	// Based on the type, parse
+	switch asBroadcastMsg.BroadcastType {
+	// Video Source Status Report
+	case ipcBroadcastVideoSourceStatus:
+		var broadcast VideoSourceStatusReport
+		if err := json.Unmarshal(rawMsg, &broadcast); err != nil {
+			return nil, err
+		}
+		return broadcast, nil
+
+	default:
+		return nil, fmt.Errorf("unknown IPC broadcast message type '%s'", asBroadcastMsg.Type)
 	}
 }
