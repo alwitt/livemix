@@ -104,6 +104,16 @@ func TestDBManagerVideoSource(t *testing.T) {
 		entry, err := uut.GetVideoSource(utCtxt, sourceID1)
 		assert.Nil(err)
 		assert.True(entry.Streaming)
+		assert.Nil(entry.ReqRespTargetID)
+	}
+	{
+		reqRespID := uuid.NewString()
+		timestamp := time.Now().UTC()
+		assert.Nil(uut.RefreshVideoSourceStats(utCtxt, sourceID1, reqRespID, timestamp))
+		entry, err := uut.GetVideoSource(utCtxt, sourceID1)
+		assert.Nil(err)
+		assert.Equal(reqRespID, *entry.ReqRespTargetID)
+		assert.Equal(timestamp, entry.SourceLocalTime)
 	}
 
 	// Case 5: recreate existing entry

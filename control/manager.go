@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"time"
 
 	"github.com/alwitt/livemix/common"
 )
@@ -69,6 +70,19 @@ type SystemManager interface {
 			@param newSetting common.VideoSource - new properties
 	*/
 	UpdateVideoSource(ctxt context.Context, newSetting common.VideoSource) error
+
+	/*
+		RefreshVideoSourceStats update video source status fields
+
+			@param ctxt context.Context - execution context
+			@param id string - source ID
+			@param reqRespTargetID string - the request-response target ID for reaching video source
+			    over request-response network.
+			@param sourceLocalTime time.Time - video source local time
+	*/
+	RefreshVideoSourceStats(
+		ctxt context.Context, id string, reqRespTargetID string, sourceLocalTime time.Time,
+	) error
 
 	/*
 		DeleteVideoSource delete a video source

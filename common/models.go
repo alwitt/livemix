@@ -13,9 +13,11 @@ type VideoSource struct {
 	Description *string `json:"description,omitempty" gorm:"column:description;default:null"`
 	Streaming   bool    `json:"streaming" gorm:"column:streaming;default:false"`
 	// PlaylistURI video source HLS playlist file URI
-	PlaylistURI *string   `json:"playlist,omitempty" gorm:"column:playlist;default:null" validate:"omitempty,uri"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	PlaylistURI     *string   `json:"playlist,omitempty" gorm:"column:playlist;default:null" validate:"omitempty,uri"`
+	ReqRespTargetID *string   `json:"rr_target,omitempty" gorm:"column:rr_target;default:null" validate:"omitempty"`
+	SourceLocalTime time.Time `json:"local_time" gorm:"column:local_time;default:null"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 // VideoSegment a single HLS TS segment

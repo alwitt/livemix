@@ -104,6 +104,19 @@ type PersistenceManager interface {
 	ChangeVideoSourceStreamState(ctxt context.Context, id string, streaming bool) error
 
 	/*
+		RefreshVideoSourceStats update video source status fields
+
+			@param ctxt context.Context - execution context
+			@param id string - source ID
+			@param reqRespTargetID string - the request-response target ID for reaching video source
+			    over request-response network.
+			@param sourceLocalTime time.Time - video source local time
+	*/
+	RefreshVideoSourceStats(
+		ctxt context.Context, id string, reqRespTargetID string, sourceLocalTime time.Time,
+	) error
+
+	/*
 		DeleteVideoSource delete a video source
 
 			@param ctxt context.Context - execution context
@@ -410,6 +423,22 @@ func (m *persistenceManagerImpl) ChangeVideoSourceStreamState(
 			ID: id,
 		}}).Updates(&videoSource{VideoSource: common.VideoSource{
 			Streaming: streaming,
+		}}); tmp.Error != nil {
+			return tmp.Error
+		}
+		return nil
+	})
+}
+
+func (m *persistenceManagerImpl) RefreshVideoSourceStats(
+	ctxt context.Context, id string, reqRespTargetID string, sourceLocalTime time.Time,
+) error {
+	return m.db.Transaction(func(tx *gorm.DB) error {
+		if tmp := tx.Where(&videoSource{VideoSource: common.VideoSource{
+			ID: id,
+		}}).Updates(&videoSource{VideoSource: common.VideoSource{
+			ReqRespTargetID: &reqRespTargetID,
+			SourceLocalTime: sourceLocalTime,
 		}}); tmp.Error != nil {
 			return tmp.Error
 		}
