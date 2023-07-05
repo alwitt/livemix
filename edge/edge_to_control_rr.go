@@ -17,6 +17,14 @@ import (
 // ControlRequestClient request-response client for edge to call control
 type ControlRequestClient interface {
 	/*
+		InstallReferenceToManager used by a VideoSourceOperator to add a reference of itself
+		into the client
+
+			@param newManager VideoSourceOperator - reference to the manager
+	*/
+	InstallReferenceToManager(newManager VideoSourceOperator)
+
+	/*
 		GetVideoSourceInfo query control for a video source's information
 
 			@param ctxt context.Context - execution context
@@ -28,9 +36,9 @@ type ControlRequestClient interface {
 
 // controlRequestClientImpl implements ControlRequestClient
 type controlRequestClientImpl struct {
-	goutils.Component
+	ipc.RequestResponseDriver
+	core              VideoSourceOperator
 	controlRRTargetID string
-	client            goutils.RequestResponseClient
 	requestTimeout    time.Duration
 	validator         *validator.Validate
 }
@@ -38,6 +46,7 @@ type controlRequestClientImpl struct {
 /*
 NewControlRequestClient define a new edge to control request-response client
 
+	@param ctxt context.Context - execution context
 	@param clientName string - name of this client instance
 	@param controlRRTargetID string - control's target ID for request-response targeting
 	@param coreClient goutils.RequestResponseClient - core request-response client
@@ -45,6 +54,7 @@ NewControlRequestClient define a new edge to control request-response client
 	@returns new client
 */
 func NewControlRequestClient(
+	ctxt context.Context,
 	clientName string,
 	controlRRTargetID string,
 	coreClient goutils.RequestResponseClient,
@@ -53,19 +63,79 @@ func NewControlRequestClient(
 	logTags := log.Fields{
 		"module": "api", "component": "edge-to-control-rr-client", "instance": clientName,
 	}
-	return &controlRequestClientImpl{
-		Component: goutils.Component{
-			LogTags: logTags,
-			LogTagModifiers: []goutils.LogMetadataModifier{
-				goutils.ModifyLogMetadataByRestRequestParam,
+
+	instance := &controlRequestClientImpl{
+		RequestResponseDriver: ipc.RequestResponseDriver{
+			Component: goutils.Component{
+				LogTags: logTags,
+				LogTagModifiers: []goutils.LogMetadataModifier{
+					goutils.ModifyLogMetadataByRestRequestParam,
+				},
 			},
+			Client: coreClient,
 		},
+		core:              nil,
 		controlRRTargetID: controlRRTargetID,
-		client:            coreClient,
 		requestTimeout:    requestTimeout,
 		validator:         validator.New(),
-	}, nil
+	}
+
+	// Install inbound request handling
+	if err := coreClient.SetInboundRequestHandler(ctxt, instance.ProcessInboundRequest); err != nil {
+		return nil, err
+	}
+	instance.InstallHandler(
+		reflect.TypeOf(ipc.ChangeSourceStreamingStateRequest{}),
+		instance.processInboundStreamingStateChangeRequest,
+	)
+
+	return instance, nil
 }
+
+func (c *controlRequestClientImpl) InstallReferenceToManager(newManager VideoSourceOperator) {
+	c.core = newManager
+}
+
+// ======================================================================================
+// Inbound Request Processing
+
+func (c *controlRequestClientImpl) processInboundStreamingStateChangeRequest(
+	ctxt context.Context,
+	requestRaw interface{},
+	origMsg goutils.ReqRespMessage,
+) (interface{}, error) {
+	logTag := c.GetLogTagsForContext(ctxt)
+
+	request, ok := requestRaw.(ipc.ChangeSourceStreamingStateRequest)
+	if !ok {
+		return nil, fmt.Errorf(
+			"incorrect request type '%s' for 'change streaming state'", reflect.TypeOf(requestRaw),
+		)
+	}
+
+	if c.core == nil {
+		return nil, fmt.Errorf("no reference to EdgeManager set yet")
+	}
+
+	err := c.core.ChangeVideoSourceStreamState(ctxt, request.SourceID, request.NewState)
+	var response ipc.GeneralResponse
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTag).
+			WithField("request-sender", origMsg.SenderID).
+			WithField("request-id", origMsg.RequestID).
+			Errorf("Failed to change source '%s' streaming state", request.SourceID)
+		response = ipc.NewGetGeneralResponse(false, err.Error())
+	} else {
+		response = ipc.NewGetGeneralResponse(true, "")
+	}
+
+	return response, nil
+}
+
+// ======================================================================================
+// Outbound Request Processing
 
 func (c *controlRequestClientImpl) GetVideoSourceInfo(
 	ctxt context.Context, sourceName string,
@@ -80,124 +150,54 @@ func (c *controlRequestClientImpl) GetVideoSourceInfo(
 		return common.VideoSource{}, nil
 	}
 
-	// Handler to receive the message from control
-	respReceiveChan := make(chan goutils.ReqRespMessage, 2)
-	respReceiveCB := func(ctxt context.Context, msg goutils.ReqRespMessage) error {
-		log.
-			WithFields(logTags).
-			Debug("Received raw video source info response")
-		respReceiveChan <- msg
-		return nil
-	}
-	// Handler in case of request timeout
-	timeoutChan := make(chan error, 2)
-	timeoutCB := func(ctxt context.Context) error {
-		err := fmt.Errorf("video source '%s' info request timeout", sourceName)
-		log.
-			WithError(err).
-			WithFields(logTags).
-			Debug("Video source info query failed")
-		timeoutChan <- err
-		return nil
-	}
-
 	// Prepare the request parameters
 	callParam := goutils.RequestCallParam{
-		RespHandler:            respReceiveCB,
 		ExpectedResponsesCount: 1,
 		Blocking:               false,
 		Timeout:                c.requestTimeout,
-		TimeoutHandler:         timeoutCB,
 	}
 
-	var rawResponse goutils.ReqRespMessage
-
-	log.
-		WithFields(logTags).
-		Debugf("Sending video source '%s' info request", sourceName)
-	// Make the call
-	requestID, err := c.client.Request(ctxt, c.controlRRTargetID, msgStr, nil, callParam)
+	// Make request
+	results, err := c.MakeRequest(
+		ctxt,
+		fmt.Sprintf("Fetch video source '%s' info", sourceName),
+		c.controlRRTargetID,
+		msgStr,
+		nil,
+		callParam,
+	)
 	if err != nil {
 		log.
 			WithError(err).
 			WithFields(logTags).
-			WithField("request-id", requestID).
-			Errorf("Failed to send video source '%s' info request", sourceName)
+			Errorf("Video source '%s' request failed", sourceName)
 		return common.VideoSource{}, err
 	}
-	log.
-		WithFields(logTags).
-		WithField("request-id", requestID).
-		Debugf("Sent video source '%s' info request. Waiting for response...", sourceName)
 
-	// Wait for response from control
-	select {
-	// Execution context timeout
-	case <-ctxt.Done():
-		return common.VideoSource{}, fmt.Errorf("execution context timed out")
-
-	// Request timeout
-	case err, ok := <-timeoutChan:
-		if ok {
+	// Process the responses
+	answer := results[0]
+	switch reflect.TypeOf(answer) {
+	case reflect.TypeOf(ipc.GetVideoSourceByNameResponse{}):
+		videoInfo := answer.(ipc.GetVideoSourceByNameResponse)
+		if err := c.validator.Struct(&videoInfo); err != nil {
 			log.
 				WithError(err).
 				WithFields(logTags).
-				WithField("request-id", requestID).
-				Errorf("Video source '%s' info request failed", sourceName)
+				Error("Can't process invalid 'GetVideoSourceByNameResponse' from control")
 			return common.VideoSource{}, err
 		}
-		err = fmt.Errorf("request timeout channel returned erroneous results")
+		return videoInfo.Source, nil
+
+	case reflect.TypeOf(ipc.GeneralResponse{}):
+		response := answer.(ipc.GeneralResponse)
+		return common.VideoSource{}, fmt.Errorf(response.ErrorMsg)
+
+	default:
+		err := fmt.Errorf("unknown supported response type '%s'", reflect.TypeOf(answer))
 		log.
 			WithError(err).
 			WithFields(logTags).
-			WithField("request-id", requestID).
-			Errorf("Video source '%s' info request failed", sourceName)
-		return common.VideoSource{}, err
-
-	// Response successful
-	case resp, ok := <-respReceiveChan:
-		if !ok {
-			err := fmt.Errorf("response channel returned erroneous results")
-			log.
-				WithError(err).
-				WithFields(logTags).
-				WithField("request-id", requestID).
-				Errorf("Video source '%s' info request failed", sourceName)
-			return common.VideoSource{}, err
-		}
-		rawResponse = resp
-	}
-
-	log.
-		WithFields(logTags).
-		WithField("raw-msg", string(rawResponse.Payload)).
-		Debugf("Controller returned video source '%s' info", sourceName)
-
-	// Process the response
-	parsed, err := ipc.ParseRawMessage(rawResponse.Payload)
-	if err != nil {
-		log.
-			WithError(err).
-			WithFields(logTags).
-			Errorf("Unable to parse video source '%s' info", sourceName)
+			Errorf("Unable to parse video source '%s' info response", sourceName)
 		return common.VideoSource{}, err
 	}
-	videoInfo, ok := parsed.(ipc.GetVideoSourceByNameResponse)
-	if !ok {
-		err := fmt.Errorf("received unexpected response message (%s)", reflect.TypeOf(parsed))
-		log.
-			WithError(err).
-			WithFields(logTags).
-			Errorf("Unable to parse video source '%s' info", sourceName)
-		return common.VideoSource{}, err
-	}
-	if err := c.validator.Struct(&videoInfo); err != nil {
-		log.
-			WithError(err).
-			WithFields(logTags).
-			Error("Can't process invalid 'GetVideoSourceByNameResponse' from control")
-		return common.VideoSource{}, err
-	}
-
-	return videoInfo.Source, nil
 }

@@ -23,6 +23,7 @@ mock: .prepare ## Generate test mock interfaces
 	@mockery --dir vod --name SegmentManager
 	@mockery --dir api --name RequestResponseClient
 	@mockery --dir control --name SystemManager
+	@mockery --dir edge --name VideoSourceOperator
 
 .PHONY: test
 test: .prepare ## Run unittests

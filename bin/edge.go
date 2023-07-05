@@ -107,6 +107,7 @@ func DefineEdgeNode(
 
 	// Define edge-to-controller request-response client
 	edgeToCtrlRRClient, err := edge.NewControlRequestClient(
+		parentCtxt,
 		nodeName,
 		config.RRClient.ControlRRTopic,
 		theNode.rrClient,

@@ -49,7 +49,8 @@ func ParseRawMessage(rawMsg []byte) (interface{}, error) {
 type baseRequestTypeDT string
 
 const (
-	ipcRequestTypeGetVideoSource baseRequestTypeDT = "get_video_source"
+	ipcRequestTypeGetVideoSource    baseRequestTypeDT = "get_video_source"
+	ipcRequestTypeChangeStreamState baseRequestTypeDT = "change_stream_state"
 )
 
 // BaseRequest base request IPC message payload. All other requests must be built
@@ -83,6 +84,33 @@ func NewGetVideoSourceByNameRequest(sourceName string) GetVideoSourceByNameReque
 	}
 }
 
+// ChangeSourceStreamingStateRequest RR request change video source streaming type
+type ChangeSourceStreamingStateRequest struct {
+	BaseRequest
+	// SourceID video source ID
+	SourceID string `json:"source_id" validate:"required"`
+	// NewState new video source streaming state
+	NewState bool `json:"new_state"`
+}
+
+/*
+NewChangeSourceStreamingStateRequest define new ChangeSourceStreamingStateRequest message
+
+	@param sourceID string - video source ID
+	@param newState bool - new streaming state
+	@returns defined structure
+*/
+func NewChangeSourceStreamingStateRequest(
+	sourceID string, newState bool,
+) ChangeSourceStreamingStateRequest {
+	return ChangeSourceStreamingStateRequest{
+		BaseRequest: BaseRequest{
+			BaseMessage: BaseMessage{Type: ipcMessageTypeRequest},
+			RequestType: ipcRequestTypeChangeStreamState,
+		}, SourceID: sourceID, NewState: newState,
+	}
+}
+
 /*
 parseRawRequestMessage parse raw IPC request message
 
@@ -98,11 +126,19 @@ func parseRawRequestMessage(rawMsg []byte) (interface{}, error) {
 	switch asRequestMsg.RequestType {
 	// Request Video Source Info
 	case ipcRequestTypeGetVideoSource:
-		var getVideoSourceReq GetVideoSourceByNameRequest
-		if err := json.Unmarshal(rawMsg, &getVideoSourceReq); err != nil {
+		var request GetVideoSourceByNameRequest
+		if err := json.Unmarshal(rawMsg, &request); err != nil {
 			return nil, err
 		}
-		return getVideoSourceReq, nil
+		return request, nil
+
+	// Request Change Streaming State
+	case ipcRequestTypeChangeStreamState:
+		var request ChangeSourceStreamingStateRequest
+		if err := json.Unmarshal(rawMsg, &request); err != nil {
+			return nil, err
+		}
+		return request, nil
 
 	default:
 		return nil, fmt.Errorf("unknown IPC request message type '%s'", asRequestMsg.Type)
@@ -115,7 +151,8 @@ func parseRawRequestMessage(rawMsg []byte) (interface{}, error) {
 type baseResponseTypeDT string
 
 const (
-	ipcResponseTypeGetVideoSource baseResponseTypeDT = "get_video_source_resp"
+	ipcResponseTypeGeneralResponse baseResponseTypeDT = "general_resp"
+	ipcResponseTypeGetVideoSource  baseResponseTypeDT = "get_video_source_resp"
 )
 
 // BaseResponse base response IPC message payload. All other responses must be built
@@ -123,6 +160,31 @@ const (
 type BaseResponse struct {
 	BaseMessage
 	ResponseType baseResponseTypeDT `json:"response_type" validate:"required,oneof=get_video_source_resp"`
+}
+
+// GeneralResponse RR general purpose response
+type GeneralResponse struct {
+	BaseResponse
+	// Success whether the request succeeded
+	Success bool `json:"success"`
+	// ErrorMsg if request failed, the error message
+	ErrorMsg string `json:"error,omitempty"`
+}
+
+/*
+NewGetGeneralResponse define new GeneralResponse message
+
+	@param success bool - whether the request succeeded
+	@param errorMsg string - if request failed, the error message
+	@returns defined structure
+*/
+func NewGetGeneralResponse(success bool, errorMsg string) GeneralResponse {
+	return GeneralResponse{
+		BaseResponse: BaseResponse{
+			BaseMessage:  BaseMessage{Type: ipcMessageTypeResponse},
+			ResponseType: ipcResponseTypeGeneralResponse,
+		}, Success: success, ErrorMsg: errorMsg,
+	}
 }
 
 // GetVideoSourceByNameResponse RR response containing video source info
@@ -161,13 +223,21 @@ func parseRawResponseMessage(rawMsg []byte) (interface{}, error) {
 	}
 	// Based on the type, parse
 	switch asResponseMsg.ResponseType {
-	// Video Source Info Response
-	case ipcResponseTypeGetVideoSource:
-		var getVideoSourceResp GetVideoSourceByNameResponse
-		if err := json.Unmarshal(rawMsg, &getVideoSourceResp); err != nil {
+	// General Purpose Response
+	case ipcResponseTypeGeneralResponse:
+		var response GeneralResponse
+		if err := json.Unmarshal(rawMsg, &response); err != nil {
 			return nil, err
 		}
-		return getVideoSourceResp, nil
+		return response, nil
+
+	// Video Source Info Response
+	case ipcResponseTypeGetVideoSource:
+		var response GetVideoSourceByNameResponse
+		if err := json.Unmarshal(rawMsg, &response); err != nil {
+			return nil, err
+		}
+		return response, nil
 
 	default:
 		return nil, fmt.Errorf("unknown IPC response message type '%s'", asResponseMsg.Type)

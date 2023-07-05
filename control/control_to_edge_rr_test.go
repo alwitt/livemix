@@ -3,7 +3,9 @@ package control_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/alwitt/goutils"
 	"github.com/alwitt/livemix/common"
@@ -36,13 +38,12 @@ func TestControlToEdgeGetVideoSourceInfoResponse(t *testing.T) {
 		requestInject = args.Get(1).(goutils.ReqRespMessageHandler)
 	}).Return(nil).Once()
 
-	// edgeName := "unit-tester"
 	controlName := "ut-controller"
-	uut, err := control.NewEdgeRequestClient(utCtxt, controlName, mockRRClient)
+	uut, err := control.NewEdgeRequestClient(utCtxt, controlName, mockRRClient, time.Second)
 	assert.Nil(err)
 
 	// --------------------------------------------------------------------------
-	// Case 0: send request with a manager installed
+	// Case 0: send request without a manager installed
 	{
 		request := ipc.NewGetVideoSourceByNameRequest("video-00")
 		requestStr, err := json.Marshal(&request)
@@ -104,6 +105,40 @@ func TestControlToEdgeGetVideoSourceInfoResponse(t *testing.T) {
 
 		asType := parsed.(ipc.GetVideoSourceByNameResponse)
 		assert.EqualValues(videoInfo, asType.Source)
+	}).Return(nil).Once()
+
+	assert.Nil(requestInject(utCtxt, request))
+
+	// --------------------------------------------------------------------------
+	// Case 1: send request for video source, but failed
+
+	mockSystem.On(
+		"GetVideoSourceByName",
+		mock.AnythingOfType("*context.emptyCtx"),
+		"video-00",
+	).Return(videoInfo, fmt.Errorf("dummy error")).Once()
+	mockRRClient.On(
+		"Respond",
+		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("goutils.ReqRespMessage"),
+		mock.AnythingOfType("[]uint8"),
+		mock.AnythingOfType("map[string]string"),
+		false,
+	).Run(func(args mock.Arguments) {
+		origRequest := args.Get(1).(goutils.ReqRespMessage)
+		rawResponse := args.Get(2).([]byte)
+
+		// Verify the original request
+		assert.EqualValues(request, origRequest)
+
+		// Parse the response
+		parsed, err := ipc.ParseRawMessage(rawResponse)
+		assert.Nil(err)
+		assert.IsType(ipc.GeneralResponse{}, parsed)
+
+		asType := parsed.(ipc.GeneralResponse)
+		assert.False(asType.Success)
+		assert.Equal("dummy error", asType.ErrorMsg)
 	}).Return(nil).Once()
 
 	assert.Nil(requestInject(utCtxt, request))

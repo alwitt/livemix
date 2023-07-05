@@ -3,6 +3,7 @@ package bin
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/alwitt/goutils"
 	"github.com/alwitt/livemix/api"
@@ -84,7 +85,12 @@ func DefineControlNode(
 	}
 
 	// Define controller-to-edge request-response client
-	ctrlToEdgeRRClient, err := control.NewEdgeRequestClient(parentCtxt, nodeName, theNode.rrClient)
+	ctrlToEdgeRRClient, err := control.NewEdgeRequestClient(
+		parentCtxt,
+		nodeName,
+		theNode.rrClient,
+		time.Second*time.Duration(config.Management.RRClient.MaxOutboundRequestDurationInSec),
+	)
 	if err != nil {
 		log.WithError(err).Error("Failed to create controller-to-edge request-response client")
 		return theNode, err

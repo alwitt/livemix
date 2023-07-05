@@ -127,6 +127,8 @@ type ReqRespClientConfig struct {
 	InboudRequestTopic PubSubSubcriptionConfig `mapstructure:"self" json:"self" validate:"required,dive"`
 	// SupportWorkerCount number of support workers to spawn to process inbound requests
 	SupportWorkerCount int `mapstructure:"supportWorkerCount" json:"supportWorkerCount" validate:"required"`
+	// MaxOutboundRequestDurationInSec the max duration for outbound request in secs
+	MaxOutboundRequestDurationInSec uint32 `mapstructure:"outboundRequestDurationInSec" json:"outboundRequestDurationInSec" validate:"gte=5,lte=60"`
 	// RequestTimeoutEnforceIntInSec outbound request timeout enforcement check interval in secs
 	RequestTimeoutEnforceIntInSec uint32 `mapstructure:"requestTimeoutEnforceIntInSec" json:"requestTimeoutEnforceIntInSec" validate:"gte=15,lte=120"`
 }
@@ -136,8 +138,6 @@ type EdgeReqRespClientConfig struct {
 	ReqRespClientConfig `mapstructure:",squash"`
 	// ControlRRTopic the PubSub topic for reaching system control
 	ControlRRTopic string `mapstructure:"systemControlTopic" json:"systemControlTopic" validate:"required"`
-	// MaxOutboundRequestDurationInSec the max duration for outbound request in secs
-	MaxOutboundRequestDurationInSec uint32 `mapstructure:"outboundRequestDurationInSec" json:"outboundRequestDurationInSec" validate:"gte=5,lte=60"`
 }
 
 // ===============================================================================
@@ -243,6 +243,7 @@ func InstallDefaultControlNodeConfigValues() {
 	// Default system manager request-response client config
 	viper.SetDefault("management.requestResponse.self.msgTTL", 600)
 	viper.SetDefault("management.requestResponse.supportWorkerCount", 4)
+	viper.SetDefault("management.requestResponse.outboundRequestDurationInSec", 15)
 	viper.SetDefault("management.requestResponse.requestTimeoutEnforceIntInSec", 30)
 }
 

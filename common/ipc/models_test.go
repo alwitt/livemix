@@ -31,6 +31,14 @@ func TestIPCMessageParsing(t *testing.T) {
 			}),
 			inputType: reflect.TypeOf(ipc.GetVideoSourceByNameResponse{}),
 		},
+		{
+			input:     ipc.NewChangeSourceStreamingStateRequest(uuid.NewString(), true),
+			inputType: reflect.TypeOf(ipc.ChangeSourceStreamingStateRequest{}),
+		},
+		{
+			input:     ipc.NewGetGeneralResponse(false, uuid.NewString()),
+			inputType: reflect.TypeOf(ipc.GeneralResponse{}),
+		},
 	}
 
 	for idx, oneTest := range testCases {
