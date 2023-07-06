@@ -268,6 +268,8 @@ type BaseBroadcast struct {
 // VideoSourceStatusReport broadcast video source status report
 type VideoSourceStatusReport struct {
 	BaseBroadcast
+	// SourceID video source ID
+	SourceID string `json:"source_id" validate:"required"`
 	// RequestResponseTargetID the request-response target ID for reaching video source
 	// over request-response network.
 	RequestResponseTargetID string `json:"rr_target_id" validate:"required"`
@@ -278,19 +280,21 @@ type VideoSourceStatusReport struct {
 /*
 NewVideoSourceStatusReport define new VideoSourceStatusReport message
 
+	@param sourceID string - video source ID
 	@param reqRespTargetID string - the request-response target ID for reaching video source
 	    over request-response network.
 	@param lclTimestamp time.Time - video source local time
 	@returns defined structure
 */
 func NewVideoSourceStatusReport(
-	reqRespTargetID string, lclTimestamp time.Time,
+	sourceID, reqRespTargetID string, lclTimestamp time.Time,
 ) VideoSourceStatusReport {
 	return VideoSourceStatusReport{
 		BaseBroadcast: BaseBroadcast{
 			BaseMessage:   BaseMessage{Type: ipcMessageTypeBroadcast},
 			BroadcastType: ipcBroadcastVideoSourceStatus,
 		},
+		SourceID:                sourceID,
 		RequestResponseTargetID: reqRespTargetID,
 		LocalTimestamp:          lclTimestamp,
 	}

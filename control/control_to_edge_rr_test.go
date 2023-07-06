@@ -24,7 +24,7 @@ func TestControlToEdgeGetVideoSourceInfoResponse(t *testing.T) {
 	utCtxt := context.Background()
 
 	mockRRClient := mocks.NewRequestResponseClient(t)
-	mockSystem := mocks.NewPersistenceManager(t)
+	mockSystem := mocks.NewSystemManager(t)
 
 	// --------------------------------------------------------------------------
 	// Prepare mocks for object initialization

@@ -43,7 +43,7 @@ func TestIPCMessageParsing(t *testing.T) {
 			inputType: reflect.TypeOf(ipc.GeneralResponse{}),
 		},
 		{
-			input:     ipc.NewVideoSourceStatusReport(uuid.NewString(), currentTime),
+			input:     ipc.NewVideoSourceStatusReport(uuid.NewString(), uuid.NewString(), currentTime),
 			inputType: reflect.TypeOf(ipc.VideoSourceStatusReport{}),
 		},
 	}

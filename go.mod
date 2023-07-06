@@ -3,6 +3,7 @@ module github.com/alwitt/livemix
 go 1.20
 
 require (
+	cloud.google.com/go/pubsub v1.31.0
 	github.com/alwitt/goutils v0.5.0
 	github.com/apex/log v1.9.0
 	github.com/bradfitz/gomemcache v0.0.0-20230611145640-acc696258285
@@ -25,7 +26,6 @@ require (
 	cloud.google.com/go/compute v1.19.0 // indirect
 	cloud.google.com/go/compute/metadata v0.2.3 // indirect
 	cloud.google.com/go/iam v1.0.1 // indirect
-	cloud.google.com/go/pubsub v1.31.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.2 // indirect

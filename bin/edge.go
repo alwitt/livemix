@@ -2,12 +2,14 @@ package bin
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"time"
 
 	"github.com/alwitt/goutils"
 	"github.com/alwitt/livemix/api"
 	"github.com/alwitt/livemix/common"
+	"github.com/alwitt/livemix/common/ipc"
 	"github.com/alwitt/livemix/db"
 	"github.com/alwitt/livemix/edge"
 	"github.com/alwitt/livemix/tracker"
@@ -25,6 +27,7 @@ type EdgeNode struct {
 	rrClient              goutils.RequestResponseClient
 	segmentReader         utils.SegmentReader
 	monitor               tracker.SourceHLSMonitor
+	operator              edge.VideoSourceOperator
 	PlaylistReceiveServer *http.Server
 	VODServer             *http.Server
 }
@@ -36,16 +39,19 @@ Cleanup stop and clean up the edge node
 */
 func (n EdgeNode) Cleanup(ctxt context.Context) error {
 	n.ctxtCancel()
+	if err := n.monitor.Stop(ctxt); err != nil {
+		return err
+	}
+	if err := n.segmentReader.Stop(ctxt); err != nil {
+		return err
+	}
 	if err := n.rrClient.Stop(ctxt); err != nil {
 		return err
 	}
 	if err := n.psClient.Close(ctxt); err != nil {
 		return err
 	}
-	if err := n.segmentReader.Stop(ctxt); err != nil {
-		return err
-	}
-	return n.monitor.Stop(ctxt)
+	return n.operator.Stop(ctxt)
 }
 
 /*
@@ -75,6 +81,10 @@ func DefineEdgeNode(
 		* Prepare local VOD server
 	*/
 
+	logTags := log.Fields{
+		"module": "global", "component": "edge-node", "instance": nodeName,
+	}
+
 	theNode := EdgeNode{}
 	theNode.nodeRuntimeCtxt, theNode.ctxtCancel = context.WithCancel(parentCtxt)
 
@@ -83,7 +93,7 @@ func DefineEdgeNode(
 	// Define the persistence manager
 	dbManager, err := db.NewManager(sqlDSN, logger.Error)
 	if err != nil {
-		log.WithError(err).Error("Failed to define persistence manager")
+		log.WithError(err).WithFields(logTags).Error("Failed to define persistence manager")
 		return theNode, err
 	}
 
@@ -92,7 +102,7 @@ func DefineEdgeNode(
 		parentCtxt, time.Second*time.Duration(config.SegmentCache.RetentionCheckIntInSec),
 	)
 	if err != nil {
-		log.WithError(err).Error("Failed to define video segment cache")
+		log.WithError(err).WithFields(logTags).Error("Failed to define video segment cache")
 		return theNode, err
 	}
 
@@ -101,7 +111,10 @@ func DefineEdgeNode(
 		parentCtxt, nodeName, config.RRClient.ReqRespClientConfig,
 	)
 	if err != nil {
-		log.WithError(err).Error("PubSub request-response client initialization failed")
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("PubSub request-response client initialization failed")
 		return theNode, err
 	}
 
@@ -114,16 +127,20 @@ func DefineEdgeNode(
 		time.Second*time.Duration(config.RRClient.MaxOutboundRequestDurationInSec),
 	)
 	if err != nil {
-		log.WithError(err).Error("Failed to create edge-to-controller request-response client")
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Failed to create edge-to-controller request-response client")
 		return theNode, err
 	}
 
 	// Query control for target video source info
-	sourceInfo, err := edgeToCtrlRRClient.GetVideoSourceInfo(parentCtxt, config.VideoSourceName.Name)
+	sourceInfo, err := edgeToCtrlRRClient.GetVideoSourceInfo(parentCtxt, config.VideoSource.Name)
 	if err != nil {
 		log.
 			WithError(err).
-			Errorf("Fetching info for video source '%s' failed", config.VideoSourceName.Name)
+			WithFields(logTags).
+			Errorf("Fetching info for video source '%s' failed", config.VideoSource.Name)
 		return theNode, err
 	}
 	// Record this in persistence
@@ -137,16 +154,49 @@ func DefineEdgeNode(
 	); err != nil {
 		log.
 			WithError(err).
-			Errorf("Recording video source '%s' failed", config.VideoSourceName.Name)
+			WithFields(logTags).
+			Errorf("Recording video source '%s' failed", config.VideoSource.Name)
 		return theNode, err
 	}
+
+	forwardStatusReports := func(
+		ctxt context.Context, report ipc.VideoSourceStatusReport,
+	) error {
+		payload, err := json.Marshal(&report)
+		if err != nil {
+			return err
+		}
+		_, err = theNode.psClient.Publish(ctxt, config.BroadcastSystem.PubSub.Topic, payload, nil, true)
+		return err
+	}
+
+	// Define video source operator
+	edgeOperator, err := edge.NewManager(
+		parentCtxt,
+		sourceInfo,
+		config.RRClient.InboudRequestTopic.Topic,
+		dbManager,
+		forwardStatusReports,
+		time.Second*time.Duration(config.VideoSource.StatusReportIncInSec),
+	)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Failed to create video source operator")
+		return theNode, err
+	}
+	theNode.operator = edgeOperator
+
+	// Install reference to VideoSourceOperator
+	edgeToCtrlRRClient.InstallReferenceToManager(edgeOperator)
 
 	// Define video segment reader
 	theNode.segmentReader, err = utils.NewSegmentReader(
 		parentCtxt, config.MonitorConfig.SegmentReaderWorkerCount,
 	)
 	if err != nil {
-		log.WithError(err).Error("Failed to create video segment reader")
+		log.WithError(err).WithFields(logTags).Error("Failed to create video segment reader")
 		return theNode, err
 	}
 
@@ -160,12 +210,12 @@ func DefineEdgeNode(
 		theNode.segmentReader,
 		func(ctxt context.Context, segment common.VideoSegmentWithData) error {
 			// TODO FIXME: once forwarders are implemented replace this
-			log.WithField("segment", segment.String()).Info("Processed new segment")
+			log.WithFields(logTags).WithField("segment", segment.String()).Info("Processed new segment")
 			return nil
 		},
 	)
 	if err != nil {
-		log.WithError(err).Error("Failed to create HLS monitor")
+		log.WithError(err).WithFields(logTags).Error("Failed to create HLS monitor")
 		return theNode, err
 	}
 
@@ -174,7 +224,7 @@ func DefineEdgeNode(
 		theNode.nodeRuntimeCtxt, config.MonitorConfig.APIServer, theNode.monitor.Update,
 	)
 	if err != nil {
-		log.WithError(err).Error("Failed to create playlist receiver HTTP server")
+		log.WithError(err).WithFields(logTags).Error("Failed to create playlist receiver HTTP server")
 		return theNode, err
 	}
 
@@ -183,18 +233,18 @@ func DefineEdgeNode(
 		cache, theNode.segmentReader, time.Second*time.Duration(config.VODConfig.SegmentCacheTTLInSec),
 	)
 	if err != nil {
-		log.WithError(err).Error("Failed to create video segment manager")
+		log.WithError(err).WithFields(logTags).Error("Failed to create video segment manager")
 		return theNode, err
 	}
 
 	// Define live VOD playlist builder
 	plBuilder, err := vod.NewPlaylistBuilder(
 		dbManager,
-		time.Second*time.Duration(config.VideoSourceName.SegmentDurationInSec),
+		time.Second*time.Duration(config.VideoSource.SegmentDurationInSec),
 		config.VODConfig.LiveVODSegmentCount,
 	)
 	if err != nil {
-		log.WithError(err).Error("Failed to create VOD playlist builder")
+		log.WithError(err).WithFields(logTags).Error("Failed to create VOD playlist builder")
 		return theNode, err
 	}
 
@@ -203,7 +253,7 @@ func DefineEdgeNode(
 		config.VODConfig.APIServer, dbManager, plBuilder, segmentMgnt,
 	)
 	if err != nil {
-		log.WithError(err).Error("Failed to create live VOD HTTP server")
+		log.WithError(err).WithFields(logTags).Error("Failed to create live VOD HTTP server")
 		return theNode, err
 	}
 

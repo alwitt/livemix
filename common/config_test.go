@@ -48,7 +48,11 @@ management:
     gcpProject: rpi-cam
     self:
       topic: control
-      msgTTL: 900`)
+      msgTTL: 900
+
+broadcast:
+  pubsub:
+    topic: system-events`)
 		assert.Nil(viper.ReadConfig(bytes.NewBuffer(config)))
 		var cfg common.ControlNodeConfig
 		assert.Nil(viper.Unmarshal(&cfg))
@@ -78,7 +82,11 @@ management:
   requestResponse:
     gcpProject: rpi-cam
     self:
-      msgTTL: 900`)
+      msgTTL: 900
+
+broadcast:
+  pubsub:
+    topic: system-events`)
 		assert.Nil(viper.ReadConfig(bytes.NewBuffer(config)))
 		var cfg common.ControlNodeConfig
 		assert.Nil(viper.Unmarshal(&cfg))
@@ -102,7 +110,11 @@ management:
     gcpProject: rpi-cam
     self:
       topic: control
-      msgTTL: 300`)
+      msgTTL: 300
+
+broadcast:
+  pubsub:
+    topic: system-events`)
 		assert.Nil(viper.ReadConfig(bytes.NewBuffer(config)))
 		var cfg common.ControlNodeConfig
 		assert.Nil(viper.Unmarshal(&cfg))

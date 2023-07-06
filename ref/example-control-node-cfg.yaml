@@ -71,3 +71,13 @@ management:
       topic: local-dev-ctrl-node
       # Message retention within the subscription in secs
       msgTTL: 600
+
+#########################################################################################
+# System broadcast channel configuration
+broadcast:
+  # Broadcast PubSub settings
+  pubsub:
+    # Broadcast channel PubSub topic
+    topic: system-events
+    # Message retention within the subscription in secs
+    msgTTL: 600

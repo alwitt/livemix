@@ -75,6 +75,8 @@ type VideoSourceConfig struct {
 	Name string `mapstructure:"name" json:"name" validate:"required"`
 	// SegmentDurationInSec the expected duration of each video segment in secs
 	SegmentDurationInSec uint32 `mapstructure:"segmentDurationInSec" json:"segmentDurationInSec" validate:"gte=2"`
+	// StatusReportIncInSec interval in secs between video source status report to system controller
+	StatusReportIncInSec uint32 `mapstructure:"statusReportIntInSec" json:"statusReportIntInSec" validate:"gte=10"`
 }
 
 // ===============================================================================
@@ -140,6 +142,12 @@ type EdgeReqRespClientConfig struct {
 	ControlRRTopic string `mapstructure:"systemControlTopic" json:"systemControlTopic" validate:"required"`
 }
 
+// BroadcastSystemConfig system broadcast channel configuration
+type BroadcastSystemConfig struct {
+	// PubSub broadcast PubSub settings
+	PubSub PubSubSubcriptionConfig `mapstructure:"pubsub" json:"pubsub" validate:"required,dive"`
+}
+
 // ===============================================================================
 // Video Segment Cache Configuration Structures
 
@@ -199,12 +207,14 @@ type ControlNodeConfig struct {
 	Postgres PostgresConfig `mapstructure:"postgres" json:"postgres" validate:"required,dive"`
 	// Management management
 	Management SystemManagementConfig `mapstructure:"management" json:"management" validate:"required,dive"`
+	// BroadcastSystem system broadcast channel configuration
+	BroadcastSystem BroadcastSystemConfig `mapstructure:"broadcast" json:"broadcast" validate:"required,dive"`
 }
 
 // EdgeNodeConfig define edge node settings and behavior
 type EdgeNodeConfig struct {
-	// VideoSourceName the video source this edge is monitoring
-	VideoSourceName VideoSourceConfig `mapstructure:"videoSource" json:"videoSource" validate:"required,dive"`
+	// VideoSource the video source this edge is monitoring
+	VideoSource VideoSourceConfig `mapstructure:"videoSource" json:"videoSource" validate:"required,dive"`
 	// SegmentCache video segment cache config
 	SegmentCache RAMSegmentCacheConfig `mapstructure:"cache" json:"cache" validate:"required,dive"`
 	// Sqlite sqlite DB configuration
@@ -215,6 +225,8 @@ type EdgeNodeConfig struct {
 	VODConfig VODServerConfig `mapstructure:"vod" json:"vod" validate:"required,dive"`
 	// RRClient PubSub request-response client config
 	RRClient EdgeReqRespClientConfig `mapstructure:"requestResponse" json:"requestResponse" validate:"required,dive"`
+	// BroadcastSystem system broadcast channel configuration
+	BroadcastSystem BroadcastSystemConfig `mapstructure:"broadcast" json:"broadcast" validate:"required,dive"`
 }
 
 // ===============================================================================
@@ -245,10 +257,16 @@ func InstallDefaultControlNodeConfigValues() {
 	viper.SetDefault("management.requestResponse.supportWorkerCount", 4)
 	viper.SetDefault("management.requestResponse.outboundRequestDurationInSec", 15)
 	viper.SetDefault("management.requestResponse.requestTimeoutEnforceIntInSec", 30)
+
+	// Default broadcast channel config
+	viper.SetDefault("broadcast.pubsub.msgTTL", 600)
 }
 
 // InstallDefaultEdgeNodeConfigValues installs default config parameters in viper for edge node
 func InstallDefaultEdgeNodeConfigValues() {
+	// Default video source config
+	viper.SetDefault("videoSource.statusReportIntInSec", 60)
+
 	// Default cache config
 	viper.SetDefault("cache.retentionCheckIntInSec", 60)
 
@@ -294,4 +312,7 @@ func InstallDefaultEdgeNodeConfigValues() {
 	viper.SetDefault("requestResponse.requestTimeoutEnforceIntInSec", 30)
 	viper.SetDefault("requestResponse.systemControlTopic", "system-control-node")
 	viper.SetDefault("requestResponse.outboundRequestDurationInSec", 15)
+
+	// Default broadcast channel config
+	viper.SetDefault("broadcast.pubsub.msgTTL", 600)
 }

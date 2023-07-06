@@ -6,6 +6,8 @@ videoSource:
   name: "test-video"
   # the expected duration of each video segment in secs
   segmentDurationInSec: 4
+  # interval in secs between video source status report to system controller
+  statusReportIntInSec: 60
 
 #########################################################################################
 # Local video cache configuration
@@ -134,3 +136,13 @@ requestResponse:
 
   # Max duration for outbound request in secs
   outboundRequestDurationInSec: 30
+
+#########################################################################################
+# System broadcast channel configuration
+broadcast:
+  # Broadcast PubSub settings
+  pubsub:
+    # Broadcast channel PubSub topic
+    topic: system-events
+    # Message retention within the subscription in secs
+    msgTTL: 600
