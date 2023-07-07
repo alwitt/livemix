@@ -94,18 +94,18 @@ type ChangeSourceStreamingStateRequest struct {
 	// SourceID video source ID
 	SourceID string `json:"source_id" validate:"required"`
 	// NewState new video source streaming state
-	NewState bool `json:"new_state"`
+	NewState int `json:"new_state" validate:"oneof=-1 1"`
 }
 
 /*
 NewChangeSourceStreamingStateRequest define new ChangeSourceStreamingStateRequest message
 
 	@param sourceID string - video source ID
-	@param newState bool - new streaming state
+	@param newState int - new streaming state
 	@returns defined structure
 */
 func NewChangeSourceStreamingStateRequest(
-	sourceID string, newState bool,
+	sourceID string, newState int,
 ) ChangeSourceStreamingStateRequest {
 	return ChangeSourceStreamingStateRequest{
 		BaseRequest: BaseRequest{
@@ -176,13 +176,13 @@ type GeneralResponse struct {
 }
 
 /*
-NewGetGeneralResponse define new GeneralResponse message
+NewGeneralResponse define new GeneralResponse message
 
 	@param success bool - whether the request succeeded
 	@param errorMsg string - if request failed, the error message
 	@returns defined structure
 */
-func NewGetGeneralResponse(success bool, errorMsg string) GeneralResponse {
+func NewGeneralResponse(success bool, errorMsg string) GeneralResponse {
 	return GeneralResponse{
 		BaseResponse: BaseResponse{
 			BaseMessage:  BaseMessage{Type: ipcMessageTypeResponse},

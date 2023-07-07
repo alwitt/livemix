@@ -166,12 +166,21 @@ type MemcachedSegementCacheConfig struct {
 // ===============================================================================
 // Major System Component Configuration Structures
 
+// VideoSourceManagementConfig video source management settings
+type VideoSourceManagementConfig struct {
+	// StatusReportMaxDelayInSec maximum delay a source status report can be before the
+	// control node marks source as no longer connected
+	StatusReportMaxDelayInSec uint32 `mapstructure:"statusReportMaxDelayInSec" json:"statusReportMaxDelayInSec" validate:"required,gte=20"`
+}
+
 // SystemManagementConfig define control node management sub-module config
 type SystemManagementConfig struct {
 	// APIServer management REST API server config
 	APIServer APIServerConfig `mapstructure:"api" json:"api" validate:"required,dive"`
 	// RRClient PubSub request-response client config
 	RRClient ReqRespClientConfig `mapstructure:"requestResponse" json:"requestResponse" validate:"required,dive"`
+	// SourceManagment video source management settings
+	SourceManagment VideoSourceManagementConfig `mapstructure:"videoSourceManagement" json:"videoSourceManagement" validate:"required,dive"`
 }
 
 // HLSMonitorConfig HLS video source monitoring config
@@ -257,6 +266,8 @@ func InstallDefaultControlNodeConfigValues() {
 	viper.SetDefault("management.requestResponse.supportWorkerCount", 4)
 	viper.SetDefault("management.requestResponse.outboundRequestDurationInSec", 15)
 	viper.SetDefault("management.requestResponse.requestTimeoutEnforceIntInSec", 30)
+	// Default video source management config
+	viper.SetDefault("management.videoSourceManagement.statusReportMaxDelayInSec", 60)
 
 	// Default broadcast channel config
 	viper.SetDefault("broadcast.pubsub.msgTTL", 600)

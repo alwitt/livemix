@@ -42,10 +42,10 @@ type VideoSourceOperator interface {
 			@param name string - source name
 			@param playlistURI *string - video source playlist URI
 			@param description *string - optionally, source description
-			@param streaming bool - whether the video source is currently streaming
+			@param streaming int - whether the video source is currently streaming
 	*/
 	RecordKnownVideoSource(
-		ctxt context.Context, id, name string, playlistURI, description *string, streaming bool,
+		ctxt context.Context, id, name string, playlistURI, description *string, streaming int,
 	) error
 
 	/*
@@ -53,9 +53,9 @@ type VideoSourceOperator interface {
 
 			@param ctxt context.Context - execution context
 			@param id string - source ID
-			@param streaming bool - new streaming state
+			@param streaming int - new streaming state
 	*/
-	ChangeVideoSourceStreamState(ctxt context.Context, id string, streaming bool) error
+	ChangeVideoSourceStreamState(ctxt context.Context, id string, streaming int) error
 }
 
 // videoSourceOperatorImpl implements VideoSourceOperator
@@ -152,13 +152,13 @@ func (o *videoSourceOperatorImpl) Stop(ctxt context.Context) error {
 }
 
 func (o *videoSourceOperatorImpl) RecordKnownVideoSource(
-	ctxt context.Context, id, name string, playlistURI, description *string, streaming bool,
+	ctxt context.Context, id, name string, playlistURI, description *string, streaming int,
 ) error {
 	return o.db.RecordKnownVideoSource(ctxt, id, name, playlistURI, description, streaming)
 }
 
 func (o *videoSourceOperatorImpl) ChangeVideoSourceStreamState(
-	ctxt context.Context, id string, streaming bool,
+	ctxt context.Context, id string, streaming int,
 ) error {
 	return o.db.ChangeVideoSourceStreamState(ctxt, id, streaming)
 }

@@ -66,6 +66,10 @@ func BuildSystemManagementServer(
 		"put": httpHandler.UpdateVideoSourceNameHandler(),
 	})
 
+	_ = registerPathPrefix(perSourceRouter, "/streaming", map[string]http.HandlerFunc{
+		"put": httpHandler.ChangeSourceStreamingStateHandler(),
+	})
+
 	// --------------------------------------------------------------------------------
 	// Middleware
 

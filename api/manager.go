@@ -418,6 +418,82 @@ func (h SystemManagerHandler) UpdateVideoSourceNameHandler() http.HandlerFunc {
 	}
 }
 
+// ------------------------------------------------------------------------------------
+
+// ChangeSourceStreamingState godoc
+// @Summary Change video source streaming state
+// @Description Change video source streaming state
+// @tags management,cloud
+// @Produce json
+// @Param X-Request-ID header string false "Request ID"
+// @Param sourceID path string true "Video source ID"
+// @Param new_state query string true "New video source streaming state [true,false]"
+// @Success 200 {object} goutils.RestAPIBaseResponse "success"
+// @Failure 400 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 403 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 404 {string} string "error"
+// @Failure 500 {object} goutils.RestAPIBaseResponse "error"
+// @Router /v1/source/{sourceID}/streaming [put]
+func (h SystemManagerHandler) ChangeSourceStreamingState(w http.ResponseWriter, r *http.Request) {
+	var respCode int
+	var response interface{}
+	logTags := h.GetLogTagsForContext(r.Context())
+	defer func() {
+		if err := h.WriteRESTResponse(w, respCode, response, nil); err != nil {
+			log.WithError(err).WithFields(logTags).Error("Failed to form response")
+		}
+	}()
+
+	// Get video source ID
+	vars := mux.Vars(r)
+	videoSourceID, ok := vars["sourceID"]
+	if !ok {
+		msg := "video source ID missing from request URL"
+		log.WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
+		return
+	}
+
+	// Get new video streaming state
+	queryParams := r.URL.Query()
+	newStateVal := queryParams.Get("new_state")
+	if newStateVal == "" {
+		msg := "request did not provide a new video source streaming state"
+		log.WithFields(logTags).WithField("video-source", videoSourceID).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
+		return
+	}
+	var newState int
+	if newStateVal == "true" {
+		newState = 1
+	} else {
+		newState = -1
+	}
+
+	// Change the streaming state
+	err := h.manager.ChangeVideoSourceStreamState(r.Context(), videoSourceID, newState)
+	if err != nil {
+		msg := "video source streaming state update failed"
+		log.WithError(err).WithFields(logTags).WithField("video-source", videoSourceID).Error(msg)
+		respCode = http.StatusInternalServerError
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusInternalServerError, msg, err.Error())
+		return
+	}
+
+	// Return video source
+	respCode = http.StatusOK
+	response = h.GetStdRESTSuccessMsg(r.Context())
+}
+
+// ChangeSourceStreamingStateHandler Wrapper around ChangeSourceStreamingState
+func (h SystemManagerHandler) ChangeSourceStreamingStateHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.ChangeSourceStreamingState(w, r)
+	}
+}
+
 // ====================================================================================
 // Utilities
 

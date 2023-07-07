@@ -86,13 +86,6 @@ func DefineControlNode(
 		return nil, err
 	}
 
-	// Define the system manager
-	systemManager, err := control.NewManager(dbManager)
-	if err != nil {
-		log.WithError(err).WithFields(logTags).Error("Failed to define system manager")
-		return nil, err
-	}
-
 	// Prepare core request-response client
 	theNode.psClient, theNode.rrClient, err = buildReqRespClients(
 		parentCtxt, nodeName, config.Management.RRClient,
@@ -166,6 +159,18 @@ func DefineControlNode(
 			Error("Failed to create controller-to-edge request-response client")
 		return nil, err
 	}
+
+	// Define the system manager
+	systemManager, err := control.NewManager(
+		dbManager,
+		ctrlToEdgeRRClient,
+		time.Second*time.Duration(config.Management.SourceManagment.StatusReportMaxDelayInSec),
+	)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to define system manager")
+		return nil, err
+	}
+
 	// Link manager with request-response client
 	ctrlToEdgeRRClient.InstallReferenceToManager(systemManager)
 

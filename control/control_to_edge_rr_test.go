@@ -143,3 +143,70 @@ func TestControlToEdgeGetVideoSourceInfoResponse(t *testing.T) {
 
 	assert.Nil(requestInject(utCtxt, request))
 }
+
+func TestControlToEdgeChangeVideoStreamingState(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+	utCtxt := context.Background()
+
+	mockRRClient := mocks.NewRequestResponseClient(t)
+
+	// --------------------------------------------------------------------------
+	// Prepare mocks for object initialization
+
+	mockRRClient.On(
+		"SetInboundRequestHandler",
+		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("goutils.ReqRespMessageHandler"),
+	).Return(nil).Once()
+
+	controlName := "ut-controller"
+	uut, err := control.NewEdgeRequestClient(utCtxt, controlName, mockRRClient, time.Second)
+	assert.Nil(err)
+
+	// --------------------------------------------------------------------------
+	// Case 0: video source does not contain a target request response ID
+
+	assert.NotNil(uut.ChangeVideoStreamingState(utCtxt, common.VideoSource{}, 0))
+
+	// --------------------------------------------------------------------------
+	// Case 1: video source does not contain a target request response ID
+
+	testSourceID := uuid.NewString()
+	targetReqRespID := uuid.NewString()
+
+	testResponse := ipc.NewGeneralResponse(false, "dummy error")
+
+	// Prepare mocks for request
+	mockRRClient.On(
+		"Request",
+		mock.AnythingOfType("*context.emptyCtx"),
+		targetReqRespID,
+		mock.AnythingOfType("[]uint8"),
+		mock.AnythingOfType("map[string]string"),
+		mock.AnythingOfType("goutils.RequestCallParam"),
+	).Run(func(args mock.Arguments) {
+		requestRaw := args.Get(2).([]byte)
+		requestParam := args.Get(4).(goutils.RequestCallParam)
+
+		// Parse the request
+		p, err := ipc.ParseRawMessage(requestRaw)
+		assert.Nil(err)
+		assert.IsType(ipc.ChangeSourceStreamingStateRequest{}, p)
+		request, ok := p.(ipc.ChangeSourceStreamingStateRequest)
+		assert.True(ok)
+		assert.Equal(testSourceID, request.SourceID)
+		assert.Equal(1, request.NewState)
+
+		// Send a response back
+		t, err := json.Marshal(&testResponse)
+		assert.Nil(err)
+		assert.Nil(requestParam.RespHandler(utCtxt, goutils.ReqRespMessage{Payload: t}))
+	}).Return(uuid.NewString(), nil).Once()
+
+	err = uut.ChangeVideoStreamingState(
+		utCtxt, common.VideoSource{ID: testSourceID, ReqRespTargetID: &targetReqRespID}, 1,
+	)
+	assert.NotNil(err)
+	assert.Equal("dummy error", err.Error())
+}

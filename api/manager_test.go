@@ -305,3 +305,47 @@ func TestManagerUpdateVideoSourceName(t *testing.T) {
 
 	assert.Equal(http.StatusOK, respRecorder.Code)
 }
+
+func TestManagerChangeVideoStreamingState(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	mockManager := mocks.NewSystemManager(t)
+
+	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
+		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
+	})
+	assert.Nil(err)
+
+	// Prepare mock
+	testEntryID := uuid.NewString()
+	newState := "false"
+	mockManager.On(
+		"ChangeVideoSourceStreamState",
+		mock.AnythingOfType("*context.valueCtx"),
+		testEntryID,
+		-1,
+	).Return(nil).Once()
+
+	// Prepare request
+	req, err := http.NewRequest("PUT", fmt.Sprintf("/v1/source/%s/streaming", testEntryID), nil)
+	assert.Nil(err)
+	{
+		q := req.URL.Query()
+		q.Add("new_state", newState)
+		req.URL.RawQuery = q.Encode()
+	}
+
+	// Setup HTTP handling
+	router := mux.NewRouter()
+	respRecorder := httptest.NewRecorder()
+	router.HandleFunc(
+		"/v1/source/{sourceID}/streaming",
+		uut.LoggingMiddleware(uut.ChangeSourceStreamingStateHandler()),
+	)
+
+	// Request
+	router.ServeHTTP(respRecorder, req)
+
+	assert.Equal(http.StatusOK, respRecorder.Code)
+}

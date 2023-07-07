@@ -126,9 +126,9 @@ func (c *controlRequestClientImpl) processInboundStreamingStateChangeRequest(
 			WithField("request-sender", origMsg.SenderID).
 			WithField("request-id", origMsg.RequestID).
 			Errorf("Failed to change source '%s' streaming state", request.SourceID)
-		response = ipc.NewGetGeneralResponse(false, err.Error())
+		response = ipc.NewGeneralResponse(false, err.Error())
 	} else {
-		response = ipc.NewGetGeneralResponse(true, "")
+		response = ipc.NewGeneralResponse(true, "")
 	}
 
 	return response, nil
@@ -170,7 +170,8 @@ func (c *controlRequestClientImpl) GetVideoSourceInfo(
 		log.
 			WithError(err).
 			WithFields(logTags).
-			Errorf("Video source '%s' request failed", sourceName)
+			WithField("video-source", sourceName).
+			Error("Video source info request failed")
 		return common.VideoSource{}, err
 	}
 
@@ -197,7 +198,8 @@ func (c *controlRequestClientImpl) GetVideoSourceInfo(
 		log.
 			WithError(err).
 			WithFields(logTags).
-			Errorf("Unable to parse video source '%s' info response", sourceName)
+			WithField("video-source", sourceName).
+			Error("Unable to parse video source info response")
 		return common.VideoSource{}, err
 	}
 }

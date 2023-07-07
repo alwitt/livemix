@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/alwitt/goutils"
+	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/common/ipc"
 	"github.com/apex/log"
 	"github.com/go-playground/validator/v10"
@@ -26,10 +27,10 @@ type EdgeRequestClient interface {
 		ChangeVideoStreamingState change a video source's streaming state
 
 			@param ctxt context.Context - execution context
-			@param sourceID string - source ID
-			@param newState bool - new streaming state
+			@param source common.VideoSource - video source entry
+			@param newState int - new streaming state
 	*/
-	ChangeVideoStreamingState(ctxt context.Context, sourceID string, newState bool) error
+	ChangeVideoStreamingState(ctxt context.Context, source common.VideoSource, newState int) error
 }
 
 // edgeRequestClientImpl implements EdgeRequestClient
@@ -126,7 +127,7 @@ func (c *edgeRequestClientImpl) processInboundVideoSourceInfoRequest(
 			WithField("request-sender", origMsg.SenderID).
 			WithField("request-id", origMsg.RequestID).
 			Errorf("Failed to read video source '%s' info", request.TargetName)
-		response = ipc.NewGetGeneralResponse(false, err.Error())
+		response = ipc.NewGeneralResponse(false, err.Error())
 	} else {
 		response = ipc.NewGetVideoSourceByNameResponse(sourceInfo)
 	}
@@ -138,19 +139,70 @@ func (c *edgeRequestClientImpl) processInboundVideoSourceInfoRequest(
 // Outbound Request Processing
 
 func (c *edgeRequestClientImpl) ChangeVideoStreamingState(
-	ctxt context.Context, sourceID string, newState bool,
+	ctxt context.Context, source common.VideoSource, newState int,
 ) error {
 	logTags := c.GetLogTagsForContext(ctxt)
 
+	if source.ReqRespTargetID == nil {
+		err := fmt.Errorf("video source have not reported a request-response target ID")
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", source.ID).
+			Error("Unable to make request")
+		return err
+	}
+
 	// BUild the request
-	msg := ipc.NewChangeSourceStreamingStateRequest(sourceID, newState)
-	_, err := json.Marshal(&msg)
+	msg := ipc.NewChangeSourceStreamingStateRequest(source.ID, newState)
+	msgStr, err := json.Marshal(&msg)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Fail to build streaming state change IPC msg")
 		return nil
 	}
 
-	// TODO: Continue
+	// Prepare the request parameters
+	callParam := goutils.RequestCallParam{
+		ExpectedResponsesCount: 1,
+		Blocking:               false,
+		Timeout:                c.requestTimeout,
+	}
 
-	return nil
+	// Make request
+	results, err := c.MakeRequest(
+		ctxt,
+		fmt.Sprintf("Change video source '%s' streaming state", source.Name),
+		*source.ReqRespTargetID,
+		msgStr,
+		nil,
+		callParam,
+	)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", source.ID).
+			Error("Change streaming state request failed")
+		return err
+	}
+
+	// Process the response
+	answer := results[0]
+	switch reflect.TypeOf(answer) {
+	case reflect.TypeOf(ipc.GeneralResponse{}):
+		response := answer.(ipc.GeneralResponse)
+		if !response.Success {
+			return fmt.Errorf(response.ErrorMsg)
+		}
+		return nil
+
+	default:
+		err := fmt.Errorf("unknown supported response type '%s'", reflect.TypeOf(answer))
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", source.ID).
+			Errorf("Unable to parse streaming state change response")
+		return err
+	}
 }

@@ -49,10 +49,10 @@ type PersistenceManager interface {
 			@param name string - source name
 			@param playlistURI *string - video source playlist URI
 			@param description *string - optionally, source description
-			@param streaming bool - whether the video source is currently streaming
+			@param streaming int - whether the video source is currently streaming
 	*/
 	RecordKnownVideoSource(
-		ctxt context.Context, id, name string, playlistURI, description *string, streaming bool,
+		ctxt context.Context, id, name string, playlistURI, description *string, streaming int,
 	) error
 
 	/*
@@ -99,9 +99,9 @@ type PersistenceManager interface {
 
 			@param ctxt context.Context - execution context
 			@param id string - source ID
-			@param streaming bool - new streaming state
+			@param streaming int - new streaming state
 	*/
-	ChangeVideoSourceStreamState(ctxt context.Context, id string, streaming bool) error
+	ChangeVideoSourceStreamState(ctxt context.Context, id string, streaming int) error
 
 	/*
 		RefreshVideoSourceStats update video source status fields
@@ -289,6 +289,7 @@ func (m *persistenceManagerImpl) DefineVideoSource(
 				Name:        name,
 				Description: description,
 				PlaylistURI: playlistURI,
+				Streaming:   -1,
 			},
 		}
 
@@ -313,7 +314,7 @@ func (m *persistenceManagerImpl) DefineVideoSource(
 }
 
 func (m *persistenceManagerImpl) RecordKnownVideoSource(
-	ctxt context.Context, id, name string, playlistURI, description *string, streaming bool,
+	ctxt context.Context, id, name string, playlistURI, description *string, streaming int,
 ) error {
 	return m.db.Transaction(func(tx *gorm.DB) error {
 		logTags := m.GetLogTagsForContext(ctxt)
@@ -416,7 +417,7 @@ func (m *persistenceManagerImpl) UpdateVideoSource(
 }
 
 func (m *persistenceManagerImpl) ChangeVideoSourceStreamState(
-	ctxt context.Context, id string, streaming bool,
+	ctxt context.Context, id string, streaming int,
 ) error {
 	return m.db.Transaction(func(tx *gorm.DB) error {
 		if tmp := tx.Where(&videoSource{VideoSource: common.VideoSource{

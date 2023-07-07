@@ -48,6 +48,7 @@ func TestEdgeToControlGetVideoSourceInfoRequest(t *testing.T) {
 		ID:          uuid.NewString(),
 		Name:        uuid.NewString(),
 		PlaylistURI: nil,
+		Streaming:   -1,
 	})
 
 	mockRRClient.On(
@@ -109,7 +110,7 @@ func TestEdgeToControlGetVideoSourceInfoErrorResponse(t *testing.T) {
 
 	targetSource := "video-00"
 
-	testResponse := ipc.NewGetGeneralResponse(false, "dummy error")
+	testResponse := ipc.NewGeneralResponse(false, "dummy error")
 
 	mockRRClient.On(
 		"Request",
@@ -227,7 +228,7 @@ func TestEdgeToControlChangeStreamingState(t *testing.T) {
 	// --------------------------------------------------------------------------
 	// Case 0: send request without a manager installed
 	{
-		request := ipc.NewChangeSourceStreamingStateRequest(uuid.NewString(), false)
+		request := ipc.NewChangeSourceStreamingStateRequest(uuid.NewString(), 0)
 		requestStr, err := json.Marshal(&request)
 		assert.Nil(err)
 		assert.NotNil(requestInject(utCtxt, goutils.ReqRespMessage{
@@ -247,7 +248,7 @@ func TestEdgeToControlChangeStreamingState(t *testing.T) {
 	sourceID := uuid.NewString()
 	var request goutils.ReqRespMessage
 	{
-		requestCore := ipc.NewChangeSourceStreamingStateRequest(sourceID, true)
+		requestCore := ipc.NewChangeSourceStreamingStateRequest(sourceID, 1)
 		requestStr, err := json.Marshal(&requestCore)
 		assert.Nil(err)
 		request = goutils.ReqRespMessage{
@@ -261,7 +262,7 @@ func TestEdgeToControlChangeStreamingState(t *testing.T) {
 		"ChangeVideoSourceStreamState",
 		mock.AnythingOfType("*context.emptyCtx"),
 		sourceID,
-		true,
+		1,
 	).Return(nil).Once()
 	mockRRClient.On(
 		"Respond",
@@ -295,7 +296,7 @@ func TestEdgeToControlChangeStreamingState(t *testing.T) {
 		"ChangeVideoSourceStreamState",
 		mock.AnythingOfType("*context.emptyCtx"),
 		sourceID,
-		true,
+		1,
 	).Return(fmt.Errorf("dummy error")).Once()
 	mockRRClient.On(
 		"Respond",

@@ -72,6 +72,12 @@ management:
       # Message retention within the subscription in secs
       msgTTL: 600
 
+  # Video source management settings
+  videoSourceManagement:
+    # The maximum delay a source status report can be before the control node marks
+    # source as no longer connected
+    statusReportMaxDelayInSec: 60
+
 #########################################################################################
 # System broadcast channel configuration
 broadcast:

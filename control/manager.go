@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"time"
 
@@ -77,6 +78,15 @@ type SystemManager interface {
 	UpdateVideoSource(ctxt context.Context, newSetting common.VideoSource) error
 
 	/*
+		ChangeVideoSourceStreamState change the streaming state for a video source
+
+			@param ctxt context.Context - execution context
+			@param id string - source ID
+			@param streaming int - new streaming state
+	*/
+	ChangeVideoSourceStreamState(ctxt context.Context, id string, streaming int) error
+
+	/*
 		DeleteVideoSource delete a video source
 
 			@param ctxt context.Context - execution context
@@ -103,16 +113,27 @@ type SystemManager interface {
 // systemManagerImpl implements SystemManager
 type systemManagerImpl struct {
 	goutils.Component
-	db db.PersistenceManager
+	db                          db.PersistenceManager
+	rrClient                    EdgeRequestClient
+	maxAgeForSourceStatusReport time.Duration
 }
 
 /*
 NewManager define a new system manager
 
 	@param dbClient db.PersistenceManager - persistence manager
+	@param rrClient EdgeRequestClient - request-response client
+	@param maxAgeForSourceStatusReport time.Duration - for the system to send a requests to a
+	    particular video source, this source must have sent out a video source status report
+	    within this time window before a request is made. If not, the video source is treated as
+	    connected.
 	@returns new manager
 */
-func NewManager(dbClient db.PersistenceManager) (SystemManager, error) {
+func NewManager(
+	dbClient db.PersistenceManager,
+	rrClient EdgeRequestClient,
+	maxAgeForSourceStatusReport time.Duration,
+) (SystemManager, error) {
 	logTags := log.Fields{"module": "control", "component": "system-manager"}
 	return &systemManagerImpl{
 		Component: goutils.Component{
@@ -120,8 +141,29 @@ func NewManager(dbClient db.PersistenceManager) (SystemManager, error) {
 			LogTagModifiers: []goutils.LogMetadataModifier{
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
-		}, db: dbClient,
+		},
+		db:                          dbClient,
+		rrClient:                    rrClient,
+		maxAgeForSourceStatusReport: maxAgeForSourceStatusReport,
 	}, nil
+}
+
+func (m *systemManagerImpl) canRequestVideoSource(source common.VideoSource) error {
+	currentTime := time.Now().UTC()
+
+	if source.ReqRespTargetID == nil {
+		return fmt.Errorf("video source '%s' have not reported a request-response target ID", source.ID)
+	}
+
+	if source.SourceLocalTime.Add(m.maxAgeForSourceStatusReport).Before(currentTime) {
+		return fmt.Errorf(
+			"video source '%s' have not sent a status report within last %s",
+			source.ID,
+			m.maxAgeForSourceStatusReport.String(),
+		)
+	}
+
+	return nil
 }
 
 func (m *systemManagerImpl) Ready(ctxt context.Context) error {
@@ -154,6 +196,51 @@ func (m *systemManagerImpl) UpdateVideoSource(
 	ctxt context.Context, newSetting common.VideoSource,
 ) error {
 	return m.db.UpdateVideoSource(ctxt, newSetting)
+}
+
+func (m *systemManagerImpl) ChangeVideoSourceStreamState(
+	ctxt context.Context, id string, streaming int,
+) error {
+	logTags := m.GetLogTagsForContext(ctxt)
+
+	// Fetch entry
+	entry, err := m.db.GetVideoSource(ctxt, id)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Errorf("Unable to find video source '%s'", id)
+		return err
+	}
+
+	// Verify that it is possible to make the request
+	if err := m.canRequestVideoSource(entry); err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", id).
+			Error("Can't make request to source")
+		return err
+	}
+
+	// Request state change first
+	if err := m.rrClient.ChangeVideoStreamingState(ctxt, entry, streaming); err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", id).
+			Error("Streaming state change request failed")
+		return err
+	}
+
+	// Update persistence
+	if err := m.db.ChangeVideoSourceStreamState(ctxt, id, streaming); err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", id).
+			Error("Failed to persist streaming state change")
+		return err
+	}
+
+	return nil
 }
 
 func (m *systemManagerImpl) DeleteVideoSource(ctxt context.Context, id string) error {
