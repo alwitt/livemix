@@ -364,3 +364,76 @@ func TestDBManagerVideoSegment(t *testing.T) {
 		assert.Len(entries, 0)
 	}
 }
+
+func TestDBManagerVideoSegmentPurgeOldSegments(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	testInstance := fmt.Sprintf("ut-%s", uuid.NewString())
+	testDB := fmt.Sprintf("/tmp/%s.db", testInstance)
+	uut, err := db.NewManager(db.GetSqliteDialector(testDB), logger.Info)
+	assert.Nil(err)
+
+	log.Debugf("Using %s", testDB)
+
+	utCtxt := context.Background()
+
+	assert.Nil(uut.Ready(utCtxt))
+
+	// Create a source
+	sourceID, err := uut.DefineVideoSource(
+		utCtxt, uuid.NewString(), nil, nil,
+	)
+	assert.Nil(err)
+
+	currentTime := time.Now().UTC()
+	segmentLength := time.Second * 10
+
+	// Define test segments
+	testSegments := []hls.Segment{}
+	for itr := 0; itr < 6; itr++ {
+		segmentName := fmt.Sprintf("ut-seg-%s.ts", uuid.NewString())
+		testSegments = append(testSegments, hls.Segment{
+			Name:      segmentName,
+			StartTime: currentTime.Add(segmentLength * time.Duration(itr)),
+			EndTime:   currentTime.Add(segmentLength * time.Duration(itr+1)),
+			Length:    segmentLength.Seconds(),
+			URI:       fmt.Sprintf("file:///tmp/%s", segmentName),
+		})
+	}
+	// Install segments
+	_, err = uut.BulkRegisterLiveStreamSegments(utCtxt, sourceID, testSegments)
+	assert.Nil(err)
+
+	// Case 0: read back segments
+	{
+		segments, err := uut.ListAllLiveStreamSegments(utCtxt, sourceID)
+		assert.Nil(err)
+		assert.Len(segments, 6)
+		for idx, segment := range segments {
+			assert.Equal(testSegments[idx].Name, segment.Name)
+		}
+	}
+
+	// Case 1: delete segments older than time
+	{
+		markTime := currentTime.Add(segmentLength * 3)
+		assert.Nil(uut.PurgeOldLiveStreamSegments(utCtxt, markTime))
+		segments, err := uut.ListAllLiveStreamSegments(utCtxt, sourceID)
+		assert.Nil(err)
+		assert.Len(segments, 4)
+		for idx, segment := range segments {
+			assert.Equal(testSegments[idx+2].Name, segment.Name)
+		}
+	}
+
+	// Case 2: delete segments older than time
+	{
+		markTime := currentTime.Add(segmentLength * 6)
+		assert.Nil(uut.PurgeOldLiveStreamSegments(utCtxt, markTime))
+		segments, err := uut.ListAllLiveStreamSegments(utCtxt, sourceID)
+		assert.Nil(err)
+		assert.Len(segments, 1)
+		assert.Equal(testSegments[5].Name, segments[0].Name)
+	}
+}

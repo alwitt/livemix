@@ -218,6 +218,16 @@ type PersistenceManager interface {
 			@param ids []string - video segment IDs
 	*/
 	BulkDeleteLiveStreamSegment(ctxt context.Context, ids []string) error
+
+	/*
+		PurgeOldSegments delete segments older than a specific point in time
+
+			@param ctxt context.Context - execution context
+			@param timeLimit time.Time - video segment older than this point will be purged
+	*/
+	PurgeOldLiveStreamSegments(
+		ctxt context.Context, timeLimit time.Time,
+	) error
 }
 
 // persistenceManagerImpl implements PersistenceManager
@@ -631,6 +641,19 @@ func (m *persistenceManagerImpl) DeleteLiveStreamSegment(ctxt context.Context, i
 func (m *persistenceManagerImpl) BulkDeleteLiveStreamSegment(ctxt context.Context, ids []string) error {
 	return m.db.Transaction(func(tx *gorm.DB) error {
 		if tmp := tx.Where("id in ?", ids).Delete(&liveStreamVideoSegment{}); tmp.Error != nil {
+			return tmp.Error
+		}
+		return nil
+	})
+}
+
+func (m *persistenceManagerImpl) PurgeOldLiveStreamSegments(
+	ctxt context.Context, timeLimit time.Time,
+) error {
+	return m.db.Transaction(func(tx *gorm.DB) error {
+		if tmp := tx.
+			Where("end < ?", timeLimit).
+			Delete(&liveStreamVideoSegment{}); tmp.Error != nil {
 			return tmp.Error
 		}
 		return nil

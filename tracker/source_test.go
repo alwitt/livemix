@@ -136,6 +136,11 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 			mock.AnythingOfType("*context.emptyCtx"),
 			testSource.ID,
 		).Return(defineSegmentList(currentTime, segmentIDs0, segmentNames0), nil).Once()
+		mockDB.On(
+			"PurgeOldLiveStreamSegments",
+			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("time.Time"),
+		).Return(nil).Once()
 
 		newSegs, err := uut.Update(utCtxt, playlist0, playlist0.CreatedAt)
 		assert.Nil(err)
@@ -185,6 +190,11 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 			mock.AnythingOfType("*context.emptyCtx"),
 			testSource.ID,
 		).Return(defineSegmentList(currentTime, segmentIDs1, segmentNames1), nil).Once()
+		mockDB.On(
+			"PurgeOldLiveStreamSegments",
+			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("time.Time"),
+		).Return(nil).Once()
 
 		newSegs, err := uut.Update(utCtxt, playlist1, playlist1.CreatedAt)
 		assert.Nil(err)
@@ -235,14 +245,10 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 			testSource.ID,
 		).Return(defineSegmentList(currentTime, segmentIDs2, segmentNames2), nil).Once()
 		mockDB.On(
-			"BulkDeleteLiveStreamSegment",
+			"PurgeOldLiveStreamSegments",
 			mock.AnythingOfType("*context.emptyCtx"),
-			mock.AnythingOfType("[]string"),
-		).Run(func(args mock.Arguments) {
-			toDeleteIDs := args.Get(1).([]string)
-			assert.Len(toDeleteIDs, 1)
-			assert.Equal(segmentIDs0[segmentNames0[0]], toDeleteIDs[0])
-		}).Return(nil).Once()
+			mock.AnythingOfType("time.Time"),
+		).Return(nil).Once()
 
 		newSegs, err := uut.Update(utCtxt, playlist2, playlist2.CreatedAt)
 		assert.Nil(err)

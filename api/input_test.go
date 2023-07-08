@@ -3,6 +3,7 @@ package api_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/hls"
 	"github.com/apex/log"
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 )
@@ -99,5 +101,86 @@ func TestPlaylistReceiver(t *testing.T) {
 		assert.Equal("vid-1.ts", parsedPlaylist.Segments[1].Name)
 		assert.Equal("file:///vid/vid-1.ts", parsedPlaylist.Segments[1].URI)
 		assert.Equal(23.5, parsedPlaylist.Segments[1].Length)
+	}
+}
+
+func TestSegmentReceive(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	utCtxt := context.Background()
+
+	rxSourceID := ""
+	rxSegmentInfo := hls.Segment{}
+	rxContent := []byte{}
+
+	receiveSegment := func(
+		ctxt context.Context, sourceID string, segment hls.Segment, content []byte,
+	) error {
+		rxSourceID = sourceID
+		rxSegmentInfo = segment
+		rxContent = content
+		return nil
+	}
+
+	uut, err := api.NewSegmentReceiveHandler(
+		utCtxt, receiveSegment, common.HTTPRequestLogging{
+			RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
+		},
+	)
+	assert.Nil(err)
+
+	// Case 0: missing required header
+	{
+		req, err := http.NewRequest("POST", "/v1/new-segment", nil)
+		assert.Nil(err)
+
+		// Setup HTTP handling
+		router := mux.NewRouter()
+		respRecorder := httptest.NewRecorder()
+		router.HandleFunc(
+			"/v1/new-segment", uut.LoggingMiddleware(uut.NewSegmentHandler()),
+		)
+
+		// Request
+		router.ServeHTTP(respRecorder, req)
+
+		assert.Equal(http.StatusBadRequest, respRecorder.Code)
+	}
+
+	// Case 1: correct request
+	{
+		testSourceID := uuid.NewString()
+		testSegmentName := uuid.NewString()
+		testStartTime := time.Now().UTC()
+		testSegmentLen := time.Second * 4
+		testURI := fmt.Sprintf("file:///tmp/%s", testSegmentName)
+		payload := []byte(uuid.NewString())
+		req, err := http.NewRequest("POST", "/v1/new-segment", bytes.NewBuffer(payload))
+		assert.Nil(err)
+		req.Header.Add("Source-ID", testSourceID)
+		req.Header.Add("Segment-Name", testSegmentName)
+		req.Header.Add("Segment-Start-TS", fmt.Sprintf("%d", testStartTime.Unix()))
+		req.Header.Add("Segment-Length-MSec", fmt.Sprintf("%d", int(testSegmentLen.Milliseconds())))
+		req.Header.Add("Segment-URI", testURI)
+
+		// Setup HTTP handling
+		router := mux.NewRouter()
+		respRecorder := httptest.NewRecorder()
+		router.HandleFunc(
+			"/v1/new-segment", uut.LoggingMiddleware(uut.NewSegmentHandler()),
+		)
+
+		// Request
+		router.ServeHTTP(respRecorder, req)
+
+		assert.Equal(http.StatusOK, respRecorder.Code)
+		assert.Equal(testSourceID, rxSourceID)
+		assert.Equal(payload, rxContent)
+		assert.Equal(testSegmentName, rxSegmentInfo.Name)
+		assert.Equal(testStartTime.Unix(), rxSegmentInfo.StartTime.Unix())
+		assert.Equal(testStartTime.Add(testSegmentLen).Unix(), rxSegmentInfo.EndTime.Unix())
+		assert.Equal(testSegmentLen.Seconds(), rxSegmentInfo.Length)
+		assert.Equal(testURI, rxSegmentInfo.URI)
 	}
 }

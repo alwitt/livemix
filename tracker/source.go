@@ -136,21 +136,9 @@ func (t *sourceHLSTrackerImpl) Update(
 	// Remove segments older than the tracking window
 	oldestTime := timestamp.Add(-t.trackingWindow)
 	log.WithFields(logTags).Debugf("Dropping segments older than %s", oldestTime.String())
-	deleteSegments := []string{}
-	for _, oneSegment := range allSegments {
-		if oldestTime.After(oneSegment.EndTime) {
-			deleteSegments = append(deleteSegments, oneSegment.ID)
-			log.
-				WithFields(logTags).
-				WithField("segment", oneSegment.String()).
-				Debug("Dropping expired segment")
-		}
-	}
-	if len(deleteSegments) > 0 {
-		if err := t.dbClient.BulkDeleteLiveStreamSegment(ctxt, deleteSegments); err != nil {
-			log.WithError(err).WithFields(logTags).Error("Failed to drop expired segment")
-			return nil, err
-		}
+	if err := t.dbClient.PurgeOldLiveStreamSegments(ctxt, oldestTime); err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to drop expired segment")
+		return nil, err
 	}
 
 	return newSegmentsComplete, nil

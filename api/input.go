@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,6 +14,9 @@ import (
 	"github.com/alwitt/livemix/hls"
 	"github.com/apex/log"
 )
+
+// =====================================================================================
+// Playlist Receiver - Hosted by edge nodes
 
 // PlaylistForwardCB callback signature of function for sending newly received HLS playlist
 // onward for processing
@@ -47,7 +51,7 @@ func NewPlaylistReceiveHandler(
 	return PlaylistReceiveHandler{
 		RestAPIHandler: goutils.RestAPIHandler{
 			Component: goutils.Component{
-				LogTags: log.Fields{"module": "api", "component": "edge-api-handler"},
+				LogTags: log.Fields{"module": "api", "component": "playlist-receiver-handler"},
 				LogTagModifiers: []goutils.LogMetadataModifier{
 					goutils.ModifyLogMetadataByRestRequestParam,
 				},
@@ -173,5 +177,196 @@ func (h PlaylistReceiveHandler) NewPlaylist(w http.ResponseWriter, r *http.Reque
 func (h PlaylistReceiveHandler) NewPlaylistHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		h.NewPlaylist(w, r)
+	}
+}
+
+// =====================================================================================
+// Live Stream Video Segment Receiver - Hosted by system control node
+
+// VideoSegmentForwardCB callback signature of function for sending newly received video segments
+// onward for processing
+type VideoSegmentForwardCB func(
+	ctxt context.Context, sourceID string, segment hls.Segment, content []byte,
+) error
+
+// SegmentReceiveHandler HLS video segment receiver
+//
+// This is only meant to be used by the system control node
+type SegmentReceiveHandler struct {
+	goutils.RestAPIHandler
+	parentCtxt     context.Context
+	forwardSegment VideoSegmentForwardCB
+}
+
+/*
+NewSegmentReceiveHandler define a new video segment receiver
+
+	@param parentCtxt context.Context - REST handler parent context
+	@param forwardSegment VideoSegmentForwardCB - callback function for sending newly received
+	    video segment onward for processing
+	@param logConfig common.HTTPRequestLogging - handler log settings
+	@returns new SegmentReceiveHandler
+*/
+func NewSegmentReceiveHandler(
+	parentCtxt context.Context,
+	forwardSegment VideoSegmentForwardCB,
+	logConfig common.HTTPRequestLogging,
+) (SegmentReceiveHandler, error) {
+	return SegmentReceiveHandler{
+		RestAPIHandler: goutils.RestAPIHandler{
+			Component: goutils.Component{
+				LogTags: log.Fields{"module": "api", "component": "segment-receiver-handler"},
+				LogTagModifiers: []goutils.LogMetadataModifier{
+					goutils.ModifyLogMetadataByRestRequestParam,
+				},
+			},
+			CallRequestIDHeaderField: &logConfig.RequestIDHeader,
+			DoNotLogHeaders: func() map[string]bool {
+				result := map[string]bool{}
+				for _, v := range logConfig.DoNotLogHeaders {
+					result[v] = true
+				}
+				return result
+			}(),
+		}, parentCtxt: parentCtxt, forwardSegment: forwardSegment,
+	}, nil
+}
+
+// NewSegment godoc
+// @Summary Process new HLS video segment
+// @Description Process new HLS video segment
+// @tags live,cloud
+// @Accept plain
+// @Produce json
+// @Param X-Request-ID header string false "Request ID"
+// @Param Source-ID header string true "Video source ID this segment belongs to"
+// @Param Segment-Name header string true "Video segment name"
+// @Param Segment-Start-TS header int64 true "Video segment start timestamp - epoch seconds"
+// @Param Segment-Length-MSec header int64 true "Video segment duration in milli-secs"
+// @Param Segment-URI header string true "Video segment URI"
+// @Param segmentContent body []byte] true "Video segment content"
+// @Success 200 {object} goutils.RestAPIBaseResponse "success"
+// @Failure 400 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 403 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 404 {string} string "error"
+// @Failure 500 {object} goutils.RestAPIBaseResponse "error"
+// @Router /v1/new-segment [post]
+func (h SegmentReceiveHandler) NewSegment(w http.ResponseWriter, r *http.Request) {
+	var respCode int
+	var response interface{}
+	logTags := h.GetLogTagsForContext(r.Context())
+	defer func() {
+		if err := h.WriteRESTResponse(w, respCode, response, nil); err != nil {
+			log.WithError(err).WithFields(logTags).Error("Failed to form response")
+		}
+	}()
+
+	// Get video source ID
+	videoSourceID := r.Header.Get("Source-ID")
+	if videoSourceID == "" {
+		msg := "request missing 'Source-ID'"
+		log.WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
+		return
+	}
+
+	// Get video segment name
+	segmentName := r.Header.Get("Segment-Name")
+	if segmentName == "" {
+		msg := "request missing 'Segment-Name'"
+		log.WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
+		return
+	}
+
+	// Get video segment start timestamp
+	startTimeRaw := r.Header.Get("Segment-Start-TS")
+	if startTimeRaw == "" {
+		msg := "request missing 'Segment-Start-TS'"
+		log.WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
+		return
+	}
+	startTimeEpoch, err := strconv.ParseInt(startTimeRaw, 10, 64)
+	if err != nil {
+		msg := "header parameter 'Segment-Start-TS' is not int64 epoch timestamp"
+		log.WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
+		return
+	}
+
+	// Get video segment length
+	segmentLengthMSecRaw := r.Header.Get("Segment-Length-MSec")
+	if segmentLengthMSecRaw == "" {
+		msg := "request missing 'Segment-Length-MSec'"
+		log.WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
+		return
+	}
+	segmentLengthMSec, err := strconv.ParseInt(segmentLengthMSecRaw, 10, 64)
+	if err != nil {
+		msg := "header parameter 'Segment-Length-MSec' is not int64"
+		log.WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
+		return
+	}
+
+	// Get video segment URI
+	segmentURI := r.Header.Get("Segment-URI")
+	if segmentURI == "" {
+		msg := "request missing 'Segment-URI'"
+		log.WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
+		return
+	}
+
+	// Read the entire segment into memory
+	content, err := io.ReadAll(r.Body)
+	if err != nil {
+		msg := "unable to read video segment data from request"
+		log.WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
+		return
+	}
+
+	// Process the timestamps - epoch seconds
+	startTime := time.Unix(startTimeEpoch, 0)
+	segmentLength := time.Millisecond * time.Duration(segmentLengthMSec)
+	endTime := startTime.Add(segmentLength)
+
+	// Build segment entry
+	segment := hls.Segment{
+		Name:      segmentName,
+		StartTime: startTime,
+		EndTime:   endTime,
+		Length:    segmentLength.Seconds(),
+		URI:       segmentURI,
+	}
+
+	// Record segment
+	if err := h.forwardSegment(h.parentCtxt, videoSourceID, segment, content); err != nil {
+		msg := "video segment processing failed"
+		log.WithError(err).WithFields(logTags).Error(msg)
+		respCode = http.StatusInternalServerError
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusInternalServerError, msg, err.Error())
+		return
+	}
+
+	respCode = http.StatusOK
+	response = h.GetStdRESTSuccessMsg(r.Context())
+}
+
+// NewSegmentHandler Wrapper around NewSegment
+func (h SegmentReceiveHandler) NewSegmentHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.NewSegment(w, r)
 	}
 }
