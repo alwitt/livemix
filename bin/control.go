@@ -13,6 +13,7 @@ import (
 	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/control"
 	"github.com/alwitt/livemix/db"
+	"github.com/alwitt/livemix/utils"
 	"github.com/apex/log"
 	"gorm.io/gorm/logger"
 )
@@ -24,7 +25,9 @@ type ControlNode struct {
 	wg              sync.WaitGroup
 	psSubCtxt       context.Context
 	psSubCtxtCancel context.CancelFunc
+	segmentMgmt     control.CentralSegmentManager
 	MgmtAPIServer   *http.Server
+	VODAPIServer    *http.Server
 }
 
 /*
@@ -34,6 +37,9 @@ Cleanup stop and clean up the system control node
 */
 func (n *ControlNode) Cleanup(ctxt context.Context) error {
 	n.psSubCtxtCancel()
+	if err := n.segmentMgmt.Stop(ctxt); err != nil {
+		return nil
+	}
 	if err := n.rrClient.Stop(ctxt); err != nil {
 		return err
 	}
@@ -63,8 +69,12 @@ func DefineControlNode(
 
 		* Prepare database
 		* Prepare system manager
+		* Prepare VOD support systems
+		  * Prepare memcached segment cache
+			* Prepare segment manager
 		* Prepare request-response client for manager
 		* Prepare HTTP server for manager
+		* Prepare HTTP server for VOD
 	*/
 
 	logTags := log.Fields{
@@ -174,8 +184,27 @@ func DefineControlNode(
 	// Link manager with request-response client
 	ctrlToEdgeRRClient.InstallReferenceToManager(systemManager)
 
+	// Build memcached segment cache
+	cache, err := utils.NewMemcachedVideoSegmentCache(config.VODConfig.Cache.Servers)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to define memcached segment cache")
+		return nil, err
+	}
+
+	// Build segment manager
+	theNode.segmentMgmt, err = control.NewSegmentManager(
+		parentCtxt,
+		dbManager,
+		cache,
+		time.Second*time.Duration(config.VODConfig.SegReceiverTrackingWindowInSec),
+	)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to define segment manager")
+		return nil, err
+	}
+
 	// Define manager API HTTP server
-	mgmtAPIServer, err := api.BuildSystemManagementServer(config.Management.APIServer, systemManager)
+	theNode.MgmtAPIServer, err = api.BuildSystemManagementServer(config.Management.APIServer, systemManager)
 	if err != nil {
 		log.
 			WithError(err).
@@ -183,7 +212,18 @@ func DefineControlNode(
 			Error("Failed to create system management API HTTP server")
 		return nil, err
 	}
-	theNode.MgmtAPIServer = mgmtAPIServer
+
+	// Define VOD API HTTP server
+	theNode.VODAPIServer, err = api.BuildCentralVODServer(
+		parentCtxt, config.VODConfig.APIServer, theNode.segmentMgmt.RegisterLiveStreamSegment,
+	)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Failed to create VOD API HTTP server")
+		return nil, err
+	}
 
 	// Register manager to process broadcast message
 	theNode.wg.Add(1)

@@ -150,6 +150,63 @@ func BuildPlaylistReceiverServer(
 }
 
 // ====================================================================================
+// Segment Receiver Server
+
+/*
+BuildCentralVODServer create control node VOD server. It is responsible for
+* segment receive for video stream proxy
+* VOD server
+
+	@param parentCtxt context.Context - REST handler parent context
+	@param httpCfg common.APIServerConfig - HTTP server configuration
+	@param forwardCB VideoSegmentForwardCB - callback to forward newly received segments
+	@returns HTTP server instance
+*/
+func BuildCentralVODServer(
+	parentCtxt context.Context, httpCfg common.APIServerConfig, forwardCB VideoSegmentForwardCB,
+) (*http.Server, error) {
+	segmentRXHandler, err := NewSegmentReceiveHandler(
+		parentCtxt, forwardCB, httpCfg.APIs.RequestLogging,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	router := mux.NewRouter()
+	mainRouter := registerPathPrefix(router, httpCfg.APIs.Endpoint.PathPrefix, nil)
+	v1Router := registerPathPrefix(mainRouter, "/v1", nil)
+
+	// --------------------------------------------------------------------------------
+	// Segment input
+	_ = registerPathPrefix(v1Router, "/new-segment", map[string]http.HandlerFunc{
+		"post": segmentRXHandler.NewSegmentHandler(),
+	})
+
+	// --------------------------------------------------------------------------------
+	// Middleware
+
+	router.Use(func(next http.Handler) http.Handler {
+		return segmentRXHandler.LoggingMiddleware(next.ServeHTTP)
+	})
+
+	// --------------------------------------------------------------------------------
+	// HTTP Server
+
+	serverListen := fmt.Sprintf(
+		"%s:%d", httpCfg.Server.ListenOn, httpCfg.Server.Port,
+	)
+	httpSrv := &http.Server{
+		Addr:         serverListen,
+		WriteTimeout: time.Second * time.Duration(httpCfg.Server.Timeouts.WriteTimeout),
+		ReadTimeout:  time.Second * time.Duration(httpCfg.Server.Timeouts.ReadTimeout),
+		IdleTimeout:  time.Second * time.Duration(httpCfg.Server.Timeouts.IdleTimeout),
+		Handler:      h2c.NewHandler(router, &http2.Server{}),
+	}
+
+	return httpSrv, nil
+}
+
+// ====================================================================================
 // VOD Server
 
 /*

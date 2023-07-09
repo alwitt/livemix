@@ -3,6 +3,7 @@ version: '3'
 services:
   ctrl-db:
     container_name: livemix-ctrl-db
+    restart: always
     hostname: "postgres"
     image: "postgres:15"
     ports:
@@ -14,6 +15,7 @@ services:
 
   memcached:
     container_name: livemix-ctrl-memcached
+    restart: always
     hostname: memcached
     image: memcached:1.6.20-alpine
     ports:

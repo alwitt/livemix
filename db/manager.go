@@ -550,7 +550,7 @@ func (m *persistenceManagerImpl) ListAllLiveStreamSegments(ctxt context.Context,
 	var results []common.VideoSegment
 	return results, m.db.Transaction(func(tx *gorm.DB) error {
 		var entries []liveStreamVideoSegment
-		if tmp := tx.Where("source = ?", sourceID).Order("end").Find(&entries); tmp.Error != nil {
+		if tmp := tx.Where("source = ?", sourceID).Order("end_ts").Find(&entries); tmp.Error != nil {
 			return tmp.Error
 		}
 		for _, entry := range entries {
@@ -596,8 +596,8 @@ func (m *persistenceManagerImpl) ListAllLiveStreamSegmentsAfterTime(
 		var entries []liveStreamVideoSegment
 		if tmp := tx.
 			Where("source = ?", sourceID).
-			Where("end >= ?", timestamp).
-			Order("end").
+			Where("end_ts >= ?", timestamp).
+			Order("end_ts").
 			Find(&entries); tmp.Error != nil {
 			return tmp.Error
 		}
@@ -616,7 +616,7 @@ func (m *persistenceManagerImpl) GetLatestLiveStreamSegments(
 		var entries []liveStreamVideoSegment
 		if tmp := tx.
 			Where("source = ?", sourceID).
-			Order("end desc").
+			Order("end_ts desc").
 			Limit(count).
 			Find(&entries); tmp.Error != nil {
 			return tmp.Error
@@ -652,7 +652,7 @@ func (m *persistenceManagerImpl) PurgeOldLiveStreamSegments(
 ) error {
 	return m.db.Transaction(func(tx *gorm.DB) error {
 		if tmp := tx.
-			Where("end < ?", timeLimit).
+			Where("end_ts < ?", timeLimit).
 			Delete(&liveStreamVideoSegment{}); tmp.Error != nil {
 			return tmp.Error
 		}

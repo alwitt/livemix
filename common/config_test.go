@@ -50,6 +50,12 @@ management:
       topic: control
       msgTTL: 900
 
+vod:
+  segmentReceiverTrackingWindow: 30
+  cache:
+    servers:
+      - 127.0.0.1:18080
+
 broadcast:
   pubsub:
     topic: system-events`)
@@ -65,6 +71,8 @@ broadcast:
 		assert.NotNil(cfg.Postgres.SSL.CAFile)
 		assert.Equal("/tmp/psql_ca.pem", *cfg.Postgres.SSL.CAFile)
 		assert.Equal("control", cfg.Management.RRClient.InboudRequestTopic.Topic)
+		assert.Equal(uint32(30), cfg.VODConfig.SegReceiverTrackingWindowInSec)
+		assert.Len(cfg.VODConfig.Cache.Servers, 1)
 	}
 
 	// Case 2: missing a config parameter
@@ -111,6 +119,12 @@ management:
     self:
       topic: control
       msgTTL: 300
+
+segmentReceiver:
+  trackingWindow: 30
+  cache:
+    servers:
+      - 127.0.0.1:18080
 
 broadcast:
   pubsub:

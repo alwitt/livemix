@@ -207,6 +207,16 @@ type VODServerConfig struct {
 	SegmentCacheTTLInSec uint32 `mapstructure:"segmentCacheTTLInSec" json:"segmentCacheTTLInSec" validate:"gte=30,lte=7200"`
 }
 
+// CentralVODServerConfig VOD server running on the control node
+type CentralVODServerConfig struct {
+	VODServerConfig `mapstructure:",squash"`
+	// Cache memcached based video segment cache
+	Cache MemcachedSegementCacheConfig `mapstructure:"cache" json:"cache" validate:"required,dive"`
+	// SegReceiverTrackingWindowInSec Tracking window is the duration in time a video segment is
+	// tracked. Recorded segments are forgotten after this tracking window.
+	SegReceiverTrackingWindowInSec uint32 `mapstructure:"segmentReceiverTrackingWindow" json:"segmentReceiverTrackingWindow" validate:"gte=10,lte=300"`
+}
+
 // ===============================================================================
 // Complete Configuration Structures
 
@@ -216,6 +226,8 @@ type ControlNodeConfig struct {
 	Postgres PostgresConfig `mapstructure:"postgres" json:"postgres" validate:"required,dive"`
 	// Management management
 	Management SystemManagementConfig `mapstructure:"management" json:"management" validate:"required,dive"`
+	// VODConfig control node VOD server config
+	VODConfig CentralVODServerConfig `mapstructure:"vod" json:"vod" validate:"required,dive"`
 	// BroadcastSystem system broadcast channel configuration
 	BroadcastSystem BroadcastSystemConfig `mapstructure:"broadcast" json:"broadcast" validate:"required,dive"`
 }
@@ -268,6 +280,26 @@ func InstallDefaultControlNodeConfigValues() {
 	viper.SetDefault("management.requestResponse.requestTimeoutEnforceIntInSec", 30)
 	// Default video source management config
 	viper.SetDefault("management.videoSourceManagement.statusReportMaxDelayInSec", 60)
+
+	// Default VOD server config
+	// Default REST API server config
+	viper.SetDefault("vod.api.enabled", true)
+	viper.SetDefault("vod.api.service.listenOn", "0.0.0.0")
+	viper.SetDefault("vod.api.service.appPort", 8081)
+	viper.SetDefault("vod.api.service.timeoutSecs.read", 60)
+	viper.SetDefault("vod.api.service.timeoutSecs.write", 60)
+	viper.SetDefault("vod.api.service.timeoutSecs.idle", 60)
+	viper.SetDefault("vod.api.apis.endPoint.pathPrefix", "/")
+	viper.SetDefault("vod.api.apis.requestLogging.requestIDHeader", "X-Request-ID")
+	viper.SetDefault("vod.api.apis.requestLogging.skipHeaders", []string{
+		"WWW-Authenticate", "Authorization", "Proxy-Authenticate", "Proxy-Authorization",
+	})
+	// Default number of segments to include a live VOD playlist
+	viper.SetDefault("vod.liveVODSegmentCount", 2)
+	// Default TTL for storing segment fetched from cold storage in local cache
+	viper.SetDefault("vod.segmentCacheTTLInSec", 300)
+	// Default segment receiver tracking window
+	viper.SetDefault("vod.segmentReceiverTrackingWindow", 60)
 
 	// Default broadcast channel config
 	viper.SetDefault("broadcast.pubsub.msgTTL", 600)

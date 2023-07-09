@@ -268,6 +268,19 @@ func startControlNode(c *cli.Context) error {
 			}
 		}()
 	}
+	// Start VOD HTTP server
+	{
+		svr := ctrlNode.VODAPIServer
+		apiServers["vod-api"] = svr
+		// Start the server
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := svr.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.WithError(err).Error("VOD API HTTP server failure")
+			}
+		}()
+	}
 
 	// ------------------------------------------------------------------------------------
 	// Wait for termination
