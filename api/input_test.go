@@ -12,6 +12,7 @@ import (
 
 	"github.com/alwitt/livemix/api"
 	"github.com/alwitt/livemix/common"
+	"github.com/alwitt/livemix/common/ipc"
 	"github.com/alwitt/livemix/hls"
 	"github.com/apex/log"
 	"github.com/google/uuid"
@@ -158,11 +159,13 @@ func TestSegmentReceive(t *testing.T) {
 		payload := []byte(uuid.NewString())
 		req, err := http.NewRequest("POST", "/v1/new-segment", bytes.NewBuffer(payload))
 		assert.Nil(err)
-		req.Header.Add("Source-ID", testSourceID)
-		req.Header.Add("Segment-Name", testSegmentName)
-		req.Header.Add("Segment-Start-TS", fmt.Sprintf("%d", testStartTime.Unix()))
-		req.Header.Add("Segment-Length-MSec", fmt.Sprintf("%d", int(testSegmentLen.Milliseconds())))
-		req.Header.Add("Segment-URI", testURI)
+		req.Header.Add(ipc.HTTPSegmentForwardHeaderSourceID, testSourceID)
+		req.Header.Add(ipc.HTTPSegmentForwardHeaderName, testSegmentName)
+		req.Header.Add(ipc.HTTPSegmentForwardHeaderStartTS, fmt.Sprintf("%d", testStartTime.Unix()))
+		req.Header.Add(
+			ipc.HTTPSegmentForwardHeaderLength, fmt.Sprintf("%d", int(testSegmentLen.Milliseconds())),
+		)
+		req.Header.Add(ipc.HTTPSegmentForwardHeaderSegURI, testURI)
 
 		// Setup HTTP handling
 		router := mux.NewRouter()

@@ -11,6 +11,7 @@ import (
 
 	"github.com/alwitt/goutils"
 	"github.com/alwitt/livemix/common"
+	"github.com/alwitt/livemix/common/ipc"
 	"github.com/alwitt/livemix/hls"
 	"github.com/apex/log"
 )
@@ -242,7 +243,7 @@ func NewSegmentReceiveHandler(
 // @Param Source-ID header string true "Video source ID this segment belongs to"
 // @Param Segment-Name header string true "Video segment name"
 // @Param Segment-Start-TS header int64 true "Video segment start timestamp - epoch seconds"
-// @Param Segment-Length-MSec header int64 true "Video segment duration in milli-secs"
+// @Param Segment-Length-MSec header int64 true "Video segment duration in millisecond"
 // @Param Segment-URI header string true "Video segment URI"
 // @Param segmentContent body []byte] true "Video segment content"
 // @Success 200 {object} goutils.RestAPIBaseResponse "success"
@@ -262,9 +263,9 @@ func (h SegmentReceiveHandler) NewSegment(w http.ResponseWriter, r *http.Request
 	}()
 
 	// Get video source ID
-	videoSourceID := r.Header.Get("Source-ID")
+	videoSourceID := r.Header.Get(ipc.HTTPSegmentForwardHeaderSourceID)
 	if videoSourceID == "" {
-		msg := "request missing 'Source-ID'"
+		msg := fmt.Sprintf("request missing '%s'", ipc.HTTPSegmentForwardHeaderSourceID)
 		log.WithFields(logTags).Error(msg)
 		respCode = http.StatusBadRequest
 		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
@@ -272,9 +273,9 @@ func (h SegmentReceiveHandler) NewSegment(w http.ResponseWriter, r *http.Request
 	}
 
 	// Get video segment name
-	segmentName := r.Header.Get("Segment-Name")
+	segmentName := r.Header.Get(ipc.HTTPSegmentForwardHeaderName)
 	if segmentName == "" {
-		msg := "request missing 'Segment-Name'"
+		msg := fmt.Sprintf("request missing '%s'", ipc.HTTPSegmentForwardHeaderName)
 		log.WithFields(logTags).Error(msg)
 		respCode = http.StatusBadRequest
 		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
@@ -282,9 +283,9 @@ func (h SegmentReceiveHandler) NewSegment(w http.ResponseWriter, r *http.Request
 	}
 
 	// Get video segment start timestamp
-	startTimeRaw := r.Header.Get("Segment-Start-TS")
+	startTimeRaw := r.Header.Get(ipc.HTTPSegmentForwardHeaderStartTS)
 	if startTimeRaw == "" {
-		msg := "request missing 'Segment-Start-TS'"
+		msg := fmt.Sprintf("request missing '%s'", ipc.HTTPSegmentForwardHeaderStartTS)
 		log.WithFields(logTags).Error(msg)
 		respCode = http.StatusBadRequest
 		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
@@ -292,7 +293,10 @@ func (h SegmentReceiveHandler) NewSegment(w http.ResponseWriter, r *http.Request
 	}
 	startTimeEpoch, err := strconv.ParseInt(startTimeRaw, 10, 64)
 	if err != nil {
-		msg := "header parameter 'Segment-Start-TS' is not int64 epoch timestamp"
+		msg := fmt.Sprintf(
+			"header parameter '%s' is not int64 epoch timestamp",
+			ipc.HTTPSegmentForwardHeaderStartTS,
+		)
 		log.WithFields(logTags).Error(msg)
 		respCode = http.StatusBadRequest
 		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
@@ -300,9 +304,9 @@ func (h SegmentReceiveHandler) NewSegment(w http.ResponseWriter, r *http.Request
 	}
 
 	// Get video segment length
-	segmentLengthMSecRaw := r.Header.Get("Segment-Length-MSec")
+	segmentLengthMSecRaw := r.Header.Get(ipc.HTTPSegmentForwardHeaderLength)
 	if segmentLengthMSecRaw == "" {
-		msg := "request missing 'Segment-Length-MSec'"
+		msg := fmt.Sprintf("request missing '%s'", ipc.HTTPSegmentForwardHeaderLength)
 		log.WithFields(logTags).Error(msg)
 		respCode = http.StatusBadRequest
 		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
@@ -310,7 +314,7 @@ func (h SegmentReceiveHandler) NewSegment(w http.ResponseWriter, r *http.Request
 	}
 	segmentLengthMSec, err := strconv.ParseInt(segmentLengthMSecRaw, 10, 64)
 	if err != nil {
-		msg := "header parameter 'Segment-Length-MSec' is not int64"
+		msg := fmt.Sprintf("header parameter '%s' is not int64", ipc.HTTPSegmentForwardHeaderLength)
 		log.WithFields(logTags).Error(msg)
 		respCode = http.StatusBadRequest
 		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
@@ -318,9 +322,9 @@ func (h SegmentReceiveHandler) NewSegment(w http.ResponseWriter, r *http.Request
 	}
 
 	// Get video segment URI
-	segmentURI := r.Header.Get("Segment-URI")
+	segmentURI := r.Header.Get(ipc.HTTPSegmentForwardHeaderSegURI)
 	if segmentURI == "" {
-		msg := "request missing 'Segment-URI'"
+		msg := fmt.Sprintf("request missing '%s'", ipc.HTTPSegmentForwardHeaderSegURI)
 		log.WithFields(logTags).Error(msg)
 		respCode = http.StatusBadRequest
 		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
