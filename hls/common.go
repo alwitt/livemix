@@ -101,7 +101,7 @@ and the start time of the first segment in the playlist.
 	@param reference time.Time - reference time to compare against
 */
 func (p *Playlist) AddMediaSequenceVal(reference time.Time) {
-	if p.Segments == nil {
+	if p.Segments == nil || len(p.Segments) == 0 {
 		// No action to name
 		p.MediaSequenceVal = nil
 		return
