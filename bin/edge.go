@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/alwitt/goutils"
@@ -12,6 +13,7 @@ import (
 	"github.com/alwitt/livemix/common/ipc"
 	"github.com/alwitt/livemix/db"
 	"github.com/alwitt/livemix/edge"
+	"github.com/alwitt/livemix/forwarder"
 	"github.com/alwitt/livemix/tracker"
 	"github.com/alwitt/livemix/utils"
 	"github.com/alwitt/livemix/vod"
@@ -27,6 +29,7 @@ type EdgeNode struct {
 	rrClient              goutils.RequestResponseClient
 	segmentReader         utils.SegmentReader
 	monitor               tracker.SourceHLSMonitor
+	liveForwarder         forwarder.LiveStreamSegmentForwarder
 	operator              edge.VideoSourceOperator
 	PlaylistReceiveServer *http.Server
 	VODServer             *http.Server
@@ -43,6 +46,9 @@ func (n EdgeNode) Cleanup(ctxt context.Context) error {
 		return err
 	}
 	if err := n.segmentReader.Stop(ctxt); err != nil {
+		return err
+	}
+	if err := n.liveForwarder.Stop(ctxt); err != nil {
 		return err
 	}
 	if err := n.rrClient.Stop(ctxt); err != nil {
@@ -74,6 +80,10 @@ func DefineEdgeNode(
 		* Query control for video source info
 			* Load video source info into persistence
 		* Prepare video segment reader
+		* Prepare forwarder
+			* Prepare live segment HTTP forwarder
+				* Prepare HTTP client
+				* Prepare the forwarder
 		* Prepare HLS video source monitor
 		* Prepare video playlist receive server
 		* Prepare segment manager
@@ -200,6 +210,33 @@ func DefineEdgeNode(
 		return theNode, err
 	}
 
+	// Define resty HTTP client for forwarder
+	httpClient, err := utils.DefineHTTPClient(config.Forwarder.Live.Remote.Client)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to define resty HTTP client")
+		return theNode, err
+	}
+
+	httpForwardTarget, err := url.Parse(config.Forwarder.Live.Remote.TargetURL)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to parse HTTP forward target URL")
+		return theNode, err
+	}
+
+	// Define live segment HTTP forwarder
+	httpSegmentSender, err := forwarder.NewHTTPSegmentSender(httpForwardTarget, httpClient)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to create HTTP segment sender")
+		return theNode, err
+	}
+	theNode.liveForwarder, err = forwarder.NewHTTPLiveStreamSegmentForwarder(
+		parentCtxt, dbManager, httpSegmentSender, config.Forwarder.Live.MaxInFlight,
+	)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to create live stream segment forwarder")
+		return theNode, err
+	}
+
 	// Define video monitor
 	theNode.monitor, err = tracker.NewSourceHLSMonitor(
 		parentCtxt,
@@ -208,11 +245,7 @@ func DefineEdgeNode(
 		time.Second*time.Duration(config.MonitorConfig.TrackingWindowInSec),
 		cache,
 		theNode.segmentReader,
-		func(ctxt context.Context, segment common.VideoSegmentWithData) error {
-			// TODO FIXME: once forwarders are implemented replace this
-			log.WithFields(logTags).WithField("segment", segment.String()).Info("Processed new segment")
-			return nil
-		},
+		theNode.liveForwarder.ForwardSegment,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create HLS monitor")

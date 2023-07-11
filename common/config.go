@@ -79,6 +79,22 @@ type VideoSourceConfig struct {
 	StatusReportIncInSec uint32 `mapstructure:"statusReportIntInSec" json:"statusReportIntInSec" validate:"gte=10"`
 }
 
+// HTTPClientRetryConfig HTTP client config retry configuration
+type HTTPClientRetryConfig struct {
+	// MaxAttempts max number of retry attempts
+	MaxAttempts int `mapstructure:"maxAttempts" json:"maxAttempts" validate:"gte=0"`
+	// InitWaitTimeInSec wait time before the first wait retry
+	InitWaitTimeInSec uint32 `mapstructure:"initialWaitTimeInSec" json:"initialWaitTimeInSec" validate:"gte=1"`
+	// MaxWaitTimeInSec max wait time
+	MaxWaitTimeInSec uint32 `mapstructure:"maxWaitTimeInSec" json:"maxWaitTimeInSec" validate:"gte=1"`
+}
+
+// HTTPClientConfig HTTP client config targeting `go-resty`
+type HTTPClientConfig struct {
+	// Retry client retry configuration. See https://github.com/go-resty/resty#retries for details
+	Retry HTTPClientRetryConfig `mapstructure:"retry" json:"retry" validate:"required,dive"`
+}
+
 // ===============================================================================
 // Persistence Configuration Structures
 
@@ -164,6 +180,31 @@ type MemcachedSegementCacheConfig struct {
 }
 
 // ===============================================================================
+// Video Segment Forwarding Configuration Structures
+
+// HTTPForwarderTargetConfig HTTP video forwarder target config
+type HTTPForwarderTargetConfig struct {
+	// TargetURL URL to send new segments to
+	TargetURL string `mapstructure:"targetURL" json:"targetURL" validate:"required,url"`
+	// Client HTTP client config. This is designed to support `go-resty`
+	Client HTTPClientConfig `mapstructure:"client" json:"client" validate:"required,dive"`
+}
+
+// LiveStreamVideoForwarderConfig HTTP video forward supporting live stream through control node
+type LiveStreamVideoForwarderConfig struct {
+	// MaxInFlight max number of segments to forward in parallel
+	MaxInFlight int `mapstructure:"maxInFlightSegments" json:"maxInFlightSegments" validate:"required,gte=1"`
+	// Remote HTTP forwarder target config
+	Remote HTTPForwarderTargetConfig `mapstructure:"remote" json:"remote" validate:"required,dive"`
+}
+
+// VideoForwarderConfig video segment forwarding config
+type VideoForwarderConfig struct {
+	// Live HTTP video forward supporting live stream through control node
+	Live LiveStreamVideoForwarderConfig `mapstructure:"live" json:"live" validate:"required,dive"`
+}
+
+// ===============================================================================
 // Major System Component Configuration Structures
 
 // VideoSourceManagementConfig video source management settings
@@ -242,6 +283,8 @@ type EdgeNodeConfig struct {
 	Sqlite SqliteConfig `mapstructure:"sqlite" json:"sqlite" validate:"required,dive"`
 	// MonitorConfig HLS video source monitoring config
 	MonitorConfig HLSMonitorConfig `mapstructure:"monitor" json:"monitor" validate:"required,dive"`
+	// Forwarder video segment forwarding config
+	Forwarder VideoForwarderConfig `mapstructure:"forwarder" json:"forwarder" validate:"required,dive"`
 	// VODConfig HLS VOD server config
 	VODConfig VODServerConfig `mapstructure:"vod" json:"vod" validate:"required,dive"`
 	// RRClient PubSub request-response client config
@@ -330,6 +373,14 @@ func InstallDefaultEdgeNodeConfigValues() {
 	viper.SetDefault("monitor.api.apis.requestLogging.skipHeaders", []string{
 		"WWW-Authenticate", "Authorization", "Proxy-Authenticate", "Proxy-Authorization",
 	})
+
+	// Default forwarder config
+	// Default live video segment forwarder config
+	viper.SetDefault("forwarder.live.maxInFlightSegments", 4)
+	// Default live segment forwarder HTTP config
+	viper.SetDefault("forwarder.live.remote.client.retry.maxAttempts", 5)
+	viper.SetDefault("forwarder.live.remote.client.retry.initialWaitTimeInSec", 2)
+	viper.SetDefault("forwarder.live.remote.client.retry.maxWaitTimeInSec", 30)
 
 	// Default VOD server config
 	// Default REST API server config

@@ -70,6 +70,34 @@ monitor:
   segmentReaderWorkerCount: 4
 
 #########################################################################################
+# Video Segment Forwarding - supports
+#  * Live stream proxy
+#  * Video recording
+forwarder:
+  # Support live stream video proxy through the system control node
+  live:
+    # Max number of segments to forward in parallel
+    maxInFlightSegments: 4
+
+    # HTTP forwarder target config
+    remote:
+      # URL to send new segments to
+      targetURL: http://system-control-node/v1/new-segment
+
+      # HTTP Client configuration
+      #
+      # The actual client is [resty](https://github.com/go-resty/resty)
+      client:
+        # Client retry configuration. See https://github.com/go-resty/resty#retries for details
+        retry:
+          # Max number of retry attempts.
+          maxAttempts: 5
+          # Wait time before the first wait retry
+          initialWaitTimeInSec: 5
+          # Max wait time
+          maxWaitTimeInSec: 30
+
+#########################################################################################
 # Local Live VOD server configuration
 vod:
   # REST API configuration

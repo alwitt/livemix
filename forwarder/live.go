@@ -87,8 +87,8 @@ func NewHTTPLiveStreamSegmentForwarder(
 	workers, err := goutils.GetNewTaskDemuxProcessorInstance(
 		instance.workerCtxt,
 		"segment-forwarder-core",
-		maxInFlightSegments,
-		maxInFlightSegments,
+		maxInFlightSegments+1,
+		maxInFlightSegments+1,
 		workerLogsTags,
 	)
 	if err != nil {
