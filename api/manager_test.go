@@ -95,7 +95,7 @@ func TestManagerDefineNewVideoSource(t *testing.T) {
 
 	// Case 3: correct parameters
 	{
-		payload := api.NewVideoSourceRequest{Name: uuid.NewString()}
+		payload := api.NewVideoSourceRequest{Name: uuid.NewString(), TargetSegmentLen: 2}
 		payloadByte, err := json.Marshal(&payload)
 		assert.Nil(err)
 		req, err := http.NewRequest("POST", "/v1/source", bytes.NewBuffer(payloadByte))
@@ -115,6 +115,7 @@ func TestManagerDefineNewVideoSource(t *testing.T) {
 			"DefineVideoSource",
 			mock.AnythingOfType("*context.valueCtx"),
 			payload.Name,
+			2,
 			mock.AnythingOfType("*string"),
 			mock.AnythingOfType("*string"),
 		).Return(testEntryID, nil).Once()

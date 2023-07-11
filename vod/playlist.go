@@ -36,8 +36,6 @@ type PlaylistBuilder interface {
 type playlistBuilderImpl struct {
 	goutils.Component
 	dbClient db.PersistenceManager
-	// segmentDuration number of seconds each segment should have
-	segmentDuration time.Duration
 	// liveStreamSegCount number of segments to include when building a live stream playlist
 	liveStreamSegCount int
 	referenceTime      time.Time
@@ -47,12 +45,11 @@ type playlistBuilderImpl struct {
 NewPlaylistBuilder define new playlist builder
 
 	@param dbClient db.PersistenceManager - DB access client
-	@param segmentDuration time.Duration - number of seconds each segment should have
 	@param liveStreamSegCount int - number of segments to include when building a live stream playlist
 	@returns new PlaylistBuilder
 */
 func NewPlaylistBuilder(
-	dbClient db.PersistenceManager, segmentDuration time.Duration, liveStreamSegCount int,
+	dbClient db.PersistenceManager, liveStreamSegCount int,
 ) (PlaylistBuilder, error) {
 	// Define the reference time from which all sequence numbers are built
 	referenceTime, err := GetReferenceTime()
@@ -67,7 +64,6 @@ func NewPlaylistBuilder(
 			},
 		},
 		dbClient:           dbClient,
-		segmentDuration:    segmentDuration,
 		liveStreamSegCount: liveStreamSegCount,
 		referenceTime:      referenceTime,
 	}, nil
@@ -93,7 +89,7 @@ func (b *playlistBuilderImpl) GetLiveStreamPlaylist(
 		Name:              target.Name,
 		CreatedAt:         timestamp,
 		Version:           3,
-		TargetSegDuration: b.segmentDuration.Seconds(),
+		TargetSegDuration: float64(target.TargetSegmentLength),
 		Segments:          make([]hls.Segment, len(segments)),
 	}
 	for idx, oneSegment := range segments {

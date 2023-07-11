@@ -57,9 +57,10 @@ func NewSystemManagerHandler(
 
 // NewVideoSourceRequest parameters to define a new video source
 type NewVideoSourceRequest struct {
-	Name        string  `json:"name" validate:"required"`
-	Description *string `json:"description,omitempty"`
-	PlaylistURI *string `json:"playlist,omitempty" validate:"omitempty,uri"`
+	Name             string  `json:"name" validate:"required"`
+	TargetSegmentLen int     `json:"segment_len" validate:"required,gte=1"`
+	Description      *string `json:"description,omitempty"`
+	PlaylistURI      *string `json:"playlist,omitempty" validate:"omitempty,uri"`
 }
 
 // VideoSourceInfoResponse response containing information for one video source
@@ -135,7 +136,7 @@ func (h SystemManagerHandler) DefineNewVideoSource(w http.ResponseWriter, r *htt
 
 	// Define the video source
 	entryID, err := h.manager.DefineVideoSource(
-		r.Context(), params.Name, params.PlaylistURI, params.Description,
+		r.Context(), params.Name, params.TargetSegmentLen, params.PlaylistURI, params.Description,
 	)
 	if err != nil {
 		msg := "failed to define new video source"

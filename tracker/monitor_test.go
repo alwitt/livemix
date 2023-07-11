@@ -31,7 +31,7 @@ func TestSourceHLSMonitor(t *testing.T) {
 	assert.Nil(err)
 
 	testSourceName := fmt.Sprintf("vid-%s.m3u8", uuid.NewString())
-	testSourceID, err := dbClient.DefineVideoSource(utCtxt, testSourceName, nil, nil)
+	testSourceID, err := dbClient.DefineVideoSource(utCtxt, testSourceName, 4, nil, nil)
 	assert.Nil(err)
 	testSource, err := dbClient.GetVideoSource(utCtxt, testSourceID)
 	assert.Nil(err)

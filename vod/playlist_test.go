@@ -25,19 +25,20 @@ func TestBuildLiveStreamPlaylist(t *testing.T) {
 	mockDB := mocks.NewPersistenceManager(t)
 
 	testSource := common.VideoSource{
-		ID:   uuid.NewString(),
-		Name: fmt.Sprintf("vid-%s.m3u8", uuid.NewString()),
+		ID:                  uuid.NewString(),
+		TargetSegmentLength: 5,
+		Name:                fmt.Sprintf("vid-%s.m3u8", uuid.NewString()),
 	}
 	testSource.PlaylistURI = func() *string {
 		t := fmt.Sprintf("file:///%s", testSource.Name)
 		return &t
 	}()
 
-	segmentLength := time.Second * 5
+	segmentLength := time.Second * time.Duration(testSource.TargetSegmentLength)
 
 	segmentPerPlaylist := 3
 
-	uut, err := vod.NewPlaylistBuilder(mockDB, segmentLength, segmentPerPlaylist)
+	uut, err := vod.NewPlaylistBuilder(mockDB, segmentPerPlaylist)
 	assert.Nil(err)
 
 	startTime := time.Now().UTC()

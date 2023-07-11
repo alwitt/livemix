@@ -8,10 +8,11 @@ import (
 
 // VideoSource a single HLS video source
 type VideoSource struct {
-	ID          string  `json:"id" gorm:"column:id;primaryKey" validate:"required"`
-	Name        string  `json:"name" gorm:"column:name;not null;uniqueIndex:video_source_name_index" validate:"required"`
-	Description *string `json:"description,omitempty" gorm:"column:description;default:null"`
-	Streaming   int     `json:"streaming" gorm:"column:streaming;default:-1" validate:"oneof=-1 1"`
+	ID                  string  `json:"id" gorm:"column:id;primaryKey" validate:"required"`
+	Name                string  `json:"name" gorm:"column:name;not null;uniqueIndex:video_source_name_index" validate:"required"`
+	TargetSegmentLength int     `json:"segment_length" gorm:"column:segment_length;not null" validate:"required,gte=1"`
+	Description         *string `json:"description,omitempty" gorm:"column:description;default:null"`
+	Streaming           int     `json:"streaming" gorm:"column:streaming;default:-1" validate:"oneof=-1 1"`
 	// PlaylistURI video source HLS playlist file URI
 	PlaylistURI     *string   `json:"playlist,omitempty" gorm:"column:playlist;default:null" validate:"omitempty,uri"`
 	ReqRespTargetID *string   `json:"rr_target,omitempty" gorm:"column:rr_target;default:null" validate:"omitempty"`

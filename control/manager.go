@@ -30,12 +30,13 @@ type SystemManager interface {
 
 			@param ctxt context.Context - execution context
 			@param name string - source name
+			@param segmentLen int - target segment length in secs
 			@param playlistURI *string - video source playlist URI
 			@param description *string - optionally, source description
 			@returns new source entry ID
 	*/
 	DefineVideoSource(
-		ctxt context.Context, name string, playlistURI, description *string,
+		ctxt context.Context, name string, segmentLen int, playlistURI, description *string,
 	) (string, error)
 
 	/*
@@ -171,9 +172,9 @@ func (m *systemManagerImpl) Ready(ctxt context.Context) error {
 }
 
 func (m *systemManagerImpl) DefineVideoSource(
-	ctxt context.Context, name string, playlistURI, description *string,
+	ctxt context.Context, name string, segmentLen int, playlistURI, description *string,
 ) (string, error) {
-	return m.db.DefineVideoSource(ctxt, name, playlistURI, description)
+	return m.db.DefineVideoSource(ctxt, name, segmentLen, playlistURI, description)
 }
 
 func (m *systemManagerImpl) GetVideoSource(

@@ -4,8 +4,6 @@
 videoSource:
   # video source system entry name (as recorded by the system control node)
   name: "test-video"
-  # the expected duration of each video segment in secs
-  segmentDurationInSec: 4
   # interval in secs between video source status report to system controller
   statusReportIntInSec: 60
 

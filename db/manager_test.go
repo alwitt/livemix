@@ -46,13 +46,14 @@ func TestDBManagerVideoSource(t *testing.T) {
 
 	// Case 1: create video source
 	source1 := fmt.Sprintf("src-1-%s", uuid.NewString())
-	sourceID1, err := uut.DefineVideoSource(utCtxt, source1, getURI(source1), nil)
+	sourceID1, err := uut.DefineVideoSource(utCtxt, source1, 2, getURI(source1), nil)
 	assert.Nil(err)
 	log.Debugf("Source ID1 %s", sourceID1)
 	{
 		entry, err := uut.GetVideoSource(utCtxt, sourceID1)
 		assert.Nil(err)
 		assert.Equal(source1, entry.Name)
+		assert.Equal(2, entry.TargetSegmentLength)
 		assert.Equal(*getURI(source1), *entry.PlaylistURI)
 		entry, err = uut.GetVideoSourceByName(utCtxt, source1)
 		assert.Nil(err)
@@ -62,13 +63,13 @@ func TestDBManagerVideoSource(t *testing.T) {
 
 	// Case 2: create another with same name
 	{
-		_, err = uut.DefineVideoSource(utCtxt, source1, getURI(source1), nil)
+		_, err = uut.DefineVideoSource(utCtxt, source1, 2, getURI(source1), nil)
 		assert.NotNil(err)
 	}
 
 	// Case 3: create another source
 	source2 := fmt.Sprintf("src-2-%s", uuid.NewString())
-	sourceID2, err := uut.DefineVideoSource(utCtxt, source2, getURI(source2), nil)
+	sourceID2, err := uut.DefineVideoSource(utCtxt, source2, 2, getURI(source2), nil)
 	assert.Nil(err)
 	log.Debugf("Source ID2 %s", sourceID2)
 	{
@@ -120,7 +121,7 @@ func TestDBManagerVideoSource(t *testing.T) {
 
 	// Case 5: recreate existing entry
 	source3 := fmt.Sprintf("src-3-%s", uuid.NewString())
-	assert.Nil(uut.RecordKnownVideoSource(utCtxt, sourceID2, source3, getURI(source3), nil, 1))
+	assert.Nil(uut.RecordKnownVideoSource(utCtxt, sourceID2, source3, 4, getURI(source3), nil, 1))
 	{
 		entries, err := uut.ListVideoSources(utCtxt)
 		assert.Nil(err)
@@ -133,6 +134,7 @@ func TestDBManagerVideoSource(t *testing.T) {
 		entry, ok := asMap[sourceID2]
 		assert.True(ok)
 		assert.Equal(source3, entry.Name)
+		assert.Equal(4, entry.TargetSegmentLength)
 		assert.Equal(*getURI(source3), *entry.PlaylistURI)
 		assert.Equal(1, entry.Streaming)
 	}
@@ -176,7 +178,7 @@ func TestDBManagerVideoSegment(t *testing.T) {
 
 	// Create a source
 	sourceID, err := uut.DefineVideoSource(
-		utCtxt, uuid.NewString(), nil, nil,
+		utCtxt, uuid.NewString(), 4, nil, nil,
 	)
 	assert.Nil(err)
 
@@ -382,7 +384,7 @@ func TestDBManagerVideoSegmentPurgeOldSegments(t *testing.T) {
 
 	// Create a source
 	sourceID, err := uut.DefineVideoSource(
-		utCtxt, uuid.NewString(), nil, nil,
+		utCtxt, uuid.NewString(), 4, nil, nil,
 	)
 	assert.Nil(err)
 

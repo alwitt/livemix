@@ -45,10 +45,11 @@ func TestEdgeToControlGetVideoSourceInfoRequest(t *testing.T) {
 	targetSource := "video-00"
 
 	testResponse := ipc.NewGetVideoSourceByNameResponse(common.VideoSource{
-		ID:          uuid.NewString(),
-		Name:        uuid.NewString(),
-		PlaylistURI: nil,
-		Streaming:   -1,
+		ID:                  uuid.NewString(),
+		Name:                uuid.NewString(),
+		TargetSegmentLength: 4,
+		PlaylistURI:         nil,
+		Streaming:           -1,
 	})
 
 	mockRRClient.On(

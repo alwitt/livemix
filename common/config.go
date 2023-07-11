@@ -76,8 +76,6 @@ type APIServerConfig struct {
 type VideoSourceConfig struct {
 	// Name video source system entry name (as recorded by the system control node)
 	Name string `mapstructure:"name" json:"name" validate:"required"`
-	// SegmentDurationInSec the expected duration of each video segment in secs
-	SegmentDurationInSec uint32 `mapstructure:"segmentDurationInSec" json:"segmentDurationInSec" validate:"gte=2"`
 	// StatusReportIncInSec interval in secs between video source status report to system controller
 	StatusReportIncInSec uint32 `mapstructure:"statusReportIntInSec" json:"statusReportIntInSec" validate:"gte=10"`
 }

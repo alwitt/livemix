@@ -33,12 +33,13 @@ type PersistenceManager interface {
 
 			@param ctxt context.Context - execution context
 			@param name string - source name
+			@param segmentLen int - target segment length in secs
 			@param playlistURI *string - video source playlist URI
 			@param description *string - optionally, source description
 			@returns new source entry ID
 	*/
 	DefineVideoSource(
-		ctxt context.Context, name string, playlistURI, description *string,
+		ctxt context.Context, name string, segmentLen int, playlistURI, description *string,
 	) (string, error)
 
 	/*
@@ -47,12 +48,17 @@ type PersistenceManager interface {
 			@param ctxt context.Context - execution context
 			@param id string - source entry ID
 			@param name string - source name
+			@param segmentLen int - target segment length in secs
 			@param playlistURI *string - video source playlist URI
 			@param description *string - optionally, source description
 			@param streaming int - whether the video source is currently streaming
 	*/
 	RecordKnownVideoSource(
-		ctxt context.Context, id, name string, playlistURI, description *string, streaming int,
+		ctxt context.Context,
+		id, name string,
+		segmentLen int,
+		playlistURI, description *string,
+		streaming int,
 	) error
 
 	/*
@@ -285,7 +291,7 @@ func (m *persistenceManagerImpl) Ready(ctxt context.Context) error {
 // Video sources
 
 func (m *persistenceManagerImpl) DefineVideoSource(
-	ctxt context.Context, name string, playlistURI, description *string,
+	ctxt context.Context, name string, segmentLen int, playlistURI, description *string,
 ) (string, error) {
 	newEntryID := ""
 	return newEntryID, m.db.Transaction(func(tx *gorm.DB) error {
@@ -295,11 +301,12 @@ func (m *persistenceManagerImpl) DefineVideoSource(
 		newEntryID = uuid.NewString()
 		newEntry := videoSource{
 			VideoSource: common.VideoSource{
-				ID:          newEntryID,
-				Name:        name,
-				Description: description,
-				PlaylistURI: playlistURI,
-				Streaming:   -1,
+				ID:                  newEntryID,
+				Name:                name,
+				TargetSegmentLength: segmentLen,
+				Description:         description,
+				PlaylistURI:         playlistURI,
+				Streaming:           -1,
 			},
 		}
 
@@ -324,7 +331,11 @@ func (m *persistenceManagerImpl) DefineVideoSource(
 }
 
 func (m *persistenceManagerImpl) RecordKnownVideoSource(
-	ctxt context.Context, id, name string, playlistURI, description *string, streaming int,
+	ctxt context.Context,
+	id, name string,
+	segmentLen int,
+	playlistURI, description *string,
+	streaming int,
 ) error {
 	return m.db.Transaction(func(tx *gorm.DB) error {
 		logTags := m.GetLogTagsForContext(ctxt)
@@ -332,11 +343,12 @@ func (m *persistenceManagerImpl) RecordKnownVideoSource(
 		// Prepare entry
 		entry := videoSource{
 			VideoSource: common.VideoSource{
-				ID:          id,
-				Name:        name,
-				Description: description,
-				PlaylistURI: playlistURI,
-				Streaming:   streaming,
+				ID:                  id,
+				Name:                name,
+				TargetSegmentLength: segmentLen,
+				Description:         description,
+				PlaylistURI:         playlistURI,
+				Streaming:           streaming,
 			},
 		}
 

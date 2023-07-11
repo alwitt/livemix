@@ -158,6 +158,7 @@ func DefineEdgeNode(
 		parentCtxt,
 		sourceInfo.ID,
 		sourceInfo.Name,
+		sourceInfo.TargetSegmentLength,
 		sourceInfo.PlaylistURI,
 		sourceInfo.Description,
 		sourceInfo.Streaming,
@@ -271,11 +272,7 @@ func DefineEdgeNode(
 	}
 
 	// Define live VOD playlist builder
-	plBuilder, err := vod.NewPlaylistBuilder(
-		dbManager,
-		time.Second*time.Duration(config.VideoSource.SegmentDurationInSec),
-		config.VODConfig.LiveVODSegmentCount,
-	)
+	plBuilder, err := vod.NewPlaylistBuilder(dbManager, config.VODConfig.LiveVODSegmentCount)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create VOD playlist builder")
 		return theNode, err
