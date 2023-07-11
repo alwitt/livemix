@@ -160,13 +160,27 @@ BuildCentralVODServer create control node VOD server. It is responsible for
 	@param parentCtxt context.Context - REST handler parent context
 	@param httpCfg common.APIServerConfig - HTTP server configuration
 	@param forwardCB VideoSegmentForwardCB - callback to forward newly received segments
+	@param dbClient db.PersistenceManager - DB persistence manager
+	@param playlistBuilder vod.PlaylistBuilder - support HLS playlist builder
+	@param segments vod.SegmentManager - video segment manager
 	@returns HTTP server instance
 */
 func BuildCentralVODServer(
-	parentCtxt context.Context, httpCfg common.APIServerConfig, forwardCB VideoSegmentForwardCB,
+	parentCtxt context.Context,
+	httpCfg common.APIServerConfig,
+	forwardCB VideoSegmentForwardCB,
+	dbClient db.PersistenceManager,
+	playlistBuilder vod.PlaylistBuilder,
+	segments vod.SegmentManager,
 ) (*http.Server, error) {
 	segmentRXHandler, err := NewSegmentReceiveHandler(
 		parentCtxt, forwardCB, httpCfg.APIs.RequestLogging,
+	)
+	if err != nil {
+		return nil, err
+	}
+	vodHandler, err := NewLiveStreamHandler(
+		dbClient, playlistBuilder, segments, httpCfg.APIs.RequestLogging,
 	)
 	if err != nil {
 		return nil, err
@@ -181,6 +195,14 @@ func BuildCentralVODServer(
 	_ = registerPathPrefix(v1Router, "/new-segment", map[string]http.HandlerFunc{
 		"post": segmentRXHandler.NewSegmentHandler(),
 	})
+
+	// --------------------------------------------------------------------------------
+	// VOD endpoint
+	_ = registerPathPrefix(
+		v1Router, "/vod/live/{videoSourceID}/{fileName}", map[string]http.HandlerFunc{
+			"get": vodHandler.GetVideoFilesHandler(),
+		},
+	)
 
 	// --------------------------------------------------------------------------------
 	// Middleware
@@ -214,6 +236,7 @@ BuildVODServer create HLS VOD server
 
 	@param httpCfg common.APIServerConfig - HTTP server configuration
 	@param dbClient db.PersistenceManager - DB persistence manager
+	@param playlistBuilder vod.PlaylistBuilder - support HLS playlist builder
 	@param segments vod.SegmentManager - video segment manager
 	@returns HTTP server instance
 */

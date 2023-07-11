@@ -14,6 +14,7 @@ import (
 	"github.com/alwitt/livemix/control"
 	"github.com/alwitt/livemix/db"
 	"github.com/alwitt/livemix/utils"
+	"github.com/alwitt/livemix/vod"
 	"github.com/apex/log"
 	"gorm.io/gorm/logger"
 )
@@ -213,9 +214,31 @@ func DefineControlNode(
 		return nil, err
 	}
 
+	// Define segment manager
+	// TODO FIXME: add S3 segment reader once implemented
+	segmentMgnt, err := vod.NewSegmentManager(
+		cache, nil, time.Second*time.Duration(config.VODConfig.SegmentCacheTTLInSec),
+	)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to create video segment manager")
+		return nil, err
+	}
+
+	// Define live VOD playlist builder
+	plBuilder, err := vod.NewPlaylistBuilder(dbManager, config.VODConfig.LiveVODSegmentCount)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to create VOD playlist builder")
+		return nil, err
+	}
+
 	// Define VOD API HTTP server
 	theNode.VODAPIServer, err = api.BuildCentralVODServer(
-		parentCtxt, config.VODConfig.APIServer, theNode.segmentMgmt.RegisterLiveStreamSegment,
+		parentCtxt,
+		config.VODConfig.APIServer,
+		theNode.segmentMgmt.RegisterLiveStreamSegment,
+		dbManager,
+		plBuilder,
+		segmentMgnt,
 	)
 	if err != nil {
 		log.
