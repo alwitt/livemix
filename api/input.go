@@ -65,6 +65,7 @@ func NewPlaylistReceiveHandler(
 				}
 				return result
 			}(),
+			LogLevel: logConfig.LogLevel,
 		}, parentCtxt: parentCtxt, parser: playlistParser, forwardPlaylist: forwardPlaylist,
 	}, nil
 }
@@ -229,6 +230,7 @@ func NewSegmentReceiveHandler(
 				}
 				return result
 			}(),
+			LogLevel: logConfig.LogLevel,
 		}, parentCtxt: parentCtxt, forwardSegment: forwardSegment,
 	}, nil
 }

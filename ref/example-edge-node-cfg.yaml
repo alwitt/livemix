@@ -52,6 +52,8 @@ monitor:
         pathPrefix: /
       # Request logging parameters
       requestLogging:
+        # Output request logs at this level
+        logLevel: debug
         # HTTP header containing the API request ID
         requestIDHeader: X-Request-ID
         # List of headers to not include in logging metadata
@@ -128,6 +130,8 @@ vod:
         pathPrefix: /
       # Request logging parameters
       requestLogging:
+        # Output request logs at this level
+        logLevel: debug
         # HTTP header containing the API request ID
         requestIDHeader: X-Request-ID
         # List of headers to not include in logging metadata

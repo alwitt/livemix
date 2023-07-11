@@ -55,6 +55,7 @@ func NewLiveStreamHandler(
 				}
 				return result
 			}(),
+			LogLevel: logConfig.LogLevel,
 		}, validate: validator.New(), dbClient: dbClient, playlists: playlists, segments: segments,
 	}, nil
 }

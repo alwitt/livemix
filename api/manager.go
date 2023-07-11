@@ -47,6 +47,7 @@ func NewSystemManagerHandler(
 				}
 				return result
 			}(),
+			LogLevel: logConfig.LogLevel,
 		}, validate: validator.New(), manager: manager,
 	}, nil
 }
