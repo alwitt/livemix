@@ -88,6 +88,19 @@ forwarder:
       #
       # The actual client is [resty](https://github.com/go-resty/resty)
       client:
+        # OAuth middleware integration configuration
+        #
+        # Currently only support client-credential OAuth flow configuration
+        oauth:
+          # OpenID provider issuer URL
+          issuerURL: https://idenity.provider.com
+          # OAuth client ID
+          clientID:
+          # OAuth client secret
+          clientSecret:
+          # Get a token from IDP with this target audience
+          targetAudience:
+
         # Client retry configuration. See https://github.com/go-resty/resty#retries for details
         retry:
           # Max number of retry attempts.

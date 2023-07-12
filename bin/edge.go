@@ -212,7 +212,9 @@ func DefineEdgeNode(
 	}
 
 	// Define resty HTTP client for forwarder
-	httpClient, err := utils.DefineHTTPClient(config.Forwarder.Live.Remote.Client)
+	httpClient, err := utils.DefineHTTPClient(
+		theNode.nodeRuntimeCtxt, config.Forwarder.Live.Remote.Client,
+	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to define resty HTTP client")
 		return theNode, err

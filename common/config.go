@@ -80,6 +80,20 @@ type VideoSourceConfig struct {
 	StatusReportIncInSec uint32 `mapstructure:"statusReportIntInSec" json:"statusReportIntInSec" validate:"gte=10"`
 }
 
+// HTTPClientAuthConfig HTTP client OAuth middleware configuration
+//
+// Currently only support client-credential OAuth flow configuration
+type HTTPClientAuthConfig struct {
+	// IssuerURL OpenID provider issuer URL
+	IssuerURL string `mapstructure:"issuerURL" json:"issuerURL" validate:"required,url"`
+	// ClientID OAuth client ID
+	ClientID string `mapstructure:"clientID" json:"clientID" validate:"required"`
+	// ClientSecret OAuth client secret
+	ClientSecret string `mapstructure:"clientSecret" json:"clientSecret" validate:"required"`
+	// TargetAudience target audience `aud` to acquire a token for
+	TargetAudience string `mapstructure:"targetAudience" json:"targetAudience" validate:"required,url"`
+}
+
 // HTTPClientRetryConfig HTTP client config retry configuration
 type HTTPClientRetryConfig struct {
 	// MaxAttempts max number of retry attempts
@@ -92,6 +106,8 @@ type HTTPClientRetryConfig struct {
 
 // HTTPClientConfig HTTP client config targeting `go-resty`
 type HTTPClientConfig struct {
+	// OAuth OAuth middleware integration configuration
+	OAuth *HTTPClientAuthConfig `mapstructure:"oauth,omitempty" json:"oauth,omitempty" validate:"omitempty,dive"`
 	// Retry client retry configuration. See https://github.com/go-resty/resty#retries for details
 	Retry HTTPClientRetryConfig `mapstructure:"retry" json:"retry" validate:"required,dive"`
 }
