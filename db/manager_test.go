@@ -439,3 +439,152 @@ func TestDBManagerVideoSegmentPurgeOldSegments(t *testing.T) {
 		assert.Equal(testSegments[5].Name, segments[0].Name)
 	}
 }
+
+func TestDBManagerVideoRecording(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	testInstance := fmt.Sprintf("ut-%s", uuid.NewString())
+	testDB := fmt.Sprintf("/tmp/%s.db", testInstance)
+	uut, err := db.NewManager(db.GetSqliteDialector(testDB), logger.Info)
+	assert.Nil(err)
+
+	log.Debugf("Using %s", testDB)
+
+	utCtxt := context.Background()
+
+	assert.Nil(uut.Ready(utCtxt))
+
+	// Case 0: no recordings
+	{
+		_, err := uut.GetRecordingSession(utCtxt, uuid.NewString())
+		assert.NotNil(err)
+		result, err := uut.ListRecordingSessions(utCtxt)
+		assert.Nil(err)
+		assert.Len(result, 0)
+		result, err = uut.ListRecordingSessionsOfSource(utCtxt, uuid.NewString(), false)
+		assert.Nil(err)
+		assert.Len(result, 0)
+	}
+
+	testSource0 := uuid.NewString()
+	currentTime := time.Now().UTC()
+
+	// Case 1: define new recording
+	recordingID0 := ""
+	{
+		entryID, err := uut.DefineRecordingSession(utCtxt, testSource0, nil, nil, currentTime)
+		assert.Nil(err)
+		recordingID0 = entryID
+	}
+	{
+		entry, err := uut.GetRecordingSession(utCtxt, recordingID0)
+		assert.Nil(err)
+		assert.Equal(recordingID0, entry.ID)
+		assert.Equal(testSource0, entry.SourceID)
+		assert.Equal(1, entry.Active)
+		assert.Equal(currentTime.Unix(), entry.StartTime.Unix())
+	}
+
+	// Case 2: update recording entry
+	{
+		testAlias := uuid.NewString()
+		testDescription := uuid.NewString()
+		assert.Nil(uut.UpdateRecordingSession(utCtxt, common.Recording{
+			ID: recordingID0, Alias: &testAlias, Description: &testDescription,
+		}))
+
+		entry, err := uut.GetRecordingSession(utCtxt, recordingID0)
+		assert.Nil(err)
+		assert.Equal(testAlias, *entry.Alias)
+		assert.Equal(testDescription, *entry.Description)
+	}
+
+	// Case 3: create new recording
+	recordingID1 := ""
+	{
+		entryID, err := uut.DefineRecordingSession(utCtxt, testSource0, nil, nil, currentTime)
+		assert.Nil(err)
+		recordingID1 = entryID
+	}
+	{
+		entries, err := uut.ListRecordingSessions(utCtxt)
+		assert.Nil(err)
+		assert.Len(entries, 2)
+		entryByID := map[string]common.Recording{}
+		for _, entry := range entries {
+			entryByID[entry.ID] = entry
+		}
+		assert.Contains(entryByID, recordingID0)
+		assert.Contains(entryByID, recordingID1)
+		entry := entryByID[recordingID1]
+		assert.Equal(recordingID1, entry.ID)
+		assert.Equal(testSource0, entry.SourceID)
+		assert.Equal(1, entry.Active)
+		assert.Equal(currentTime.Unix(), entry.StartTime.Unix())
+	}
+
+	// Case 4: mark one recording finished
+	assert.Nil(uut.MarkEndOfRecordingSession(utCtxt, recordingID1, currentTime))
+	{
+		entries, err := uut.ListRecordingSessionsOfSource(utCtxt, testSource0, false)
+		assert.Nil(err)
+		assert.Len(entries, 2)
+		entryByID := map[string]common.Recording{}
+		for _, entry := range entries {
+			entryByID[entry.ID] = entry
+		}
+		assert.Contains(entryByID, recordingID0)
+		assert.Contains(entryByID, recordingID1)
+		entries, err = uut.ListRecordingSessionsOfSource(utCtxt, testSource0, true)
+		assert.Nil(err)
+		assert.Len(entries, 1)
+		assert.Equal(recordingID0, entries[0].ID)
+	}
+
+	testSource1 := uuid.NewString()
+
+	// Case 5: create new recording with different source
+	recordingID2 := ""
+	{
+		entryID, err := uut.DefineRecordingSession(utCtxt, testSource1, nil, nil, currentTime)
+		assert.Nil(err)
+		recordingID2 = entryID
+	}
+	{
+		entries, err := uut.ListRecordingSessions(utCtxt)
+		assert.Nil(err)
+		assert.Len(entries, 3)
+		entries, err = uut.ListRecordingSessionsOfSource(utCtxt, testSource1, false)
+		assert.Nil(err)
+		assert.Len(entries, 1)
+		entry := entries[0]
+		assert.Equal(recordingID2, entry.ID)
+		assert.Equal(testSource1, entry.SourceID)
+		assert.Equal(1, entry.Active)
+		assert.Equal(currentTime.Unix(), entry.StartTime.Unix())
+	}
+
+	recording1, err := uut.GetRecordingSession(utCtxt, recordingID1)
+	assert.Nil(err)
+
+	// Case 6: delete recording
+	assert.Nil(uut.DeleteRecordingSession(utCtxt, recordingID1))
+
+	// Case 7: recreate deleted record
+	assert.Nil(uut.RecordKnownRecordingSession(utCtxt, recording1))
+	{
+		entry, err := uut.GetRecordingSession(utCtxt, recordingID1)
+		assert.Nil(err)
+		assert.Equal(recordingID1, entry.ID)
+		assert.Equal(testSource0, entry.SourceID)
+		assert.Equal(-1, entry.Active)
+		assert.Equal(currentTime.Unix(), entry.StartTime.Unix())
+	}
+	{
+		entries, err := uut.ListRecordingSessionsOfSource(utCtxt, testSource0, true)
+		assert.Nil(err)
+		assert.Len(entries, 1)
+		assert.Equal(recordingID0, entries[0].ID)
+	}
+}

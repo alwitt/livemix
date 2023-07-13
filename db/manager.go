@@ -234,6 +234,89 @@ type PersistenceManager interface {
 	PurgeOldLiveStreamSegments(
 		ctxt context.Context, timeLimit time.Time,
 	) error
+
+	// =====================================================================================
+	// Video Recording Sessions
+
+	/*
+		DefineRecordingSession create new video recording session
+
+			@param ctxt context.Context - execution context
+			@param sourceID string - the video source ID
+			@param alias *string - an optional alias name for the recording session
+			@param description *string - an optional description of the recording session
+			@param startTime time.Time - when the recording session started
+			@returns new recording session ID
+	*/
+	DefineRecordingSession(
+		ctxt context.Context, sourceID string, alias, description *string, startTime time.Time,
+	) (string, error)
+
+	/*
+		RecordKnownRecordingSession create record for an existing video recording session
+
+			@param ctxt context.Context - execution context
+			@param entry common.Recording - video recording session entry
+	*/
+	RecordKnownRecordingSession(ctxt context.Context, entry common.Recording) error
+
+	/*
+		GetRecordingSession retrieve a video recording session
+
+			@param ctxt context.Context - execution context
+			@param id string - session entry ID
+			@returns video recording entry
+	*/
+	GetRecordingSession(ctxt context.Context, id string) (common.Recording, error)
+
+	/*
+		ListRecordingSessions list all video recording sessions
+
+			@param ctxt context.Context - execution context
+			@returns all recording sessions
+	*/
+	ListRecordingSessions(ctxt context.Context) ([]common.Recording, error)
+
+	/*
+		ListRecordingSessionsOfSource list all video recording sessions of a video source
+
+			@param ctxt context.Context - execution context
+			@param sourceID string - the video source ID
+			@param active bool - if 1, select only the active recording sessions; else return all.
+			@returns all recording sessions of a video source source
+	*/
+	ListRecordingSessionsOfSource(
+		ctxt context.Context, sourceID string, active bool,
+	) ([]common.Recording, error)
+
+	/*
+		MarkEndOfRecordingSession mark a video recording session as complete.
+
+			@param ctxt context.Context - execution context
+			@param id string - session entry ID
+			@param endTime time.Time - when the recording session ended
+	*/
+	MarkEndOfRecordingSession(ctxt context.Context, id string, endTime time.Time) error
+
+	/*
+		UpdateRecordingSession update properties of a video recording session.
+
+		Only the following can be updated:
+		  * Alias
+		  * Description
+
+			@param ctxt context.Context - execution context
+			@param newSetting common.Recording - new properties
+	*/
+	UpdateRecordingSession(ctxt context.Context, newSetting common.Recording) error
+
+	/*
+		DeleteRecordingSession delete a video recording session
+
+			@param ctxt context.Context - execution context
+			@param id string - session entry ID
+	*/
+	DeleteRecordingSession(ctxt context.Context, id string) error
 }
 
 // persistenceManagerImpl implements PersistenceManager
@@ -264,6 +347,9 @@ func NewManager(dbDialector gorm.Dialector, logLevel logger.LogLevel) (Persisten
 		return nil, err
 	}
 	if err := db.AutoMigrate(&liveStreamVideoSegment{}); err != nil {
+		return nil, err
+	}
+	if err := db.AutoMigrate(&recordingSession{}, &recordingVideoSegment{}); err != nil {
 		return nil, err
 	}
 
@@ -472,7 +558,9 @@ func (m *persistenceManagerImpl) RefreshVideoSourceStats(
 func (m *persistenceManagerImpl) DeleteVideoSource(ctxt context.Context, id string) error {
 	return m.db.Transaction(func(tx *gorm.DB) error {
 		logTags := m.GetLogTagsForContext(ctxt)
-		if tmp := tx.Where("source = ?", id).Delete(&liveStreamVideoSegment{}); tmp.Error != nil {
+		if tmp := tx.Where(
+			&liveStreamVideoSegment{VideoSegment: common.VideoSegment{SourceID: id}},
+		).Delete(&liveStreamVideoSegment{}); tmp.Error != nil {
 			return tmp.Error
 		}
 		if tmp := tx.Delete(&videoSource{VideoSource: common.VideoSource{ID: id}}); tmp.Error != nil {
@@ -562,7 +650,9 @@ func (m *persistenceManagerImpl) ListAllLiveStreamSegments(ctxt context.Context,
 	var results []common.VideoSegment
 	return results, m.db.Transaction(func(tx *gorm.DB) error {
 		var entries []liveStreamVideoSegment
-		if tmp := tx.Where("source = ?", sourceID).Order("end_ts").Find(&entries); tmp.Error != nil {
+		if tmp := tx.Where(
+			&liveStreamVideoSegment{VideoSegment: common.VideoSegment{SourceID: sourceID}},
+		).Order("end_ts").Find(&entries); tmp.Error != nil {
 			return tmp.Error
 		}
 		for _, entry := range entries {
@@ -578,7 +668,9 @@ func (m *persistenceManagerImpl) GetLiveStreamSegment(
 	var result common.VideoSegment
 	return result, m.db.Transaction(func(tx *gorm.DB) error {
 		var entry liveStreamVideoSegment
-		if tmp := tx.Where("id = ?", id).First(&entry); tmp.Error != nil {
+		if tmp := tx.Where(
+			&liveStreamVideoSegment{VideoSegment: common.VideoSegment{ID: id}},
+		).First(&entry); tmp.Error != nil {
 			return tmp.Error
 		}
 		result = entry.VideoSegment
@@ -592,7 +684,9 @@ func (m *persistenceManagerImpl) GetLiveStreamSegmentByName(
 	var result common.VideoSegment
 	return result, m.db.Transaction(func(tx *gorm.DB) error {
 		var entry liveStreamVideoSegment
-		if tmp := tx.Where("name = ?", name).First(&entry); tmp.Error != nil {
+		if tmp := tx.Where(
+			&liveStreamVideoSegment{VideoSegment: common.VideoSegment{Segment: hls.Segment{Name: name}}},
+		).First(&entry); tmp.Error != nil {
 			return tmp.Error
 		}
 		result = entry.VideoSegment
@@ -607,7 +701,7 @@ func (m *persistenceManagerImpl) ListAllLiveStreamSegmentsAfterTime(
 	return results, m.db.Transaction(func(tx *gorm.DB) error {
 		var entries []liveStreamVideoSegment
 		if tmp := tx.
-			Where("source = ?", sourceID).
+			Where(&liveStreamVideoSegment{VideoSegment: common.VideoSegment{SourceID: sourceID}}).
 			Where("end_ts >= ?", timestamp).
 			Order("end_ts").
 			Find(&entries); tmp.Error != nil {
@@ -627,7 +721,7 @@ func (m *persistenceManagerImpl) GetLatestLiveStreamSegments(
 	return results, m.db.Transaction(func(tx *gorm.DB) error {
 		var entries []liveStreamVideoSegment
 		if tmp := tx.
-			Where("source = ?", sourceID).
+			Where(&liveStreamVideoSegment{VideoSegment: common.VideoSegment{SourceID: sourceID}}).
 			Order("end_ts desc").
 			Limit(count).
 			Find(&entries); tmp.Error != nil {
@@ -643,7 +737,9 @@ func (m *persistenceManagerImpl) GetLatestLiveStreamSegments(
 
 func (m *persistenceManagerImpl) DeleteLiveStreamSegment(ctxt context.Context, id string) error {
 	return m.db.Transaction(func(tx *gorm.DB) error {
-		if tmp := tx.Where("id = ?", id).Delete(&liveStreamVideoSegment{}); tmp.Error != nil {
+		if tmp := tx.Where(
+			&liveStreamVideoSegment{VideoSegment: common.VideoSegment{ID: id}},
+		).Delete(&liveStreamVideoSegment{}); tmp.Error != nil {
 			return tmp.Error
 		}
 		return nil
@@ -668,6 +764,209 @@ func (m *persistenceManagerImpl) PurgeOldLiveStreamSegments(
 			Delete(&liveStreamVideoSegment{}); tmp.Error != nil {
 			return tmp.Error
 		}
+		return nil
+	})
+}
+
+// =====================================================================================
+// Video Recording Sessions
+
+func (m *persistenceManagerImpl) DefineRecordingSession(
+	ctxt context.Context, sourceID string, alias, description *string, startTime time.Time,
+) (string, error) {
+	var newEntryID string
+	return newEntryID, m.db.Transaction(func(tx *gorm.DB) error {
+		logTags := m.GetLogTagsForContext(ctxt)
+
+		// Prepare new entry
+		newEntryID = ulid.Make().String()
+
+		newEntry := recordingSession{
+			Recording: common.Recording{
+				ID:          newEntryID,
+				Alias:       alias,
+				Description: description,
+				SourceID:    sourceID,
+				StartTime:   startTime,
+				Active:      1,
+			},
+		}
+
+		// Verify data
+		if err := m.validator.Struct(&newEntry); err != nil {
+			return err
+		}
+
+		// Insert entry
+		if tmp := tx.Create(&newEntry); tmp.Error != nil {
+			return tmp.Error
+		}
+
+		log.
+			WithFields(logTags).
+			WithField("source-id", sourceID).
+			WithField("id", newEntryID).
+			Info("Registered new video recording session")
+		return nil
+	})
+}
+
+func (m *persistenceManagerImpl) RecordKnownRecordingSession(
+	ctxt context.Context, entry common.Recording,
+) error {
+	return m.db.Transaction(func(tx *gorm.DB) error {
+		logTags := m.GetLogTagsForContext(ctxt)
+
+		newEntry := recordingSession{
+			Recording: common.Recording{
+				ID:          entry.ID,
+				Alias:       entry.Alias,
+				Description: entry.Description,
+				SourceID:    entry.SourceID,
+				StartTime:   entry.StartTime,
+				EndTime:     entry.EndTime,
+				Active:      entry.Active,
+			},
+		}
+
+		// Verify data
+		if err := m.validator.Struct(&newEntry); err != nil {
+			return err
+		}
+
+		// Insert entry
+		if tmp := tx.Create(&newEntry); tmp.Error != nil {
+			return tmp.Error
+		}
+
+		log.
+			WithFields(logTags).
+			WithField("source-id", entry.SourceID).
+			WithField("id", entry.ID).
+			Info("Registered pre-existing video recording session")
+
+		return nil
+	})
+}
+
+func (m *persistenceManagerImpl) GetRecordingSession(
+	ctxt context.Context, id string,
+) (common.Recording, error) {
+	var result common.Recording
+	return result, m.db.Transaction(func(tx *gorm.DB) error {
+		var entry recordingSession
+
+		tmp := tx.Where(&recordingSession{Recording: common.Recording{ID: id}}).First(&entry)
+		if tmp.Error != nil {
+			return tmp.Error
+		}
+
+		result = entry.Recording
+		return nil
+	})
+}
+
+func (m *persistenceManagerImpl) ListRecordingSessions(
+	ctxt context.Context,
+) ([]common.Recording, error) {
+	var results []common.Recording
+	return results, m.db.Transaction(func(tx *gorm.DB) error {
+		var entries []recordingSession
+
+		if tmp := tx.Find(&entries); tmp.Error != nil {
+			return tmp.Error
+		}
+
+		for _, entry := range entries {
+			results = append(results, entry.Recording)
+		}
+		return nil
+	})
+}
+
+func (m *persistenceManagerImpl) ListRecordingSessionsOfSource(
+	ctxt context.Context, sourceID string, active bool,
+) ([]common.Recording, error) {
+	var results []common.Recording
+	return results, m.db.Transaction(func(tx *gorm.DB) error {
+		var entries []recordingSession
+
+		query := tx.Where(&recordingSession{Recording: common.Recording{SourceID: sourceID}})
+		if active {
+			query = query.Where(&recordingSession{Recording: common.Recording{Active: 1}})
+		}
+		if tmp := query.Find(&entries); tmp.Error != nil {
+			return tmp.Error
+		}
+
+		for _, entry := range entries {
+			results = append(results, entry.Recording)
+		}
+		return nil
+	})
+}
+
+func (m *persistenceManagerImpl) MarkEndOfRecordingSession(
+	ctxt context.Context, id string, endTime time.Time,
+) error {
+	return m.db.Transaction(func(tx *gorm.DB) error {
+		logTags := m.GetLogTagsForContext(ctxt)
+
+		if tmp := tx.Where(
+			&recordingSession{Recording: common.Recording{ID: id}},
+		).Updates(
+			&recordingSession{Recording: common.Recording{Active: -1, EndTime: endTime}},
+		); tmp.Error != nil {
+			return tmp.Error
+		}
+
+		log.WithFields(logTags).WithField("recording", id).Info("Marking recording as complete")
+
+		return nil
+	})
+}
+
+func (m *persistenceManagerImpl) UpdateRecordingSession(
+	ctxt context.Context, newSetting common.Recording,
+) error {
+	return m.db.Transaction(func(tx *gorm.DB) error {
+		if tmp := tx.Where(
+			&recordingSession{Recording: common.Recording{ID: newSetting.ID}},
+		).Updates(
+			&recordingSession{Recording: common.Recording{
+				Alias: newSetting.Alias, Description: newSetting.Description,
+			}},
+		); tmp.Error != nil {
+			return tmp.Error
+		}
+		return nil
+	})
+}
+
+func (m *persistenceManagerImpl) DeleteRecordingSession(ctxt context.Context, id string) error {
+	return m.db.Transaction(func(tx *gorm.DB) error {
+		logTags := m.GetLogTagsForContext(ctxt)
+
+		// Get the recording entry first
+		var recording recordingSession
+		tmp := tx.Where(
+			&recordingSession{Recording: common.Recording{ID: id}},
+		).Preload("Segments").First(&recording)
+		if tmp.Error != nil {
+			return tmp.Error
+		}
+
+		// Delete the segments associated along with the recording
+		if len(recording.Segments) > 0 {
+			if tmp = tx.Select(recording.Segments).Delete(&recording); tmp.Error != nil {
+				return tmp.Error
+			}
+		} else if tmp = tx.Delete(&recording); tmp.Error != nil {
+			return tmp.Error
+		}
+
+		log.WithFields(logTags).WithField("recording", id).Info("Deleted recording session")
+
 		return nil
 	})
 }

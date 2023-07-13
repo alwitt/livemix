@@ -27,3 +27,25 @@ type liveStreamVideoSegment struct {
 func (liveStreamVideoSegment) TableName() string {
 	return "live_video_segments"
 }
+
+// recordingSession a single video recording session
+type recordingSession struct {
+	common.Recording
+	Segments []*recordingVideoSegment `gorm:"many2many:recording_session_segments;"`
+}
+
+// TableName hard code table name
+func (recordingSession) TableName() string {
+	return "recording_sessions"
+}
+
+// recordingVideoSegment MPEG-TS video segment belonging to a video recording session
+type recordingVideoSegment struct {
+	common.VideoSegment
+	Recordings []*recordingSession `gorm:"many2many:recording_session_segments;"`
+}
+
+// TableName hard code table name
+func (recordingVideoSegment) TableName() string {
+	return "recorded_segments"
+}
