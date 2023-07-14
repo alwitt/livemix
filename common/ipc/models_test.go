@@ -46,6 +46,22 @@ func TestIPCMessageParsing(t *testing.T) {
 			input:     ipc.NewVideoSourceStatusReport(uuid.NewString(), uuid.NewString(), currentTime),
 			inputType: reflect.TypeOf(ipc.VideoSourceStatusReport{}),
 		},
+		{
+			input:     ipc.NewStartVideoRecordingSessionRequest(common.Recording{ID: uuid.NewString()}),
+			inputType: reflect.TypeOf(ipc.StartVideoRecordingRequest{}),
+		},
+		{
+			input:     ipc.NewStopVideoRecordingSessionRequest(uuid.NewString(), time.Now().UTC()),
+			inputType: reflect.TypeOf(ipc.StopVideoRecordingRequest{}),
+		},
+		{
+			input:     ipc.NewCloseAllActiveRecordingRequest(uuid.NewString()),
+			inputType: reflect.TypeOf(ipc.CloseAllActiveRecordingRequest{}),
+		},
+		{
+			input:     ipc.NewRecordingSegmentReport([]string{uuid.NewString(), uuid.NewString()}, nil),
+			inputType: reflect.TypeOf(ipc.RecordingSegmentReport{}),
+		},
 	}
 
 	for idx, oneTest := range testCases {

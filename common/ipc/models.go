@@ -55,6 +55,9 @@ type baseRequestTypeDT string
 const (
 	ipcRequestTypeGetVideoSource    baseRequestTypeDT = "get_video_source"
 	ipcRequestTypeChangeStreamState baseRequestTypeDT = "change_stream_state"
+	ipcRequestTypeStartRecording    baseRequestTypeDT = "start_recording"
+	ipcRequestTypeStopRecording     baseRequestTypeDT = "stop_recording"
+	ipcRequestTypeCloseAllRecording baseRequestTypeDT = "close_all_active_recording"
 )
 
 // BaseRequest base request IPC message payload. All other requests must be built
@@ -115,6 +118,77 @@ func NewChangeSourceStreamingStateRequest(
 	}
 }
 
+// StartVideoRecordingRequest RR request start video recording session
+type StartVideoRecordingRequest struct {
+	BaseRequest
+	// Session information regarding the recording session
+	Session common.Recording `json:"session" validate:"required,dive"`
+}
+
+/*
+NewStartVideoRecordingSessionRequest define new StartVideoRecordingSessionRequest message
+
+	@param session common.Recording - the video recording session
+	@returns defined structure
+*/
+func NewStartVideoRecordingSessionRequest(session common.Recording) StartVideoRecordingRequest {
+	return StartVideoRecordingRequest{
+		BaseRequest: BaseRequest{
+			BaseMessage: BaseMessage{Type: ipcMessageTypeRequest},
+			RequestType: ipcRequestTypeStartRecording,
+		}, Session: session,
+	}
+}
+
+// StopVideoRecordingRequest RR request stop video recording session
+type StopVideoRecordingRequest struct {
+	BaseRequest
+	// RecordingID recording session ID
+	RecordingID string `json:"session_id" validate:"required"`
+	// EndTime the end point for the recording session
+	EndTime time.Time `json:"end_time" validate:"required"`
+}
+
+/*
+NewStopVideoRecordingSessionRequest define new StopVideoRecordingSessionRequest message
+
+	@param recordingID string - recording session ID
+	@param endTime time.Time - recording session end point
+	@returns defined structure
+*/
+func NewStopVideoRecordingSessionRequest(
+	recordingID string, endTime time.Time,
+) StopVideoRecordingRequest {
+	return StopVideoRecordingRequest{
+		BaseRequest: BaseRequest{
+			BaseMessage: BaseMessage{Type: ipcMessageTypeRequest},
+			RequestType: ipcRequestTypeStopRecording,
+		}, RecordingID: recordingID, EndTime: endTime,
+	}
+}
+
+// CloseAllActiveRecordingRequest RR request close all active recording sessions
+type CloseAllActiveRecordingRequest struct {
+	BaseRequest
+	// SourceID video source ID
+	SourceID string `json:"source_id" validate:"required"`
+}
+
+/*
+NewCloseAllActiveRecordingRequest define new CloseAllActiveRecordingRequest message
+
+	@param sourceID string - video source ID
+	@returns defined structure
+*/
+func NewCloseAllActiveRecordingRequest(sourceID string) CloseAllActiveRecordingRequest {
+	return CloseAllActiveRecordingRequest{
+		BaseRequest: BaseRequest{
+			BaseMessage: BaseMessage{Type: ipcMessageTypeRequest},
+			RequestType: ipcRequestTypeCloseAllRecording,
+		}, SourceID: sourceID,
+	}
+}
+
 /*
 parseRawRequestMessage parse raw IPC request message
 
@@ -139,6 +213,30 @@ func parseRawRequestMessage(rawMsg []byte) (interface{}, error) {
 	// Request Change Streaming State
 	case ipcRequestTypeChangeStreamState:
 		var request ChangeSourceStreamingStateRequest
+		if err := json.Unmarshal(rawMsg, &request); err != nil {
+			return nil, err
+		}
+		return request, nil
+
+	// Start Video Recording
+	case ipcRequestTypeStartRecording:
+		var request StartVideoRecordingRequest
+		if err := json.Unmarshal(rawMsg, &request); err != nil {
+			return nil, err
+		}
+		return request, nil
+
+	// Stop Video Recording
+	case ipcRequestTypeStopRecording:
+		var request StopVideoRecordingRequest
+		if err := json.Unmarshal(rawMsg, &request); err != nil {
+			return nil, err
+		}
+		return request, nil
+
+	// Close All Active Recording Sessions
+	case ipcRequestTypeCloseAllRecording:
+		var request CloseAllActiveRecordingRequest
 		if err := json.Unmarshal(rawMsg, &request); err != nil {
 			return nil, err
 		}
@@ -254,7 +352,8 @@ func parseRawResponseMessage(rawMsg []byte) (interface{}, error) {
 type baseBroadcastTypeDT string
 
 const (
-	ipcBroadcastVideoSourceStatus baseBroadcastTypeDT = "report_video_source_status"
+	ipcBroadcastVideoSourceStatus   baseBroadcastTypeDT = "report_video_source_status"
+	ipcBroadcastNewRecordingSegment baseBroadcastTypeDT = "new_video_recording_segment"
 )
 
 // BaseBroadcast base broadcast IPC message payload. All other broadcasts must be built
@@ -300,6 +399,33 @@ func NewVideoSourceStatusReport(
 	}
 }
 
+// RecordingSegmentReport broadcast new video segments associated with recording sessions
+type RecordingSegmentReport struct {
+	BaseBroadcast
+	// RecordingIDs set of recording sessions ID which the segments belong to
+	RecordingIDs []string `json:"recordings" validate:"required,gte=1"`
+	// Segments set of video segments to report
+	Segments []common.VideoSegment `json:"segments" validate:"required,gte=1,dive"`
+}
+
+/*
+NewRecordingSegmentReport define new RecordingSegmentReport message
+
+	@param recordingIDs []string - set of recording sessions ID which the segments belong to
+	@param segments []common.VideoSegment - set of video segments to report
+	@returns defined structure
+*/
+func NewRecordingSegmentReport(
+	recordingIDs []string, segments []common.VideoSegment,
+) RecordingSegmentReport {
+	return RecordingSegmentReport{
+		BaseBroadcast: BaseBroadcast{
+			BaseMessage:   BaseMessage{Type: ipcMessageTypeBroadcast},
+			BroadcastType: ipcBroadcastNewRecordingSegment,
+		}, RecordingIDs: recordingIDs, Segments: segments,
+	}
+}
+
 /*
 parseRawBroadcastMessage parse raw IPC broadcast message
 
@@ -316,6 +442,14 @@ func parseRawBroadcastMessage(rawMsg []byte) (interface{}, error) {
 	// Video Source Status Report
 	case ipcBroadcastVideoSourceStatus:
 		var broadcast VideoSourceStatusReport
+		if err := json.Unmarshal(rawMsg, &broadcast); err != nil {
+			return nil, err
+		}
+		return broadcast, nil
+
+	// New Recording Video Segments
+	case ipcBroadcastNewRecordingSegment:
+		var broadcast RecordingSegmentReport
 		if err := json.Unmarshal(rawMsg, &broadcast); err != nil {
 			return nil, err
 		}
