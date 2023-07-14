@@ -317,6 +317,66 @@ type PersistenceManager interface {
 			@param id string - session entry ID
 	*/
 	DeleteRecordingSession(ctxt context.Context, id string) error
+
+	// =====================================================================================
+	// Recording Session Video segments
+
+	/*
+		RegisterRecordingSegments record a set of new segments with a set of video recording sessions
+
+			@param ctxt context.Context - execution context
+			@param recordingIDs []string - video recording session IDs
+			@param segments []common.VideoSegment - video segments
+	*/
+	RegisterRecordingSegments(
+		ctxt context.Context, recordingIDs []string, segments []common.VideoSegment,
+	) error
+
+	/*
+		GetRecordingSegments get a video segment of a video recording session
+
+			@param ctxt context.Context - execution context
+			@param id string - segment ID
+			@returns the video segment
+	*/
+	GetRecordingSegment(ctxt context.Context, id string) (common.VideoSegment, error)
+
+	/*
+		GetRecordingSegmentByName get a video segment of a video recording session by name
+
+			@param ctxt context.Context - execution context
+			@param name string - video segment name
+			@returns the video segment
+	*/
+	GetRecordingSegmentByName(ctxt context.Context, name string) (common.VideoSegment, error)
+
+	/*
+		ListAllRecordingSegments fetch all video segments belonging to recordings
+
+			@param ctxt context.Context - execution context
+			@returns set of video segments
+	*/
+	ListAllRecordingSegments(ctxt context.Context) ([]common.VideoSegment, error)
+
+	/*
+		ListAllSegmentsOfRecording fetch all video segments belonging to one recording session
+
+			@param ctxt context.Context - execution context
+			@param recordingID string - video recording session ID
+			@returns set of video segments
+	*/
+	ListAllSegmentsOfRecording(
+		ctxt context.Context, recordingID string,
+	) ([]common.VideoSegment, error)
+
+	/*
+		PurgeUnassociatedRecordingSegments delete recording segments not attached to any
+		video recording sessions
+
+			@param ctxt context.Context - execution context
+			@returns set of segments deleted
+	*/
+	PurgeUnassociatedRecordingSegments(ctxt context.Context) ([]common.VideoSegment, error)
 }
 
 // persistenceManagerImpl implements PersistenceManager
@@ -347,6 +407,9 @@ func NewManager(dbDialector gorm.Dialector, logLevel logger.LogLevel) (Persisten
 		return nil, err
 	}
 	if err := db.AutoMigrate(&liveStreamVideoSegment{}); err != nil {
+		return nil, err
+	}
+	if err := db.AutoMigrate(&segmentToRecordingAssociation{}); err != nil {
 		return nil, err
 	}
 	if err := db.AutoMigrate(&recordingSession{}, &recordingVideoSegment{}); err != nil {
@@ -951,21 +1014,228 @@ func (m *persistenceManagerImpl) DeleteRecordingSession(ctxt context.Context, id
 		var recording recordingSession
 		tmp := tx.Where(
 			&recordingSession{Recording: common.Recording{ID: id}},
-		).Preload("Segments").First(&recording)
+		).First(&recording)
 		if tmp.Error != nil {
+			log.
+				WithError(tmp.Error).
+				WithFields(logTags).
+				WithField("recording", id).
+				Error("Unable to read video recording session")
 			return tmp.Error
 		}
 
-		// Delete the segments associated along with the recording
-		if len(recording.Segments) > 0 {
-			if tmp = tx.Select(recording.Segments).Delete(&recording); tmp.Error != nil {
-				return tmp.Error
-			}
-		} else if tmp = tx.Delete(&recording); tmp.Error != nil {
+		// Delete the association between this session and segments
+		tmp = tx.
+			Where(&segmentToRecordingAssociation{RecordingID: id}).
+			Delete(&segmentToRecordingAssociation{})
+		if tmp.Error != nil {
+			log.
+				WithError(tmp.Error).
+				WithFields(logTags).
+				WithField("recording", id).
+				Error("Unable to delete associations between recording session and its segments")
+			return tmp.Error
+		}
+
+		// Delete recording
+		if tmp = tx.Delete(&recording); tmp.Error != nil {
+			log.
+				WithError(tmp.Error).
+				WithFields(logTags).
+				WithField("recording", id).
+				Error("Unable to delete video recording session")
 			return tmp.Error
 		}
 
 		log.WithFields(logTags).WithField("recording", id).Info("Deleted recording session")
+
+		return nil
+	})
+}
+
+// =====================================================================================
+// Recording Session Video segments
+
+func (m *persistenceManagerImpl) RegisterRecordingSegments(
+	ctxt context.Context, recordingIDs []string, segments []common.VideoSegment,
+) error {
+	return m.db.Transaction(func(tx *gorm.DB) error {
+		logTags := m.GetLogTagsForContext(ctxt)
+
+		// Fetch the recording sessions first
+		var recordings []recordingSession
+		if tmp := tx.Where("id in ?", recordingIDs).Find(&recordings); tmp.Error != nil {
+			log.WithError(tmp.Error).WithFields(logTags).Error("Unable to find associated recordings")
+			return tmp.Error
+		}
+
+		// Form the segment entries
+		entries := []recordingVideoSegment{}
+		for _, oneSegment := range segments {
+			entries = append(entries, recordingVideoSegment{
+				VideoSegment: common.VideoSegment{
+					ID:       oneSegment.ID,
+					SourceID: oneSegment.SourceID,
+					Segment:  oneSegment.Segment,
+				},
+			})
+		}
+
+		// Form the segment to recording session associations
+		associations := []segmentToRecordingAssociation{}
+		for _, oneSegment := range segments {
+			for _, recordingID := range recordingIDs {
+				associations = append(associations, segmentToRecordingAssociation{
+					SegmentID: oneSegment.ID, RecordingID: recordingID,
+				})
+			}
+		}
+
+		// Install the segments first
+		if tmp := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&entries); tmp.Error != nil {
+			log.WithError(tmp.Error).WithFields(logTags).Error("Failed to create recording segments")
+			return tmp.Error
+		}
+
+		// Install the associations
+		tmp := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&associations)
+		if tmp.Error != nil {
+			log.
+				WithError(tmp.Error).
+				WithFields(logTags).
+				Error("Failed to create associations between recording sessions and its segments")
+			return tmp.Error
+		}
+
+		return nil
+	})
+}
+
+func (m *persistenceManagerImpl) GetRecordingSegment(
+	ctxt context.Context, id string,
+) (common.VideoSegment, error) {
+	var result common.VideoSegment
+	return result, m.db.Transaction(func(tx *gorm.DB) error {
+		var entry recordingVideoSegment
+		if tmp := tx.Where(
+			&recordingVideoSegment{VideoSegment: common.VideoSegment{ID: id}},
+		).First(&entry); tmp.Error != nil {
+			return tmp.Error
+		}
+		result = entry.VideoSegment
+		return nil
+	})
+}
+
+func (m *persistenceManagerImpl) GetRecordingSegmentByName(
+	ctxt context.Context, name string,
+) (common.VideoSegment, error) {
+	var result common.VideoSegment
+	return result, m.db.Transaction(func(tx *gorm.DB) error {
+		var entry recordingVideoSegment
+		if tmp := tx.Where(
+			&recordingVideoSegment{VideoSegment: common.VideoSegment{Segment: hls.Segment{Name: name}}},
+		).First(&entry); tmp.Error != nil {
+			return tmp.Error
+		}
+		result = entry.VideoSegment
+		return nil
+	})
+}
+
+func (m *persistenceManagerImpl) ListAllRecordingSegments(
+	ctxt context.Context,
+) ([]common.VideoSegment, error) {
+	var result []common.VideoSegment
+	return result, m.db.Transaction(func(tx *gorm.DB) error {
+		var entries []recordingVideoSegment
+		if tmp := tx.Find(&entries); tmp.Error != nil {
+			return tmp.Error
+		}
+		for _, entry := range entries {
+			result = append(result, entry.VideoSegment)
+		}
+		return nil
+	})
+}
+
+func (m *persistenceManagerImpl) ListAllSegmentsOfRecording(
+	ctxt context.Context, recordingID string,
+) ([]common.VideoSegment, error) {
+	var result []common.VideoSegment
+	return result, m.db.Transaction(func(tx *gorm.DB) error {
+		logTags := m.GetLogTagsForContext(ctxt)
+
+		// Get the associations first
+		var associations []segmentToRecordingAssociation
+		tmp := tx.Where(&segmentToRecordingAssociation{RecordingID: recordingID}).Find(&associations)
+		if tmp.Error != nil {
+			log.
+				WithError(tmp.Error).
+				WithFields(logTags).
+				WithField("recording", recordingID).
+				Error("Unable to select segments associated with video recording session")
+			return tmp.Error
+		}
+
+		if len(associations) > 0 {
+			segIDs := []string{}
+			for _, entry := range associations {
+				segIDs = append(segIDs, entry.SegmentID)
+			}
+
+			// Get the associated segments
+			var entries []recordingVideoSegment
+			if tmp := tx.Where("id in ?", segIDs).Find(&entries); tmp.Error != nil {
+				return tmp.Error
+			}
+			for _, entry := range entries {
+				result = append(result, entry.VideoSegment)
+			}
+		}
+		return nil
+	})
+}
+
+func (m *persistenceManagerImpl) PurgeUnassociatedRecordingSegments(
+	ctxt context.Context,
+) ([]common.VideoSegment, error) {
+	var result []common.VideoSegment
+	return result, m.db.Transaction(func(tx *gorm.DB) error {
+		logTags := m.GetLogTagsForContext(ctxt)
+
+		// Get the set of distinct segments IDs still with association
+		var associations []segmentToRecordingAssociation
+		tmp := tx.Distinct("segment_id").Find(&associations)
+		if tmp.Error != nil {
+			log.
+				WithError(tmp.Error).
+				WithFields(logTags).
+				Error("Failed to read distinct segment IDs from 'segment_to_recording_association'")
+			return tmp.Error
+		}
+
+		if len(associations) > 0 {
+			// Read and delete the segments which are not mentioned in association table
+			segIDs := []string{}
+			for _, entry := range associations {
+				segIDs = append(segIDs, entry.SegmentID)
+			}
+
+			var entries []recordingVideoSegment
+			tmp = tx.Clauses(clause.Returning{}).Not("id in ?", segIDs).Delete(&entries)
+			if tmp.Error != nil {
+				log.
+					WithError(tmp.Error).
+					WithFields(logTags).
+					Error("Failed to delete segments not mentioned in 'segment_to_recording_association'")
+				return tmp.Error
+			}
+
+			for _, entry := range entries {
+				result = append(result, entry.VideoSegment)
+			}
+		}
 
 		return nil
 	})

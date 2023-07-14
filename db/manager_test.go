@@ -3,6 +3,8 @@ package db_test
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/alwitt/livemix/hls"
 	"github.com/apex/log"
 	"github.com/google/uuid"
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm/logger"
 )
@@ -586,5 +589,183 @@ func TestDBManagerVideoRecording(t *testing.T) {
 		assert.Nil(err)
 		assert.Len(entries, 1)
 		assert.Equal(recordingID0, entries[0].ID)
+	}
+}
+
+func getUnitTestPSQLConfig(assert *assert.Assertions) (common.PostgresConfig, string) {
+	pgHost := os.Getenv("PGHOST")
+	assert.NotEmpty(pgHost)
+	pgPortRaw := os.Getenv("PGPORT")
+	assert.NotEmpty(pgPortRaw)
+	pgPort, err := strconv.Atoi(pgPortRaw)
+	assert.Nil(err)
+	pgDB := os.Getenv("PGDATABASE")
+	assert.NotEmpty(pgDB)
+	pgUser := os.Getenv("PGUSER")
+	assert.NotEmpty(pgUser)
+	pgPassword := os.Getenv("PGPASSWORD")
+	assert.NotEmpty(pgPassword)
+	return common.PostgresConfig{
+		Host: pgHost, Port: uint16(pgPort), Database: pgDB, User: pgUser,
+	}, pgPassword
+}
+
+func TestDBManagerRecordingSegments(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	sqlDialector, err := db.GetPostgresDialector(getUnitTestPSQLConfig(assert))
+	assert.Nil(err)
+
+	uut, err := db.NewManager(sqlDialector, logger.Info)
+	assert.Nil(err)
+
+	utCtxt := context.Background()
+
+	assert.Nil(uut.Ready(utCtxt))
+
+	testSourceID := uuid.NewString()
+
+	timestamp := time.Now().UTC()
+
+	// Prepare test sessions
+	sessionIDs := []string{}
+	for itr := 0; itr < 3; itr++ {
+		entryID, err := uut.DefineRecordingSession(utCtxt, testSourceID, nil, nil, timestamp)
+		assert.Nil(err)
+		sessionIDs = append(sessionIDs, entryID)
+	}
+
+	// Case 0: create segment associated with unknown recording
+	{
+		testSegment := common.VideoSegment{
+			ID:       ulid.Make().String(),
+			SourceID: testSourceID,
+			Segment: hls.Segment{
+				Name:    uuid.NewString(),
+				EndTime: timestamp,
+			},
+		}
+		assert.NotNil(
+			uut.RegisterRecordingSegments(
+				utCtxt, []string{uuid.NewString()}, []common.VideoSegment{testSegment},
+			),
+		)
+	}
+
+	// Create test segments
+	testSegments0 := []common.VideoSegment{}
+	for itr := 0; itr < 3; itr++ {
+		testSegments0 = append(
+			testSegments0, common.VideoSegment{
+				ID:       ulid.Make().String(),
+				SourceID: testSourceID,
+				Segment: hls.Segment{
+					Name:    uuid.NewString(),
+					EndTime: timestamp,
+				},
+			},
+		)
+	}
+
+	// Case 1: install segment with recording association
+	assert.Nil(uut.RegisterRecordingSegments(utCtxt, []string{sessionIDs[0]}, testSegments0[0:2]))
+	{
+		segments, err := uut.ListAllSegmentsOfRecording(utCtxt, sessionIDs[0])
+		assert.Nil(err)
+		assert.Len(segments, 2)
+		segByID := map[string]common.VideoSegment{}
+		for _, segment := range segments {
+			segByID[segment.ID] = segment
+		}
+		assert.Contains(segByID, testSegments0[0].ID)
+		assert.EqualValues(testSegments0[0].Name, segByID[testSegments0[0].ID].Name)
+		assert.Contains(segByID, testSegments0[1].ID)
+		assert.EqualValues(testSegments0[1].Name, segByID[testSegments0[1].ID].Name)
+	}
+
+	// Case 2: install the same segments, but with more associations
+	assert.Nil(uut.RegisterRecordingSegments(utCtxt, sessionIDs[0:2], testSegments0[0:2]))
+	{
+		segments, err := uut.ListAllSegmentsOfRecording(utCtxt, sessionIDs[0])
+		assert.Nil(err)
+		assert.Len(segments, 2)
+		segments, err = uut.ListAllSegmentsOfRecording(utCtxt, sessionIDs[1])
+		assert.Nil(err)
+		assert.Len(segments, 2)
+		segByID := map[string]common.VideoSegment{}
+		for _, segment := range segments {
+			segByID[segment.ID] = segment
+		}
+		assert.Contains(segByID, testSegments0[0].ID)
+		assert.Contains(segByID, testSegments0[1].ID)
+	}
+
+	// Case 3: install segment with recording association
+	assert.Nil(uut.RegisterRecordingSegments(utCtxt, sessionIDs[1:3], testSegments0[2:3]))
+	{
+		segments, err := uut.ListAllSegmentsOfRecording(utCtxt, sessionIDs[1])
+		assert.Nil(err)
+		assert.Len(segments, 3)
+		segByID := map[string]common.VideoSegment{}
+		for _, segment := range segments {
+			segByID[segment.ID] = segment
+		}
+		assert.Contains(segByID, testSegments0[0].ID)
+		assert.Contains(segByID, testSegments0[1].ID)
+		assert.Contains(segByID, testSegments0[2].ID)
+	}
+	{
+		segments, err := uut.ListAllSegmentsOfRecording(utCtxt, sessionIDs[2])
+		assert.Nil(err)
+		assert.Len(segments, 1)
+		assert.Equal(testSegments0[2].Name, segments[0].Name)
+	}
+
+	// Case 4: delete recording
+	assert.Nil(uut.DeleteRecordingSession(utCtxt, sessionIDs[0]))
+	assert.Nil(uut.DeleteRecordingSession(utCtxt, sessionIDs[1]))
+	{
+		segments, err := uut.ListAllSegmentsOfRecording(utCtxt, sessionIDs[0])
+		assert.Nil(err)
+		assert.Len(segments, 0)
+		segments, err = uut.ListAllSegmentsOfRecording(utCtxt, sessionIDs[1])
+		assert.Nil(err)
+		assert.Len(segments, 0)
+		segments, err = uut.ListAllSegmentsOfRecording(utCtxt, sessionIDs[2])
+		assert.Nil(err)
+		assert.Len(segments, 1)
+		segments, err = uut.ListAllRecordingSegments(utCtxt)
+		assert.Nil(err)
+		segByID := map[string]common.VideoSegment{}
+		for _, segment := range segments {
+			segByID[segment.ID] = segment
+		}
+		assert.Contains(segByID, testSegments0[0].ID)
+		assert.Contains(segByID, testSegments0[1].ID)
+		assert.Contains(segByID, testSegments0[2].ID)
+	}
+
+	// Case 5: purge the segments not associated with any recordings
+	{
+		deleted, err := uut.PurgeUnassociatedRecordingSegments(utCtxt)
+		assert.Nil(err)
+		segByID := map[string]common.VideoSegment{}
+		for _, segment := range deleted {
+			segByID[segment.ID] = segment
+		}
+		assert.Contains(segByID, testSegments0[0].ID)
+		assert.Contains(segByID, testSegments0[1].ID)
+	}
+	{
+		segments, err := uut.ListAllRecordingSegments(utCtxt)
+		assert.Nil(err)
+		segByID := map[string]common.VideoSegment{}
+		for _, segment := range segments {
+			segByID[segment.ID] = segment
+		}
+		assert.NotContains(segByID, testSegments0[0].ID)
+		assert.NotContains(segByID, testSegments0[1].ID)
+		assert.Contains(segByID, testSegments0[2].ID)
 	}
 }

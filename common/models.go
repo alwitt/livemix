@@ -30,7 +30,7 @@ type VideoSource struct {
 
 // VideoSegment a single HLS TS segment
 type VideoSegment struct {
-	ID string `json:"id" gorm:"column:id;primaryKey" validate:"required"`
+	ID string `json:"id" gorm:"column:id;primaryKey;unique" validate:"required"`
 	hls.Segment
 	// SourceID link to parent video source
 	SourceID  string    `json:"source" gorm:"column:source;not null;primaryKey" validate:"required"`
