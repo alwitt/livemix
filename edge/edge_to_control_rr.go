@@ -14,6 +14,15 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
+/*
+
+TODO FIXME:
+
+* Support inbound request to notify an edge node to start a recording
+* Support inbound request to notify an edge node to stop a recording
+
+*/
+
 // ControlRequestClient request-response client for edge to call control
 type ControlRequestClient interface {
 	/*
@@ -32,6 +41,14 @@ type ControlRequestClient interface {
 			@returns video source info
 	*/
 	GetVideoSourceInfo(ctxt context.Context, sourceName string) (common.VideoSource, error)
+
+	/*
+		StopAllAssociatedRecordings request all recording associated this this source is stopped
+
+			@param ctxt context.Context - execution context
+			@param sourceID string - video source ID
+	*/
+	StopAllAssociatedRecordings(ctxt context.Context, sourceID string) error
 }
 
 // controlRequestClientImpl implements ControlRequestClient
@@ -201,5 +218,67 @@ func (c *controlRequestClientImpl) GetVideoSourceInfo(
 			WithField("video-source", sourceName).
 			Error("Unable to parse video source info response")
 		return common.VideoSource{}, err
+	}
+}
+
+func (c *controlRequestClientImpl) StopAllAssociatedRecordings(
+	ctxt context.Context, sourceID string,
+) error {
+	logTags := c.GetLogTagsForContext(ctxt)
+
+	// Build the request
+	msg := ipc.NewCloseAllActiveRecordingRequest(sourceID)
+	msgStr, err := json.Marshal(&msg)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Failed to build stop all associated recording session request IPC msg")
+		return err
+	}
+
+	// Prepare the request parameters
+	callParam := goutils.RequestCallParam{
+		ExpectedResponsesCount: 1,
+		Blocking:               false,
+		Timeout:                c.requestTimeout,
+	}
+
+	// Make request
+	results, err := c.MakeRequest(
+		ctxt,
+		fmt.Sprintf("Stop all video source '%s' recording sessions", sourceID),
+		c.controlRRTargetID,
+		msgStr,
+		nil,
+		callParam,
+	)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", sourceID).
+			Error("Stop all recording session of source request failed")
+		return err
+	}
+
+	// Process the responses
+	answer := results[0]
+	switch reflect.TypeOf(answer) {
+	case reflect.TypeOf(ipc.GeneralResponse{}):
+		response := answer.(ipc.GeneralResponse)
+		if !response.Success {
+			return fmt.Errorf(response.ErrorMsg)
+		}
+		return nil
+
+	default:
+		err := fmt.Errorf("unknown supported response type '%s'", reflect.TypeOf(answer))
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", sourceID).
+			Error("Unable to parse stop all recording response")
+		return err
 	}
 }
