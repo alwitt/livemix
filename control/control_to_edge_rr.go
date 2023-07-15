@@ -14,6 +14,14 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
+/*
+
+TODO FIXME:
+
+* Support inbound request to close all recording associated with a video source
+
+*/
+
 // EdgeRequestClient request-response client for control to call edge
 type EdgeRequestClient interface {
 	/*
@@ -31,6 +39,28 @@ type EdgeRequestClient interface {
 			@param newState int - new streaming state
 	*/
 	ChangeVideoStreamingState(ctxt context.Context, source common.VideoSource, newState int) error
+
+	/*
+		StartRecordingSession start a new recording session on a edge node
+
+			@param ctxt context.Context - execution context
+			@param source common.VideoSource - video source entry
+			@param recording common.Recording - video recording session
+	*/
+	StartRecordingSession(
+		ctxt context.Context, source common.VideoSource, recording common.Recording,
+	) error
+
+	/*
+		StopRecordingSession stop a recording session on a edge node
+
+			@param ctxt context.Context - execution context
+			@param source common.VideoSource - video source entry
+			@param recordingID string - video recording session ID
+	*/
+	StopRecordingSession(
+		ctxt context.Context, source common.VideoSource, recordingID string, endTime time.Time,
+	) error
 }
 
 // edgeRequestClientImpl implements EdgeRequestClient
@@ -138,6 +168,52 @@ func (c *edgeRequestClientImpl) processInboundVideoSourceInfoRequest(
 // ======================================================================================
 // Outbound Request Processing
 
+// basicRequestResponse helper function to standardize the RR process where only
+// generic responses are expected from one responder
+func (c *edgeRequestClientImpl) basicRequestResponse(
+	ctxt context.Context, targetID, requestInstanceName string, msg []byte,
+) error {
+	logTags := c.GetLogTagsForContext(ctxt)
+
+	// Prepare the request parameters
+	callParam := goutils.RequestCallParam{
+		ExpectedResponsesCount: 1,
+		Blocking:               false,
+		Timeout:                c.requestTimeout,
+	}
+
+	// Make request
+	results, err := c.MakeRequest(ctxt, requestInstanceName, targetID, msg, nil, callParam)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("request-instance", requestInstanceName).
+			Error("Failed to make request")
+		return err
+	}
+
+	// Process the response
+	answer := results[0]
+	switch reflect.TypeOf(answer) {
+	case reflect.TypeOf(ipc.GeneralResponse{}):
+		response := answer.(ipc.GeneralResponse)
+		if !response.Success {
+			return fmt.Errorf(response.ErrorMsg)
+		}
+		return nil
+
+	default:
+		err := fmt.Errorf("unknown supported response type '%s'", reflect.TypeOf(answer))
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("request-instance", requestInstanceName).
+			Errorf("Unable to parse response")
+		return err
+	}
+}
+
 func (c *edgeRequestClientImpl) ChangeVideoStreamingState(
 	ctxt context.Context, source common.VideoSource, newState int,
 ) error {
@@ -161,48 +237,74 @@ func (c *edgeRequestClientImpl) ChangeVideoStreamingState(
 		return nil
 	}
 
-	// Prepare the request parameters
-	callParam := goutils.RequestCallParam{
-		ExpectedResponsesCount: 1,
-		Blocking:               false,
-		Timeout:                c.requestTimeout,
-	}
-
-	// Make request
-	results, err := c.MakeRequest(
+	return c.basicRequestResponse(
 		ctxt,
-		fmt.Sprintf("Change video source '%s' streaming state", source.Name),
 		*source.ReqRespTargetID,
+		fmt.Sprintf("Change video source '%s' streaming state", source.Name),
 		msgStr,
-		nil,
-		callParam,
 	)
+}
+
+func (c *edgeRequestClientImpl) StartRecordingSession(
+	ctxt context.Context, source common.VideoSource, recording common.Recording,
+) error {
+	logTags := c.GetLogTagsForContext(ctxt)
+
+	if source.ReqRespTargetID == nil {
+		err := fmt.Errorf("video source have not reported a request-response target ID")
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", source.ID).
+			Error("Unable to make request")
+		return err
+	}
+
+	// Build the request
+	msg := ipc.NewStartVideoRecordingSessionRequest(recording)
+	msgStr, err := json.Marshal(&msg)
 	if err != nil {
-		log.
-			WithError(err).
-			WithFields(logTags).
-			WithField("source-id", source.ID).
-			Error("Change streaming state request failed")
-		return err
-	}
-
-	// Process the response
-	answer := results[0]
-	switch reflect.TypeOf(answer) {
-	case reflect.TypeOf(ipc.GeneralResponse{}):
-		response := answer.(ipc.GeneralResponse)
-		if !response.Success {
-			return fmt.Errorf(response.ErrorMsg)
-		}
+		log.WithError(err).WithFields(logTags).Error("Fail to build start video recording IPC msg")
 		return nil
+	}
 
-	default:
-		err := fmt.Errorf("unknown supported response type '%s'", reflect.TypeOf(answer))
+	return c.basicRequestResponse(
+		ctxt,
+		*source.ReqRespTargetID,
+		fmt.Sprintf(
+			"Start recording session '%s' on video source '%s'", recording.ID, source.Name,
+		),
+		msgStr,
+	)
+}
+
+func (c *edgeRequestClientImpl) StopRecordingSession(
+	ctxt context.Context, source common.VideoSource, recordingID string, endTime time.Time,
+) error {
+	logTags := c.GetLogTagsForContext(ctxt)
+
+	if source.ReqRespTargetID == nil {
+		err := fmt.Errorf("video source have not reported a request-response target ID")
 		log.
 			WithError(err).
 			WithFields(logTags).
 			WithField("source-id", source.ID).
-			Errorf("Unable to parse streaming state change response")
+			Error("Unable to make request")
 		return err
 	}
+
+	// Build the request
+	msg := ipc.NewStopVideoRecordingSessionRequest(recordingID, endTime)
+	msgStr, err := json.Marshal(&msg)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Fail to build stop video recording IPC msg")
+		return nil
+	}
+
+	return c.basicRequestResponse(
+		ctxt,
+		*source.ReqRespTargetID,
+		fmt.Sprintf("Stop recording session '%s' on video source '%s'", recordingID, source.Name),
+		msgStr,
+	)
 }

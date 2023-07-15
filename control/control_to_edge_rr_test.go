@@ -210,3 +210,202 @@ func TestControlToEdgeChangeVideoStreamingState(t *testing.T) {
 	assert.NotNil(err)
 	assert.Equal("dummy error", err.Error())
 }
+
+func TestControlToEdgeStartRecording(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+	utCtxt := context.Background()
+
+	mockRRClient := mocks.NewRequestResponseClient(t)
+
+	// --------------------------------------------------------------------------
+	// Prepare mocks for object initialization
+
+	mockRRClient.On(
+		"SetInboundRequestHandler",
+		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("goutils.ReqRespMessageHandler"),
+	).Return(nil).Once()
+
+	controlName := "ut-controller"
+	uut, err := control.NewEdgeRequestClient(utCtxt, controlName, mockRRClient, time.Second)
+	assert.Nil(err)
+
+	// --------------------------------------------------------------------------
+	// Case 0: successful request
+
+	testRRTargetID := uuid.NewString()
+	testSource := common.VideoSource{ID: uuid.NewString(), ReqRespTargetID: &testRRTargetID}
+	testRecording := common.Recording{ID: uuid.NewString(), SourceID: testSource.ID}
+
+	testResponse := ipc.NewGeneralResponse(true, "")
+
+	// Prepare mocks for request
+	mockRRClient.On(
+		"Request",
+		mock.AnythingOfType("*context.emptyCtx"),
+		testRRTargetID,
+		mock.AnythingOfType("[]uint8"),
+		mock.AnythingOfType("map[string]string"),
+		mock.AnythingOfType("goutils.RequestCallParam"),
+	).Run(func(args mock.Arguments) {
+		requestRaw := args.Get(2).([]byte)
+		requestParam := args.Get(4).(goutils.RequestCallParam)
+
+		// Parse the request
+		p, err := ipc.ParseRawMessage(requestRaw)
+		assert.Nil(err)
+		assert.IsType(ipc.StartVideoRecordingRequest{}, p)
+		request, ok := p.(ipc.StartVideoRecordingRequest)
+		assert.True(ok)
+		assert.Equal(testRecording.ID, request.Session.ID)
+		assert.Equal(testRecording.SourceID, request.Session.SourceID)
+
+		// Send a response back
+		t, err := json.Marshal(&testResponse)
+		assert.Nil(err)
+		assert.Nil(requestParam.RespHandler(utCtxt, goutils.ReqRespMessage{Payload: t}))
+	}).Return(uuid.NewString(), nil).Once()
+
+	err = uut.StartRecordingSession(utCtxt, testSource, testRecording)
+	assert.Nil(err)
+
+	// --------------------------------------------------------------------------
+	// Case 1: failed request
+
+	testSource = common.VideoSource{ID: uuid.NewString(), ReqRespTargetID: &testRRTargetID}
+	testRecording = common.Recording{ID: uuid.NewString(), SourceID: testSource.ID}
+
+	testResponse = ipc.NewGeneralResponse(false, "dummy error")
+
+	// Prepare mocks for request
+	mockRRClient.On(
+		"Request",
+		mock.AnythingOfType("*context.emptyCtx"),
+		testRRTargetID,
+		mock.AnythingOfType("[]uint8"),
+		mock.AnythingOfType("map[string]string"),
+		mock.AnythingOfType("goutils.RequestCallParam"),
+	).Run(func(args mock.Arguments) {
+		requestRaw := args.Get(2).([]byte)
+		requestParam := args.Get(4).(goutils.RequestCallParam)
+
+		// Parse the request
+		p, err := ipc.ParseRawMessage(requestRaw)
+		assert.Nil(err)
+		assert.IsType(ipc.StartVideoRecordingRequest{}, p)
+		request, ok := p.(ipc.StartVideoRecordingRequest)
+		assert.True(ok)
+		assert.Equal(testRecording.ID, request.Session.ID)
+		assert.Equal(testRecording.SourceID, request.Session.SourceID)
+
+		// Send a response back
+		t, err := json.Marshal(&testResponse)
+		assert.Nil(err)
+		assert.Nil(requestParam.RespHandler(utCtxt, goutils.ReqRespMessage{Payload: t}))
+	}).Return(uuid.NewString(), nil).Once()
+
+	err = uut.StartRecordingSession(utCtxt, testSource, testRecording)
+	assert.NotNil(err)
+	assert.Equal("dummy error", err.Error())
+}
+
+func TestControlToEdgeStopRecording(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+	utCtxt := context.Background()
+
+	mockRRClient := mocks.NewRequestResponseClient(t)
+
+	// --------------------------------------------------------------------------
+	// Prepare mocks for object initialization
+
+	mockRRClient.On(
+		"SetInboundRequestHandler",
+		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("goutils.ReqRespMessageHandler"),
+	).Return(nil).Once()
+
+	controlName := "ut-controller"
+	uut, err := control.NewEdgeRequestClient(utCtxt, controlName, mockRRClient, time.Second)
+	assert.Nil(err)
+
+	// --------------------------------------------------------------------------
+	// Case 0: successful request
+
+	testRRTargetID := uuid.NewString()
+	testSource := common.VideoSource{ID: uuid.NewString(), ReqRespTargetID: &testRRTargetID}
+	testRecordingID := uuid.NewString()
+	currentTime := time.Now().UTC()
+
+	testResponse := ipc.NewGeneralResponse(true, "")
+
+	// Prepare mocks for request
+	mockRRClient.On(
+		"Request",
+		mock.AnythingOfType("*context.emptyCtx"),
+		testRRTargetID,
+		mock.AnythingOfType("[]uint8"),
+		mock.AnythingOfType("map[string]string"),
+		mock.AnythingOfType("goutils.RequestCallParam"),
+	).Run(func(args mock.Arguments) {
+		requestRaw := args.Get(2).([]byte)
+		requestParam := args.Get(4).(goutils.RequestCallParam)
+
+		// Parse the request
+		p, err := ipc.ParseRawMessage(requestRaw)
+		assert.Nil(err)
+		assert.IsType(ipc.StopVideoRecordingRequest{}, p)
+		request, ok := p.(ipc.StopVideoRecordingRequest)
+		assert.True(ok)
+		assert.Equal(testRecordingID, request.RecordingID)
+		assert.Equal(currentTime, request.EndTime)
+
+		// Send a response back
+		t, err := json.Marshal(&testResponse)
+		assert.Nil(err)
+		assert.Nil(requestParam.RespHandler(utCtxt, goutils.ReqRespMessage{Payload: t}))
+	}).Return(uuid.NewString(), nil).Once()
+
+	err = uut.StopRecordingSession(utCtxt, testSource, testRecordingID, currentTime)
+	assert.Nil(err)
+
+	// --------------------------------------------------------------------------
+	// Case 1: failed request
+
+	testSource = common.VideoSource{ID: uuid.NewString(), ReqRespTargetID: &testRRTargetID}
+	testRecordingID = uuid.NewString()
+
+	testResponse = ipc.NewGeneralResponse(false, "dummy error")
+
+	// Prepare mocks for request
+	mockRRClient.On(
+		"Request",
+		mock.AnythingOfType("*context.emptyCtx"),
+		testRRTargetID,
+		mock.AnythingOfType("[]uint8"),
+		mock.AnythingOfType("map[string]string"),
+		mock.AnythingOfType("goutils.RequestCallParam"),
+	).Run(func(args mock.Arguments) {
+		requestRaw := args.Get(2).([]byte)
+		requestParam := args.Get(4).(goutils.RequestCallParam)
+
+		// Parse the request
+		p, err := ipc.ParseRawMessage(requestRaw)
+		assert.Nil(err)
+		assert.IsType(ipc.StopVideoRecordingRequest{}, p)
+		request, ok := p.(ipc.StopVideoRecordingRequest)
+		assert.True(ok)
+		assert.Equal(testRecordingID, request.RecordingID)
+		assert.Equal(currentTime, request.EndTime)
+
+		// Send a response back
+		t, err := json.Marshal(&testResponse)
+		assert.Nil(err)
+		assert.Nil(requestParam.RespHandler(utCtxt, goutils.ReqRespMessage{Payload: t}))
+	}).Return(uuid.NewString(), nil).Once()
+
+	err = uut.StopRecordingSession(utCtxt, testSource, testRecordingID, currentTime)
+	assert.NotNil(err)
+	assert.Equal("dummy error", err.Error())
+}
