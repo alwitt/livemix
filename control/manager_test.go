@@ -151,3 +151,133 @@ func TestSystemManagerRequestStreamingStateChange(t *testing.T) {
 		assert.Nil(uut.ChangeVideoSourceStreamState(utCtxt, testSource.ID, 1))
 	}
 }
+
+func TestSystemManagerStopAllActiveRecordingsOfSource(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+	utCtxt := context.Background()
+
+	mockDB := mocks.NewPersistenceManager(t)
+	mockRR := mocks.NewEdgeRequestClient(t)
+
+	currentTime := time.Now().UTC()
+
+	uut, err := control.NewManager(mockDB, mockRR, time.Minute)
+	assert.Nil(err)
+
+	// Case 0: unknown video source
+	{
+		testSourceID := uuid.NewString()
+
+		// Prepare mock
+		mockDB.On(
+			"GetVideoSource",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSourceID,
+		).Return(common.VideoSource{}, fmt.Errorf("dummy error")).Once()
+
+		err := uut.StopAllActiveRecordingOfSource(utCtxt, testSourceID, currentTime)
+		assert.NotNil(err)
+		assert.Equal("dummy error", err.Error())
+	}
+
+	// Case 1: known video source, but failed to read sessions
+	{
+		testRRTargetID := uuid.NewString()
+		testSource := common.VideoSource{
+			ID: uuid.NewString(), ReqRespTargetID: &testRRTargetID, SourceLocalTime: currentTime,
+		}
+
+		// Prepare mock
+		mockDB.On(
+			"GetVideoSource",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource.ID,
+		).Return(testSource, nil).Once()
+		mockDB.On(
+			"ListRecordingSessionsOfSource",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource.ID,
+			true,
+		).Return(nil, fmt.Errorf("dummy error")).Once()
+
+		err := uut.StopAllActiveRecordingOfSource(utCtxt, testSource.ID, currentTime)
+		assert.NotNil(err)
+		assert.Equal("dummy error", err.Error())
+	}
+
+	// Case 2: known video source, but no active sessions
+	{
+		testRRTargetID := uuid.NewString()
+		testSource := common.VideoSource{
+			ID: uuid.NewString(), ReqRespTargetID: &testRRTargetID, SourceLocalTime: currentTime,
+		}
+
+		// Prepare mock
+		mockDB.On(
+			"GetVideoSource",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource.ID,
+		).Return(testSource, nil).Once()
+		mockDB.On(
+			"ListRecordingSessionsOfSource",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource.ID,
+			true,
+		).Return([]common.Recording{}, nil).Once()
+
+		err := uut.StopAllActiveRecordingOfSource(utCtxt, testSource.ID, currentTime)
+		assert.Nil(err)
+	}
+
+	// Case 3: normal operations, two active session, one failed on RPC call
+	{
+		testRRTargetID := uuid.NewString()
+		testSource := common.VideoSource{
+			ID: uuid.NewString(), ReqRespTargetID: &testRRTargetID, SourceLocalTime: currentTime,
+		}
+		testSessions := []common.Recording{{ID: uuid.NewString()}, {ID: uuid.NewString()}}
+
+		// Prepare mock
+		mockDB.On(
+			"GetVideoSource",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource.ID,
+		).Return(testSource, nil).Once()
+		mockDB.On(
+			"ListRecordingSessionsOfSource",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource.ID,
+			true,
+		).Return(testSessions, nil).Once()
+		mockDB.On(
+			"MarkEndOfRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSessions[0].ID,
+			currentTime,
+		).Return(nil).Once()
+		mockDB.On(
+			"MarkEndOfRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSessions[1].ID,
+			currentTime,
+		).Return(nil).Once()
+		mockRR.On(
+			"StopRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource,
+			testSessions[0].ID,
+			currentTime,
+		).Return(nil).Once()
+		mockRR.On(
+			"StopRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource,
+			testSessions[1].ID,
+			currentTime,
+		).Return(fmt.Errorf("dummy error")).Once()
+
+		err := uut.StopAllActiveRecordingOfSource(utCtxt, testSource.ID, currentTime)
+		assert.Nil(err)
+	}
+}

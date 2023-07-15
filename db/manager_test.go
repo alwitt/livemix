@@ -590,6 +590,20 @@ func TestDBManagerVideoRecording(t *testing.T) {
 		assert.Len(entries, 1)
 		assert.Equal(recordingID0, entries[0].ID)
 	}
+
+	// Case 8: query recording by alias
+	{
+		newAlias := uuid.NewString()
+		entry, err := uut.GetRecordingSession(utCtxt, recordingID0)
+		assert.Nil(err)
+		entry.Alias = &newAlias
+		assert.Nil(uut.UpdateRecordingSession(utCtxt, entry))
+
+		entry, err = uut.GetRecordingSessionByAlias(utCtxt, newAlias)
+		assert.Nil(err)
+		assert.Equal(recordingID0, entry.ID)
+		assert.Equal(newAlias, *entry.Alias)
+	}
 }
 
 func getUnitTestPSQLConfig(assert *assert.Assertions) (common.PostgresConfig, string) {

@@ -96,7 +96,102 @@ type SystemManager interface {
 	DeleteVideoSource(ctxt context.Context, id string) error
 
 	// =====================================================================================
+	// Video Recording Sessions
+
+	/*
+		DefineRecordingSession create new video recording session
+
+			@param ctxt context.Context - execution context
+			@param sourceID string - the video source ID
+			@param alias *string - an optional alias name for the recording session
+			@param description *string - an optional description of the recording session
+			@param startTime time.Time - when the recording session started
+			@returns new recording session ID
+	*/
+	DefineRecordingSession(
+		ctxt context.Context, sourceID string, alias, description *string, startTime time.Time,
+	) (string, error)
+
+	/*
+		GetRecordingSession retrieve a video recording session
+
+			@param ctxt context.Context - execution context
+			@param id string - session entry ID
+			@returns video recording entry
+	*/
+	GetRecordingSession(ctxt context.Context, id string) (common.Recording, error)
+
+	/*
+		GetRecordingSessionByAlias retrieve a video recording session by alias
+
+			@param ctxt context.Context - execution context
+			@param alias string - session entry alias
+			@returns video recording entry
+	*/
+	GetRecordingSessionByAlias(ctxt context.Context, alias string) (common.Recording, error)
+
+	/*
+		ListRecordingSessions list all video recording sessions
+
+			@param ctxt context.Context - execution context
+			@returns all recording sessions
+	*/
+	ListRecordingSessions(ctxt context.Context) ([]common.Recording, error)
+
+	/*
+		ListRecordingSessionsOfSource list all video recording sessions of a video source
+
+			@param ctxt context.Context - execution context
+			@param sourceID string - the video source ID
+			@param active bool - if 1, select only the active recording sessions; else return all.
+			@returns all recording sessions of a video source source
+	*/
+	ListRecordingSessionsOfSource(
+		ctxt context.Context, sourceID string, active bool,
+	) ([]common.Recording, error)
+
+	/*
+		MarkEndOfRecordingSession mark a video recording session as complete.
+
+			@param ctxt context.Context - execution context
+			@param id string - session entry ID
+			@param endTime time.Time - when the recording session ended
+	*/
+	MarkEndOfRecordingSession(ctxt context.Context, id string, endTime time.Time) error
+
+	/*
+		UpdateRecordingSession update properties of a video recording session.
+
+		Only the following can be updated:
+		  * Alias
+		  * Description
+
+			@param ctxt context.Context - execution context
+			@param newSetting common.Recording - new properties
+	*/
+	UpdateRecordingSession(ctxt context.Context, newSetting common.Recording) error
+
+	/*
+		DeleteRecordingSession delete a video recording session
+
+			@param ctxt context.Context - execution context
+			@param id string - session entry ID
+	*/
+	DeleteRecordingSession(ctxt context.Context, id string) error
+
+	/*
+		StopAllActiveRecordingOfSource stop any active recording sessions associated with a source
+
+			@param ctxt context.Context - execution context
+			@param id string - source entry ID
+			@param currentTime time.Time - current timestamp
+	*/
+	StopAllActiveRecordingOfSource(ctxt context.Context, id string, currentTime time.Time) error
+
+	// =====================================================================================
 	// Utilities
+
+	// TODO FIXME: support new recording segment broadcast
 
 	/*
 		ProcessBroadcastMsgs process received broadcast messages
@@ -166,6 +261,9 @@ func (m *systemManagerImpl) canRequestVideoSource(source common.VideoSource) err
 
 	return nil
 }
+
+// =====================================================================================
+// Video sources
 
 func (m *systemManagerImpl) Ready(ctxt context.Context) error {
 	return m.db.Ready(ctxt)
@@ -247,6 +345,268 @@ func (m *systemManagerImpl) ChangeVideoSourceStreamState(
 func (m *systemManagerImpl) DeleteVideoSource(ctxt context.Context, id string) error {
 	return m.db.DeleteVideoSource(ctxt, id)
 }
+
+// =====================================================================================
+// Video Recording Sessions
+
+// TODO FIXME: continue after refactoring the session management in the persistence layer
+
+func (m *systemManagerImpl) DefineRecordingSession(
+	ctxt context.Context, sourceID string, alias, description *string, startTime time.Time,
+) (string, error) {
+	logTags := m.GetLogTagsForContext(ctxt)
+
+	source, err := m.db.GetVideoSource(ctxt, sourceID)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", sourceID).
+			Error("Unable to find video source")
+		return "", err
+	}
+
+	// Verify that it is possible to make the request
+	if err := m.canRequestVideoSource(source); err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", sourceID).
+			Error("Can't make request to source")
+		return "", err
+	}
+
+	// Define new recording entry
+	recordingID, err := m.db.DefineRecordingSession(ctxt, sourceID, alias, description, startTime)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", sourceID).
+			Error("Unable to define new recording for source")
+		return "", err
+	}
+	recording, err := m.db.GetRecordingSession(ctxt, recordingID)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", sourceID).
+			WithField("recording", recordingID).
+			Error("Unable to retrieve newly defined recording entry")
+		return "", err
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("source-id", sourceID).
+		WithField("recording", recordingID).
+		Info("Defined new recording entry")
+
+	// Request the source to start this recording
+	if err := m.rrClient.StartRecordingSession(ctxt, source, recording); err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", sourceID).
+			WithField("recording", recordingID).
+			Error("Unable to command source to start recording")
+		return "", err
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("source-id", sourceID).
+		WithField("recording", recordingID).
+		Info("Commanded video source to start new recording")
+
+	return recordingID, nil
+}
+
+func (m *systemManagerImpl) GetRecordingSession(
+	ctxt context.Context, id string,
+) (common.Recording, error) {
+	return m.db.GetRecordingSession(ctxt, id)
+}
+
+func (m *systemManagerImpl) GetRecordingSessionByAlias(
+	ctxt context.Context, alias string,
+) (common.Recording, error) {
+	return m.db.GetRecordingSessionByAlias(ctxt, alias)
+}
+
+func (m *systemManagerImpl) ListRecordingSessions(ctxt context.Context) ([]common.Recording, error) {
+	return m.db.ListRecordingSessions(ctxt)
+}
+
+func (m *systemManagerImpl) ListRecordingSessionsOfSource(
+	ctxt context.Context, sourceID string, active bool,
+) ([]common.Recording, error) {
+	return m.db.ListRecordingSessionsOfSource(ctxt, sourceID, active)
+}
+
+func (m *systemManagerImpl) MarkEndOfRecordingSession(
+	ctxt context.Context, id string, endTime time.Time,
+) error {
+	logTags := m.GetLogTagsForContext(ctxt)
+
+	// Get the recording entry
+	recording, err := m.db.GetRecordingSession(ctxt, id)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("recording", id).
+			Error("Unable to retrieve recording entry")
+		return err
+	}
+
+	// Get the source supporting the recording
+	source, err := m.db.GetVideoSource(ctxt, recording.SourceID)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", recording.SourceID).
+			WithField("recording", id).
+			Error("Unable to retrieve video source entry")
+		return err
+	}
+
+	// Verify that it is possible to make the request
+	if err := m.canRequestVideoSource(source); err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", source.ID).
+			Error("Can't make request to source")
+		return err
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("source-id", source.ID).
+		WithField("recording", id).
+		Info("Requesting source to stop recording")
+
+	// Request the source to stop this recording
+	if err := m.rrClient.StopRecordingSession(ctxt, source, recording.ID, endTime); err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", source.ID).
+			WithField("recording", id).
+			Error("Unable to command source to stop recording")
+		return err
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("source-id", source.ID).
+		WithField("recording", id).
+		Info("Source has stop recording")
+
+	// Stop the recording entry
+	if err := m.db.MarkEndOfRecordingSession(ctxt, id, endTime); err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", source.ID).
+			WithField("recording", id).
+			Error("Failed to mark recording as ended")
+		return err
+	}
+
+	return nil
+}
+
+func (m *systemManagerImpl) UpdateRecordingSession(
+	ctxt context.Context, newSetting common.Recording,
+) error {
+	return m.db.UpdateRecordingSession(ctxt, newSetting)
+}
+
+func (m *systemManagerImpl) DeleteRecordingSession(ctxt context.Context, id string) error {
+	// Mark end of session first if running
+	return nil
+}
+
+func (m *systemManagerImpl) StopAllActiveRecordingOfSource(
+	ctxt context.Context, id string, currentTime time.Time,
+) error {
+	logTags := m.GetLogTagsForContext(ctxt)
+
+	source, err := m.db.GetVideoSource(ctxt, id)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", id).
+			Error("Unable to find video source")
+		return err
+	}
+
+	// Verify that it is possible to make the request
+	if err := m.canRequestVideoSource(source); err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", id).
+			Error("Can't make request to source")
+		return err
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("source-id", id).
+		Info("Stopping all associated recording sessions")
+
+	// Get the active recording session for a source
+	sessions, err := m.db.ListRecordingSessionsOfSource(ctxt, id, true)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", id).
+			Error("Unable to list active recording sessions of video source")
+		return err
+	}
+
+	if len(sessions) == 0 {
+		return nil
+	}
+
+	// Close all the sessions
+	for _, session := range sessions {
+		if err := m.db.MarkEndOfRecordingSession(ctxt, session.ID, currentTime); err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				WithField("source-id", id).
+				WithField("recording-session", session.ID).
+				Error("Failed to mark recording session as ended")
+		}
+		// Make the RPC request
+		if err := m.rrClient.StopRecordingSession(ctxt, source, session.ID, currentTime); err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				WithField("source-id", id).
+				WithField("recording-session", session.ID).
+				Error("Stop recording session request failed")
+		}
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("source-id", id).
+		Info("Stopped all associated recording sessions")
+
+	return nil
+}
+
+// =====================================================================================
+// Utilities
 
 func (m *systemManagerImpl) ProcessBroadcastMsgs(
 	ctxt context.Context, pubTimestamp time.Time, msg []byte, metadata map[string]string,

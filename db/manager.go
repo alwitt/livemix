@@ -270,6 +270,15 @@ type PersistenceManager interface {
 	GetRecordingSession(ctxt context.Context, id string) (common.Recording, error)
 
 	/*
+		GetRecordingSessionByAlias retrieve a video recording session by alias
+
+			@param ctxt context.Context - execution context
+			@param alias string - session entry alias
+			@returns video recording entry
+	*/
+	GetRecordingSessionByAlias(ctxt context.Context, alias string) (common.Recording, error)
+
+	/*
 		ListRecordingSessions list all video recording sessions
 
 			@param ctxt context.Context - execution context
@@ -920,6 +929,23 @@ func (m *persistenceManagerImpl) GetRecordingSession(
 		var entry recordingSession
 
 		tmp := tx.Where(&recordingSession{Recording: common.Recording{ID: id}}).First(&entry)
+		if tmp.Error != nil {
+			return tmp.Error
+		}
+
+		result = entry.Recording
+		return nil
+	})
+}
+
+func (m *persistenceManagerImpl) GetRecordingSessionByAlias(
+	ctxt context.Context, alias string,
+) (common.Recording, error) {
+	var result common.Recording
+	return result, m.db.Transaction(func(tx *gorm.DB) error {
+		var entry recordingSession
+
+		tmp := tx.Where(&recordingSession{Recording: common.Recording{Alias: &alias}}).First(&entry)
 		if tmp.Error != nil {
 			return tmp.Error
 		}

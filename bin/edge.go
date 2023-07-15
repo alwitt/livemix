@@ -21,6 +21,8 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+// TODO FIXME: refactor and clean up the node initialization codes
+
 // EdgeNode edge node monitoring one video source
 type EdgeNode struct {
 	nodeRuntimeCtxt       context.Context
