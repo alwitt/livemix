@@ -22,9 +22,12 @@ func TestSystemManagerProcessSourceStatusBroadcast(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	utCtxt := context.Background()
 
+	mockSQL := mocks.NewConnectionManager(t)
 	mockDB := mocks.NewPersistenceManager(t)
+	mockSQL.On("NewPersistanceManager").Return(mockDB)
+	mockDB.On("Close").Return()
 
-	uut, err := control.NewManager(mockDB, nil, time.Minute)
+	uut, err := control.NewManager(mockSQL, nil, time.Minute)
 	assert.Nil(err)
 
 	currentTime := time.Now().UTC()
@@ -54,12 +57,15 @@ func TestSystemManagerRequestStreamingStateChange(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	utCtxt := context.Background()
 
+	mockSQL := mocks.NewConnectionManager(t)
 	mockDB := mocks.NewPersistenceManager(t)
+	mockSQL.On("NewPersistanceManager").Return(mockDB)
+	mockDB.On("Close").Return()
 	mockRR := mocks.NewEdgeRequestClient(t)
 
 	currentTime := time.Now().UTC()
 
-	uut, err := control.NewManager(mockDB, mockRR, time.Minute)
+	uut, err := control.NewManager(mockSQL, mockRR, time.Minute)
 	assert.Nil(err)
 
 	// Case 0: video has not specified target RR ID
@@ -157,12 +163,15 @@ func TestSystemManagerStopAllActiveRecordingsOfSource(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	utCtxt := context.Background()
 
+	mockSQL := mocks.NewConnectionManager(t)
 	mockDB := mocks.NewPersistenceManager(t)
+	mockSQL.On("NewPersistanceManager").Return(mockDB)
+	mockDB.On("Close").Return()
 	mockRR := mocks.NewEdgeRequestClient(t)
 
 	currentTime := time.Now().UTC()
 
-	uut, err := control.NewManager(mockDB, mockRR, time.Minute)
+	uut, err := control.NewManager(mockSQL, mockRR, time.Minute)
 	assert.Nil(err)
 
 	// Case 0: unknown video source

@@ -237,21 +237,21 @@ func startControlNode(c *cli.Context) error {
 		// Shutdown the servers
 		for svrInstance, svr := range apiServers {
 			ctx, cancel := context.WithTimeout(runtimeCtxt, time.Second*10)
-			defer cancel()
 			if err := svr.Shutdown(ctx); err != nil {
 				log.
 					WithError(err).
 					WithFields(logTags).
 					Errorf("Failure during HTTP Server %s shutdown", svrInstance)
 			}
+			cancel()
 		}
 		// Perform other clean up tasks
 		for taskName, task := range cleanUpTasks {
 			ctx, cancel := context.WithTimeout(runtimeCtxt, time.Second*10)
-			defer cancel()
 			if err := task(ctx); err != nil {
 				log.WithError(err).WithFields(logTags).Errorf("Clean up task '%s' failed", taskName)
 			}
+			cancel()
 		}
 	}()
 
@@ -367,21 +367,21 @@ func startEdgeNode(c *cli.Context) error {
 		// Shutdown the servers
 		for svrInstance, svr := range apiServers {
 			ctx, cancel := context.WithTimeout(runtimeCtxt, time.Second*10)
-			defer cancel()
 			if err := svr.Shutdown(ctx); err != nil {
 				log.
 					WithError(err).
 					WithFields(logTags).
 					Errorf("Failure during HTTP Server %s shutdown", svrInstance)
 			}
+			cancel()
 		}
 		// Perform other clean up tasks
 		for taskName, task := range cleanUpTasks {
 			ctx, cancel := context.WithTimeout(runtimeCtxt, time.Second*10)
-			defer cancel()
 			if err := task(ctx); err != nil {
 				log.WithError(err).WithFields(logTags).Errorf("Clean up task '%s' failed", taskName)
 			}
+			cancel()
 		}
 	}()
 

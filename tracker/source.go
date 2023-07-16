@@ -41,7 +41,7 @@ type SourceHLSTracker interface {
 // sourceHLSTrackerImpl implements SourceHLSTracker
 type sourceHLSTrackerImpl struct {
 	goutils.Component
-	dbClient       db.PersistenceManager
+	dbConns        db.ConnectionManager
 	source         common.VideoSource
 	validator      *validator.Validate
 	trackingWindow time.Duration
@@ -55,12 +55,12 @@ segment, that segment is remembered for the duration of a tracking window, and f
 after that.
 
 	@param source common.VideoSource - the HLS source to tracker
-	@param dbClient db.Manager - DB access client
+	@param dbConns db.ConnectionManager - DB connection manager
 	@param trackingWindow time.Duration - see note
 	@returns new SourceHLSTracker
 */
 func NewSourceHLSTracker(
-	source common.VideoSource, dbClient db.PersistenceManager, trackingWindow time.Duration,
+	source common.VideoSource, dbConns db.ConnectionManager, trackingWindow time.Duration,
 ) (SourceHLSTracker, error) {
 	return &sourceHLSTrackerImpl{
 		Component: goutils.Component{
@@ -74,7 +74,7 @@ func NewSourceHLSTracker(
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
 		},
-		dbClient:       dbClient,
+		dbConns:        dbConns,
 		source:         source,
 		validator:      validator.New(),
 		trackingWindow: trackingWindow,
@@ -86,6 +86,9 @@ func (t *sourceHLSTrackerImpl) Update(
 ) ([]common.VideoSegment, error) {
 	logTags := t.GetLogTagsForContext(ctxt)
 
+	dbClient := t.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+
 	// Verify the playlist came from the expected source
 	if currentPlaylist.Name != t.source.Name {
 		return nil, fmt.Errorf(
@@ -94,7 +97,7 @@ func (t *sourceHLSTrackerImpl) Update(
 	}
 
 	// Get all currently known segments
-	allSegments, err := t.dbClient.ListAllLiveStreamSegments(ctxt, t.source.ID)
+	allSegments, err := dbClient.ListAllLiveStreamSegments(ctxt, t.source.ID)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to fetch associated segments")
 		return nil, err
@@ -113,14 +116,14 @@ func (t *sourceHLSTrackerImpl) Update(
 		newSegments = append(newSegments, newSegment)
 		log.WithFields(logTags).WithField("segment", newSegment.String()).Debug("Observed new segment")
 	}
-	newSegmentIDs, err := t.dbClient.BulkRegisterLiveStreamSegments(ctxt, t.source.ID, newSegments)
+	newSegmentIDs, err := dbClient.BulkRegisterLiveStreamSegments(ctxt, t.source.ID, newSegments)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to record new segments")
 		return nil, err
 	}
 
 	// Get all currently known segments again
-	allSegments, err = t.dbClient.ListAllLiveStreamSegments(ctxt, t.source.ID)
+	allSegments, err = dbClient.ListAllLiveStreamSegments(ctxt, t.source.ID)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to fetch associated segments")
 		return nil, err
@@ -136,7 +139,7 @@ func (t *sourceHLSTrackerImpl) Update(
 	// Remove segments older than the tracking window
 	oldestTime := timestamp.Add(-t.trackingWindow)
 	log.WithFields(logTags).Debugf("Dropping segments older than %s", oldestTime.String())
-	if err := t.dbClient.PurgeOldLiveStreamSegments(ctxt, oldestTime); err != nil {
+	if err := dbClient.PurgeOldLiveStreamSegments(ctxt, oldestTime); err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to drop expired segment")
 		return nil, err
 	}
@@ -145,5 +148,7 @@ func (t *sourceHLSTrackerImpl) Update(
 }
 
 func (t *sourceHLSTrackerImpl) GetTrackedSegments(ctxt context.Context) ([]common.VideoSegment, error) {
-	return t.dbClient.ListAllLiveStreamSegments(ctxt, t.source.ID)
+	dbClient := t.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+	return dbClient.ListAllLiveStreamSegments(ctxt, t.source.ID)
 }

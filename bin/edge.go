@@ -102,10 +102,9 @@ func DefineEdgeNode(
 
 	sqlDSN := db.GetSqliteDialector(config.Sqlite.DBFile)
 
-	// Define the persistence manager
-	dbManager, err := db.NewManager(sqlDSN, logger.Error)
+	dbConns, err := db.NewSQLConnection(sqlDSN, logger.Error)
 	if err != nil {
-		log.WithError(err).WithFields(logTags).Error("Failed to define persistence manager")
+		log.WithError(err).WithFields(logTags).Error("Failed to define SQL connection manager")
 		return theNode, err
 	}
 
@@ -156,20 +155,24 @@ func DefineEdgeNode(
 		return theNode, err
 	}
 	// Record this in persistence
-	if err := dbManager.RecordKnownVideoSource(
-		parentCtxt,
-		sourceInfo.ID,
-		sourceInfo.Name,
-		sourceInfo.TargetSegmentLength,
-		sourceInfo.PlaylistURI,
-		sourceInfo.Description,
-		sourceInfo.Streaming,
-	); err != nil {
-		log.
-			WithError(err).
-			WithFields(logTags).
-			Errorf("Recording video source '%s' failed", config.VideoSource.Name)
-		return theNode, err
+	{
+		dbClient := dbConns.NewPersistanceManager()
+		if err := dbClient.RecordKnownVideoSource(
+			parentCtxt,
+			sourceInfo.ID,
+			sourceInfo.Name,
+			sourceInfo.TargetSegmentLength,
+			sourceInfo.PlaylistURI,
+			sourceInfo.Description,
+			sourceInfo.Streaming,
+		); err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				Errorf("Recording video source '%s' failed", config.VideoSource.Name)
+			return theNode, err
+		}
+		dbClient.Close()
 	}
 
 	forwardStatusReports := func(
@@ -188,7 +191,7 @@ func DefineEdgeNode(
 		parentCtxt,
 		sourceInfo,
 		config.RRClient.InboudRequestTopic.Topic,
-		dbManager,
+		dbConns,
 		forwardStatusReports,
 		time.Second*time.Duration(config.VideoSource.StatusReportIncInSec),
 	)
@@ -235,7 +238,7 @@ func DefineEdgeNode(
 		return theNode, err
 	}
 	theNode.liveForwarder, err = forwarder.NewHTTPLiveStreamSegmentForwarder(
-		parentCtxt, dbManager, httpSegmentSender, config.Forwarder.Live.MaxInFlight,
+		parentCtxt, dbConns, httpSegmentSender, config.Forwarder.Live.MaxInFlight,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create live stream segment forwarder")
@@ -246,7 +249,7 @@ func DefineEdgeNode(
 	theNode.monitor, err = tracker.NewSourceHLSMonitor(
 		parentCtxt,
 		sourceInfo,
-		dbManager,
+		dbConns,
 		time.Second*time.Duration(config.MonitorConfig.TrackingWindowInSec),
 		cache,
 		theNode.segmentReader,
@@ -276,7 +279,7 @@ func DefineEdgeNode(
 	}
 
 	// Define live VOD playlist builder
-	plBuilder, err := vod.NewPlaylistBuilder(dbManager, config.VODConfig.LiveVODSegmentCount)
+	plBuilder, err := vod.NewPlaylistBuilder(dbConns, config.VODConfig.LiveVODSegmentCount)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create VOD playlist builder")
 		return theNode, err
@@ -284,7 +287,7 @@ func DefineEdgeNode(
 
 	// Define live VOD HTTP server
 	theNode.VODServer, err = api.BuildVODServer(
-		config.VODConfig.APIServer, dbManager, plBuilder, segmentMgnt,
+		config.VODConfig.APIServer, dbConns, plBuilder, segmentMgnt,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create live VOD HTTP server")

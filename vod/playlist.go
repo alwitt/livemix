@@ -35,7 +35,7 @@ type PlaylistBuilder interface {
 // playlistBuilderImpl implements PlaylistBuilder
 type playlistBuilderImpl struct {
 	goutils.Component
-	dbClient db.PersistenceManager
+	dbConns db.ConnectionManager
 	// liveStreamSegCount number of segments to include when building a live stream playlist
 	liveStreamSegCount int
 	referenceTime      time.Time
@@ -44,12 +44,12 @@ type playlistBuilderImpl struct {
 /*
 NewPlaylistBuilder define new playlist builder
 
-	@param dbClient db.PersistenceManager - DB access client
+	@param dbConns db.ConnectionManager - DB connection manager
 	@param liveStreamSegCount int - number of segments to include when building a live stream playlist
 	@returns new PlaylistBuilder
 */
 func NewPlaylistBuilder(
-	dbClient db.PersistenceManager, liveStreamSegCount int,
+	dbConns db.ConnectionManager, liveStreamSegCount int,
 ) (PlaylistBuilder, error) {
 	// Define the reference time from which all sequence numbers are built
 	referenceTime, err := GetReferenceTime()
@@ -63,7 +63,7 @@ func NewPlaylistBuilder(
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
 		},
-		dbClient:           dbClient,
+		dbConns:            dbConns,
 		liveStreamSegCount: liveStreamSegCount,
 		referenceTime:      referenceTime,
 	}, nil
@@ -74,8 +74,11 @@ func (b *playlistBuilderImpl) GetLiveStreamPlaylist(
 ) (hls.Playlist, error) {
 	logTags := b.GetLogTagsForContext(ctxt)
 
+	dbClient := b.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+
 	// Get the video segments for the source
-	segments, err := b.dbClient.GetLatestLiveStreamSegments(ctxt, target.ID, b.liveStreamSegCount)
+	segments, err := dbClient.GetLatestLiveStreamSegments(ctxt, target.ID, b.liveStreamSegCount)
 	if err != nil {
 		log.
 			WithError(err).

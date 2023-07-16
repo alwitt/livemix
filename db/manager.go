@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/alwitt/goutils"
@@ -13,7 +14,6 @@ import (
 	"github.com/oklog/ulid/v2"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"gorm.io/gorm/logger"
 )
 
 // PersistenceManager database access layer
@@ -24,6 +24,18 @@ type PersistenceManager interface {
 			@param ctxt context.Context - execution context
 	*/
 	Ready(ctxt context.Context) error
+
+	/*
+		Close commit or rollback SQL queries within associated with this instance
+	*/
+	Close()
+
+	/*
+		Error error which occurred during the transaction
+
+			@returns the error
+	*/
+	Error() error
 
 	// =====================================================================================
 	// Video sources
@@ -391,41 +403,21 @@ type PersistenceManager interface {
 // persistenceManagerImpl implements PersistenceManager
 type persistenceManagerImpl struct {
 	goutils.Component
+	conn      ConnectionManager
 	db        *gorm.DB
 	validator *validator.Validate
+	err       error
 }
 
 /*
-NewManager define a new DB access manager
+newManager define a new DB access manager
 
 	@param dbDialector gorm.Dialector - GORM SQL dialector
 	@param logLevel logger.LogLevel - SQL log level
 	@returns new manager
 */
-func NewManager(dbDialector gorm.Dialector, logLevel logger.LogLevel) (PersistenceManager, error) {
-	db, err := gorm.Open(dbDialector, &gorm.Config{
-		Logger:                 logger.Default.LogMode(logLevel),
-		SkipDefaultTransaction: true,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// Prepare the databases
-	if err := db.AutoMigrate(&videoSource{}); err != nil {
-		return nil, err
-	}
-	if err := db.AutoMigrate(&liveStreamVideoSegment{}); err != nil {
-		return nil, err
-	}
-	if err := db.AutoMigrate(&segmentToRecordingAssociation{}); err != nil {
-		return nil, err
-	}
-	if err := db.AutoMigrate(&recordingSession{}, &recordingVideoSegment{}); err != nil {
-		return nil, err
-	}
-
-	logTags := log.Fields{"module": "db", "component": "manager", "instance": dbDialector.Name()}
+func newManager(connections ConnectionManager) PersistenceManager {
+	logTags := log.Fields{"module": "db", "component": "manager"}
 	return &persistenceManagerImpl{
 		Component: goutils.Component{
 			LogTags: logTags,
@@ -433,9 +425,11 @@ func NewManager(dbDialector gorm.Dialector, logLevel logger.LogLevel) (Persisten
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
 		},
-		db:        db,
+		conn:      connections,
+		db:        connections.NewTransaction(),
 		validator: validator.New(),
-	}, nil
+		err:       nil,
+	}
 }
 
 func (m *persistenceManagerImpl) Ready(ctxt context.Context) error {
@@ -445,47 +439,64 @@ func (m *persistenceManagerImpl) Ready(ctxt context.Context) error {
 	})
 }
 
+func (m *persistenceManagerImpl) Close() {
+	if m.err != nil {
+		m.conn.Rollback(m.db)
+	} else {
+		m.conn.Commit(m.db)
+	}
+}
+
+func (m *persistenceManagerImpl) Error() error {
+	return m.err
+}
+
 // =====================================================================================
 // Video sources
 
 func (m *persistenceManagerImpl) DefineVideoSource(
 	ctxt context.Context, name string, segmentLen int, playlistURI, description *string,
 ) (string, error) {
-	newEntryID := ""
-	return newEntryID, m.db.Transaction(func(tx *gorm.DB) error {
-		logTags := m.GetLogTagsForContext(ctxt)
+	logTags := m.GetLogTagsForContext(ctxt)
 
-		// Prepare new entry
-		newEntryID = uuid.NewString()
-		newEntry := videoSource{
-			VideoSource: common.VideoSource{
-				ID:                  newEntryID,
-				Name:                name,
-				TargetSegmentLength: segmentLen,
-				Description:         description,
-				PlaylistURI:         playlistURI,
-				Streaming:           -1,
-			},
-		}
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return "", fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
 
-		// Verify data
-		if err := m.validator.Struct(&newEntry); err != nil {
-			return err
-		}
+	// Prepare new entry
+	newEntryID := uuid.NewString()
+	newEntry := videoSource{
+		VideoSource: common.VideoSource{
+			ID:                  newEntryID,
+			Name:                name,
+			TargetSegmentLength: segmentLen,
+			Description:         description,
+			PlaylistURI:         playlistURI,
+			Streaming:           -1,
+		},
+	}
 
-		// Insert entry
-		if tmp := tx.Create(&newEntry); tmp.Error != nil {
-			return tmp.Error
-		}
+	// Verify data
+	if err := m.validator.Struct(&newEntry); err != nil {
+		m.err = err
+		return newEntryID, err
+	}
 
-		log.
-			WithFields(logTags).
-			WithField("name", name).
-			WithField("playlist", playlistURI).
-			WithField("id", newEntryID).
-			Info("Defined new video source")
-		return nil
-	})
+	// Insert entry
+	if tmp := m.db.Create(&newEntry); tmp.Error != nil {
+		m.err = tmp.Error
+		return newEntryID, tmp.Error
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("name", name).
+		WithField("playlist", playlistURI).
+		WithField("id", newEntryID).
+		Info("Defined new video source")
+
+	return newEntryID, nil
 }
 
 func (m *persistenceManagerImpl) RecordKnownVideoSource(
@@ -495,152 +506,185 @@ func (m *persistenceManagerImpl) RecordKnownVideoSource(
 	playlistURI, description *string,
 	streaming int,
 ) error {
-	return m.db.Transaction(func(tx *gorm.DB) error {
-		logTags := m.GetLogTagsForContext(ctxt)
+	logTags := m.GetLogTagsForContext(ctxt)
 
-		// Prepare entry
-		entry := videoSource{
-			VideoSource: common.VideoSource{
-				ID:                  id,
-				Name:                name,
-				TargetSegmentLength: segmentLen,
-				Description:         description,
-				PlaylistURI:         playlistURI,
-				Streaming:           streaming,
-			},
-		}
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
 
-		// Insert entry
-		if tmp := tx.Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "id"}},
-			UpdateAll: true,
-		}).Create(&entry); tmp.Error != nil {
-			return tmp.Error
-		}
+	// Prepare entry
+	entry := videoSource{
+		VideoSource: common.VideoSource{
+			ID:                  id,
+			Name:                name,
+			TargetSegmentLength: segmentLen,
+			Description:         description,
+			PlaylistURI:         playlistURI,
+			Streaming:           streaming,
+		},
+	}
 
-		log.
-			WithFields(logTags).
-			WithField("name", name).
-			WithField("playlist", playlistURI).
-			WithField("id", id).
-			Info("Recorded known video source")
-		return nil
-	})
+	// Insert entry
+	if tmp := m.db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "id"}},
+		UpdateAll: true,
+	}).Create(&entry); tmp.Error != nil {
+		m.err = tmp.Error
+		return tmp.Error
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("name", name).
+		WithField("playlist", playlistURI).
+		WithField("id", id).
+		Info("Recorded known video source")
+	return nil
 }
 
 func (m *persistenceManagerImpl) GetVideoSource(
 	ctxt context.Context, id string,
 ) (common.VideoSource, error) {
-	var result common.VideoSource
-	return result, m.db.Transaction(func(tx *gorm.DB) error {
-		var entry videoSource
-		if tmp := tx.First(&entry, "id = ?", id); tmp.Error != nil {
-			return tmp.Error
-		}
-		result = entry.VideoSource
-		return nil
-	})
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return common.VideoSource{},
+			fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
+	var entry videoSource
+	if tmp := m.db.First(&entry, "id = ?", id); tmp.Error != nil {
+		m.err = tmp.Error
+		return common.VideoSource{}, tmp.Error
+	}
+	result := entry.VideoSource
+	return result, nil
 }
 
 func (m *persistenceManagerImpl) GetVideoSourceByName(
 	ctxt context.Context, name string,
 ) (common.VideoSource, error) {
-	var result common.VideoSource
-	return result, m.db.Transaction(func(tx *gorm.DB) error {
-		var entry videoSource
-		if tmp := tx.First(&entry, "name = ?", name); tmp.Error != nil {
-			return tmp.Error
-		}
-		result = entry.VideoSource
-		return nil
-	})
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return common.VideoSource{},
+			fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
+	var entry videoSource
+	if tmp := m.db.First(&entry, "name = ?", name); tmp.Error != nil {
+		m.err = tmp.Error
+		return common.VideoSource{}, tmp.Error
+	}
+	result := entry.VideoSource
+	return result, nil
 }
 
 func (m *persistenceManagerImpl) ListVideoSources(ctxt context.Context) ([]common.VideoSource, error) {
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return nil, fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
 	var result []common.VideoSource
-	return result, m.db.Transaction(func(tx *gorm.DB) error {
-		var entries []videoSource
-		if tmp := tx.Find(&entries); tmp.Error != nil {
-			return tmp.Error
-		}
-		for _, entry := range entries {
-			result = append(result, entry.VideoSource)
-		}
-		return nil
-	})
+	var entries []videoSource
+	if tmp := m.db.Find(&entries); tmp.Error != nil {
+		m.err = tmp.Error
+		return nil, tmp.Error
+	}
+	for _, entry := range entries {
+		result = append(result, entry.VideoSource)
+	}
+	return result, nil
 }
 
 func (m *persistenceManagerImpl) UpdateVideoSource(
 	ctxt context.Context, newSetting common.VideoSource,
 ) error {
-	return m.db.Transaction(func(tx *gorm.DB) error {
-		logTags := m.GetLogTagsForContext(ctxt)
-		if tmp := tx.Where(&videoSource{VideoSource: common.VideoSource{
-			ID: newSetting.ID,
-		}}).Updates(&videoSource{VideoSource: common.VideoSource{
-			Name:        newSetting.Name,
-			Description: newSetting.Description,
-			PlaylistURI: newSetting.PlaylistURI,
-		}}); tmp.Error != nil {
-			return tmp.Error
-		}
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
 
-		log.
-			WithFields(logTags).
-			WithField("name", newSetting.Name).
-			WithField("playlist", newSetting.PlaylistURI).
-			WithField("id", newSetting.ID).
-			Info("Updated video source")
+	logTags := m.GetLogTagsForContext(ctxt)
+	if tmp := m.db.Where(&videoSource{VideoSource: common.VideoSource{
+		ID: newSetting.ID,
+	}}).Updates(&videoSource{VideoSource: common.VideoSource{
+		Name:        newSetting.Name,
+		Description: newSetting.Description,
+		PlaylistURI: newSetting.PlaylistURI,
+	}}); tmp.Error != nil {
+		m.err = tmp.Error
+		return tmp.Error
+	}
 
-		return nil
-	})
+	log.
+		WithFields(logTags).
+		WithField("name", newSetting.Name).
+		WithField("playlist", newSetting.PlaylistURI).
+		WithField("id", newSetting.ID).
+		Info("Updated video source")
+
+	return nil
 }
 
 func (m *persistenceManagerImpl) ChangeVideoSourceStreamState(
 	ctxt context.Context, id string, streaming int,
 ) error {
-	return m.db.Transaction(func(tx *gorm.DB) error {
-		if tmp := tx.Where(&videoSource{VideoSource: common.VideoSource{
-			ID: id,
-		}}).Updates(&videoSource{VideoSource: common.VideoSource{
-			Streaming: streaming,
-		}}); tmp.Error != nil {
-			return tmp.Error
-		}
-		return nil
-	})
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
+	if tmp := m.db.Where(&videoSource{VideoSource: common.VideoSource{
+		ID: id,
+	}}).Updates(&videoSource{VideoSource: common.VideoSource{
+		Streaming: streaming,
+	}}); tmp.Error != nil {
+		m.err = tmp.Error
+		return tmp.Error
+	}
+	return nil
 }
 
 func (m *persistenceManagerImpl) RefreshVideoSourceStats(
 	ctxt context.Context, id string, reqRespTargetID string, sourceLocalTime time.Time,
 ) error {
-	return m.db.Transaction(func(tx *gorm.DB) error {
-		if tmp := tx.Where(&videoSource{VideoSource: common.VideoSource{
-			ID: id,
-		}}).Updates(&videoSource{VideoSource: common.VideoSource{
-			ReqRespTargetID: &reqRespTargetID,
-			SourceLocalTime: sourceLocalTime,
-		}}); tmp.Error != nil {
-			return tmp.Error
-		}
-		return nil
-	})
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
+	if tmp := m.db.Where(&videoSource{VideoSource: common.VideoSource{
+		ID: id,
+	}}).Updates(&videoSource{VideoSource: common.VideoSource{
+		ReqRespTargetID: &reqRespTargetID,
+		SourceLocalTime: sourceLocalTime,
+	}}); tmp.Error != nil {
+		m.err = tmp.Error
+		return tmp.Error
+	}
+	return nil
 }
 
 func (m *persistenceManagerImpl) DeleteVideoSource(ctxt context.Context, id string) error {
-	return m.db.Transaction(func(tx *gorm.DB) error {
-		logTags := m.GetLogTagsForContext(ctxt)
-		if tmp := tx.Where(
-			&liveStreamVideoSegment{VideoSegment: common.VideoSegment{SourceID: id}},
-		).Delete(&liveStreamVideoSegment{}); tmp.Error != nil {
-			return tmp.Error
-		}
-		if tmp := tx.Delete(&videoSource{VideoSource: common.VideoSource{ID: id}}); tmp.Error != nil {
-			return tmp.Error
-		}
-		log.WithFields(logTags).WithField("id", id).Info("Delete video source")
-		return nil
-	})
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
+	logTags := m.GetLogTagsForContext(ctxt)
+	if tmp := m.db.Where(
+		&liveStreamVideoSegment{VideoSegment: common.VideoSegment{SourceID: id}},
+	).Delete(&liveStreamVideoSegment{}); tmp.Error != nil {
+		m.err = tmp.Error
+		return tmp.Error
+	}
+	if tmp := m.db.Delete(&videoSource{VideoSource: common.VideoSource{ID: id}}); tmp.Error != nil {
+		m.err = tmp.Error
+		return tmp.Error
+	}
+	log.WithFields(logTags).WithField("id", id).Info("Delete video source")
+	return nil
 }
 
 // =====================================================================================
@@ -649,12 +693,57 @@ func (m *persistenceManagerImpl) DeleteVideoSource(ctxt context.Context, id stri
 func (m *persistenceManagerImpl) RegisterLiveStreamSegment(
 	ctxt context.Context, sourceID string, segment hls.Segment,
 ) (string, error) {
-	var newID string
-	return newID, m.db.Transaction(func(tx *gorm.DB) error {
-		logTags := m.GetLogTagsForContext(ctxt)
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return "", fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
 
-		newID = ulid.Make().String()
+	logTags := m.GetLogTagsForContext(ctxt)
 
+	newID := ulid.Make().String()
+
+	newEntry := liveStreamVideoSegment{
+		VideoSegment: common.VideoSegment{
+			ID:       newID,
+			Segment:  segment,
+			SourceID: sourceID,
+		},
+	}
+
+	// Verify data
+	if err := m.validator.Struct(&newEntry); err != nil {
+		m.err = err
+		return "", err
+	}
+
+	// Insert entry
+	if tmp := m.db.Create(&newEntry); tmp.Error != nil {
+		m.err = tmp.Error
+		return "", tmp.Error
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("source-id", sourceID).
+		WithField("id", newID).
+		WithField("segment", segment.String()).
+		Debug("Registered new video segment")
+	return newID, nil
+}
+
+func (m *persistenceManagerImpl) BulkRegisterLiveStreamSegments(
+	ctxt context.Context, sourceID string, segments []hls.Segment,
+) (map[string]string, error) {
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return nil, fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
+	newIDs := map[string]string{}
+	newEntries := []liveStreamVideoSegment{}
+	// Prepare entries for batch insert
+	for _, segment := range segments {
+		newID := ulid.Make().String()
 		newEntry := liveStreamVideoSegment{
 			VideoSegment: common.VideoSegment{
 				ID:       newID,
@@ -662,182 +751,179 @@ func (m *persistenceManagerImpl) RegisterLiveStreamSegment(
 				SourceID: sourceID,
 			},
 		}
-
 		// Verify data
 		if err := m.validator.Struct(&newEntry); err != nil {
-			return err
+			m.err = err
+			return nil, err
 		}
+		newEntries = append(newEntries, newEntry)
+		newIDs[segment.Name] = newID
+	}
 
-		// Insert entry
-		if tmp := tx.Create(&newEntry); tmp.Error != nil {
-			return tmp.Error
-		}
-
-		log.
-			WithFields(logTags).
-			WithField("source-id", sourceID).
-			WithField("id", newID).
-			WithField("segment", segment.String()).
-			Debug("Registered new video segment")
-		return nil
-	})
-}
-
-func (m *persistenceManagerImpl) BulkRegisterLiveStreamSegments(
-	ctxt context.Context, sourceID string, segments []hls.Segment,
-) (map[string]string, error) {
-	newIDs := map[string]string{}
-	return newIDs, m.db.Transaction(func(tx *gorm.DB) error {
-		newEntries := []liveStreamVideoSegment{}
-		// Prepare entries for batch insert
-		for _, segment := range segments {
-			newID := ulid.Make().String()
-			newEntry := liveStreamVideoSegment{
-				VideoSegment: common.VideoSegment{
-					ID:       newID,
-					Segment:  segment,
-					SourceID: sourceID,
-				},
-			}
-			// Verify data
-			if err := m.validator.Struct(&newEntry); err != nil {
-				return err
-			}
-			newEntries = append(newEntries, newEntry)
-			newIDs[segment.Name] = newID
-		}
-
-		// Insert entries
-		if tmp := tx.Create(&newEntries); tmp.Error != nil {
-			return tmp.Error
-		}
-
-		return nil
-	})
+	// Insert entries
+	if tmp := m.db.Create(&newEntries); tmp.Error != nil {
+		m.err = tmp.Error
+		return nil, tmp.Error
+	}
+	return newIDs, nil
 }
 
 func (m *persistenceManagerImpl) ListAllLiveStreamSegments(ctxt context.Context, sourceID string) (
 	[]common.VideoSegment, error,
 ) {
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return nil, fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
 	var results []common.VideoSegment
-	return results, m.db.Transaction(func(tx *gorm.DB) error {
-		var entries []liveStreamVideoSegment
-		if tmp := tx.Where(
-			&liveStreamVideoSegment{VideoSegment: common.VideoSegment{SourceID: sourceID}},
-		).Order("end_ts").Find(&entries); tmp.Error != nil {
-			return tmp.Error
-		}
-		for _, entry := range entries {
-			results = append(results, entry.VideoSegment)
-		}
-		return nil
-	})
+	var entries []liveStreamVideoSegment
+	if tmp := m.db.Where(
+		&liveStreamVideoSegment{VideoSegment: common.VideoSegment{SourceID: sourceID}},
+	).Order("end_ts").Find(&entries); tmp.Error != nil {
+		m.err = tmp.Error
+		return nil, tmp.Error
+	}
+	for _, entry := range entries {
+		results = append(results, entry.VideoSegment)
+	}
+	return results, nil
 }
 
 func (m *persistenceManagerImpl) GetLiveStreamSegment(
 	ctxt context.Context, id string,
 ) (common.VideoSegment, error) {
-	var result common.VideoSegment
-	return result, m.db.Transaction(func(tx *gorm.DB) error {
-		var entry liveStreamVideoSegment
-		if tmp := tx.Where(
-			&liveStreamVideoSegment{VideoSegment: common.VideoSegment{ID: id}},
-		).First(&entry); tmp.Error != nil {
-			return tmp.Error
-		}
-		result = entry.VideoSegment
-		return nil
-	})
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return common.VideoSegment{},
+			fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
+	var entry liveStreamVideoSegment
+	if tmp := m.db.Where(
+		&liveStreamVideoSegment{VideoSegment: common.VideoSegment{ID: id}},
+	).First(&entry); tmp.Error != nil {
+		m.err = tmp.Error
+		return common.VideoSegment{}, tmp.Error
+	}
+	result := entry.VideoSegment
+	return result, nil
 }
 
 func (m *persistenceManagerImpl) GetLiveStreamSegmentByName(
 	ctxt context.Context, name string,
 ) (common.VideoSegment, error) {
-	var result common.VideoSegment
-	return result, m.db.Transaction(func(tx *gorm.DB) error {
-		var entry liveStreamVideoSegment
-		if tmp := tx.Where(
-			&liveStreamVideoSegment{VideoSegment: common.VideoSegment{Segment: hls.Segment{Name: name}}},
-		).First(&entry); tmp.Error != nil {
-			return tmp.Error
-		}
-		result = entry.VideoSegment
-		return nil
-	})
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return common.VideoSegment{},
+			fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
+	var entry liveStreamVideoSegment
+	if tmp := m.db.Where(
+		&liveStreamVideoSegment{VideoSegment: common.VideoSegment{Segment: hls.Segment{Name: name}}},
+	).First(&entry); tmp.Error != nil {
+		m.err = tmp.Error
+		return common.VideoSegment{}, tmp.Error
+	}
+	result := entry.VideoSegment
+	return result, nil
 }
 
 func (m *persistenceManagerImpl) ListAllLiveStreamSegmentsAfterTime(
 	ctxt context.Context, sourceID string, timestamp time.Time,
 ) ([]common.VideoSegment, error) {
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return nil, fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
 	var results []common.VideoSegment
-	return results, m.db.Transaction(func(tx *gorm.DB) error {
-		var entries []liveStreamVideoSegment
-		if tmp := tx.
-			Where(&liveStreamVideoSegment{VideoSegment: common.VideoSegment{SourceID: sourceID}}).
-			Where("end_ts >= ?", timestamp).
-			Order("end_ts").
-			Find(&entries); tmp.Error != nil {
-			return tmp.Error
-		}
-		for _, entry := range entries {
-			results = append(results, entry.VideoSegment)
-		}
-		return nil
-	})
+	var entries []liveStreamVideoSegment
+	if tmp := m.db.
+		Where(&liveStreamVideoSegment{VideoSegment: common.VideoSegment{SourceID: sourceID}}).
+		Where("end_ts >= ?", timestamp).
+		Order("end_ts").
+		Find(&entries); tmp.Error != nil {
+		m.err = tmp.Error
+		return nil, tmp.Error
+	}
+	for _, entry := range entries {
+		results = append(results, entry.VideoSegment)
+	}
+	return results, nil
 }
 
 func (m *persistenceManagerImpl) GetLatestLiveStreamSegments(
 	ctxt context.Context, sourceID string, count int,
 ) ([]common.VideoSegment, error) {
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return nil, fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
 	var results []common.VideoSegment
-	return results, m.db.Transaction(func(tx *gorm.DB) error {
-		var entries []liveStreamVideoSegment
-		if tmp := tx.
-			Where(&liveStreamVideoSegment{VideoSegment: common.VideoSegment{SourceID: sourceID}}).
-			Order("end_ts desc").
-			Limit(count).
-			Find(&entries); tmp.Error != nil {
-			return tmp.Error
-		}
-		results = make([]common.VideoSegment, len(entries))
-		for idx, entry := range entries {
-			results[len(entries)-idx-1] = entry.VideoSegment
-		}
-		return nil
-	})
+	var entries []liveStreamVideoSegment
+	if tmp := m.db.
+		Where(&liveStreamVideoSegment{VideoSegment: common.VideoSegment{SourceID: sourceID}}).
+		Order("end_ts desc").
+		Limit(count).
+		Find(&entries); tmp.Error != nil {
+		m.err = tmp.Error
+		return nil, tmp.Error
+	}
+	results = make([]common.VideoSegment, len(entries))
+	for idx, entry := range entries {
+		results[len(entries)-idx-1] = entry.VideoSegment
+	}
+	return results, nil
 }
 
 func (m *persistenceManagerImpl) DeleteLiveStreamSegment(ctxt context.Context, id string) error {
-	return m.db.Transaction(func(tx *gorm.DB) error {
-		if tmp := tx.Where(
-			&liveStreamVideoSegment{VideoSegment: common.VideoSegment{ID: id}},
-		).Delete(&liveStreamVideoSegment{}); tmp.Error != nil {
-			return tmp.Error
-		}
-		return nil
-	})
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
+	if tmp := m.db.Where(
+		&liveStreamVideoSegment{VideoSegment: common.VideoSegment{ID: id}},
+	).Delete(&liveStreamVideoSegment{}); tmp.Error != nil {
+		m.err = tmp.Error
+		return tmp.Error
+	}
+	return nil
 }
 
-func (m *persistenceManagerImpl) BulkDeleteLiveStreamSegment(ctxt context.Context, ids []string) error {
-	return m.db.Transaction(func(tx *gorm.DB) error {
-		if tmp := tx.Where("id in ?", ids).Delete(&liveStreamVideoSegment{}); tmp.Error != nil {
-			return tmp.Error
-		}
-		return nil
-	})
+func (m *persistenceManagerImpl) BulkDeleteLiveStreamSegment(
+	ctxt context.Context, ids []string,
+) error {
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
+	if tmp := m.db.Where("id in ?", ids).Delete(&liveStreamVideoSegment{}); tmp.Error != nil {
+		m.err = tmp.Error
+		return tmp.Error
+	}
+	return nil
 }
 
 func (m *persistenceManagerImpl) PurgeOldLiveStreamSegments(
 	ctxt context.Context, timeLimit time.Time,
 ) error {
-	return m.db.Transaction(func(tx *gorm.DB) error {
-		if tmp := tx.
-			Where("end_ts < ?", timeLimit).
-			Delete(&liveStreamVideoSegment{}); tmp.Error != nil {
-			return tmp.Error
-		}
-		return nil
-	})
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
+	if tmp := m.db.
+		Where("end_ts < ?", timeLimit).
+		Delete(&liveStreamVideoSegment{}); tmp.Error != nil {
+		m.err = tmp.Error
+		return tmp.Error
+	}
+	return nil
 }
 
 // =====================================================================================
@@ -846,237 +932,275 @@ func (m *persistenceManagerImpl) PurgeOldLiveStreamSegments(
 func (m *persistenceManagerImpl) DefineRecordingSession(
 	ctxt context.Context, sourceID string, alias, description *string, startTime time.Time,
 ) (string, error) {
-	var newEntryID string
-	return newEntryID, m.db.Transaction(func(tx *gorm.DB) error {
-		logTags := m.GetLogTagsForContext(ctxt)
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return "", fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
 
-		// Prepare new entry
-		newEntryID = ulid.Make().String()
+	logTags := m.GetLogTagsForContext(ctxt)
 
-		newEntry := recordingSession{
-			Recording: common.Recording{
-				ID:          newEntryID,
-				Alias:       alias,
-				Description: description,
-				SourceID:    sourceID,
-				StartTime:   startTime,
-				Active:      1,
-			},
-		}
+	// Prepare new entry
+	newEntryID := ulid.Make().String()
 
-		// Verify data
-		if err := m.validator.Struct(&newEntry); err != nil {
-			return err
-		}
+	newEntry := recordingSession{
+		Recording: common.Recording{
+			ID:          newEntryID,
+			Alias:       alias,
+			Description: description,
+			SourceID:    sourceID,
+			StartTime:   startTime,
+			Active:      1,
+		},
+	}
 
-		// Insert entry
-		if tmp := tx.Create(&newEntry); tmp.Error != nil {
-			return tmp.Error
-		}
+	// Verify data
+	if err := m.validator.Struct(&newEntry); err != nil {
+		m.err = err
+		return "", err
+	}
 
-		log.
-			WithFields(logTags).
-			WithField("source-id", sourceID).
-			WithField("id", newEntryID).
-			Info("Registered new video recording session")
-		return nil
-	})
+	// Insert entry
+	if tmp := m.db.Create(&newEntry); tmp.Error != nil {
+		m.err = tmp.Error
+		return "", tmp.Error
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("source-id", sourceID).
+		WithField("id", newEntryID).
+		Info("Registered new video recording session")
+	return newEntryID, nil
 }
 
 func (m *persistenceManagerImpl) RecordKnownRecordingSession(
 	ctxt context.Context, entry common.Recording,
 ) error {
-	return m.db.Transaction(func(tx *gorm.DB) error {
-		logTags := m.GetLogTagsForContext(ctxt)
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
 
-		newEntry := recordingSession{
-			Recording: common.Recording{
-				ID:          entry.ID,
-				Alias:       entry.Alias,
-				Description: entry.Description,
-				SourceID:    entry.SourceID,
-				StartTime:   entry.StartTime,
-				EndTime:     entry.EndTime,
-				Active:      entry.Active,
-			},
-		}
+	logTags := m.GetLogTagsForContext(ctxt)
 
-		// Verify data
-		if err := m.validator.Struct(&newEntry); err != nil {
-			return err
-		}
+	newEntry := recordingSession{
+		Recording: common.Recording{
+			ID:          entry.ID,
+			Alias:       entry.Alias,
+			Description: entry.Description,
+			SourceID:    entry.SourceID,
+			StartTime:   entry.StartTime,
+			EndTime:     entry.EndTime,
+			Active:      entry.Active,
+		},
+	}
 
-		// Insert entry
-		if tmp := tx.Create(&newEntry); tmp.Error != nil {
-			return tmp.Error
-		}
+	// Verify data
+	if err := m.validator.Struct(&newEntry); err != nil {
+		m.err = err
+		return err
+	}
 
-		log.
-			WithFields(logTags).
-			WithField("source-id", entry.SourceID).
-			WithField("id", entry.ID).
-			Info("Registered pre-existing video recording session")
+	// Insert entry
+	if tmp := m.db.Create(&newEntry); tmp.Error != nil {
+		m.err = tmp.Error
+		return tmp.Error
+	}
 
-		return nil
-	})
+	log.
+		WithFields(logTags).
+		WithField("source-id", entry.SourceID).
+		WithField("id", entry.ID).
+		Info("Registered pre-existing video recording session")
+
+	return nil
 }
 
 func (m *persistenceManagerImpl) GetRecordingSession(
 	ctxt context.Context, id string,
 ) (common.Recording, error) {
-	var result common.Recording
-	return result, m.db.Transaction(func(tx *gorm.DB) error {
-		var entry recordingSession
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return common.Recording{},
+			fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
 
-		tmp := tx.Where(&recordingSession{Recording: common.Recording{ID: id}}).First(&entry)
-		if tmp.Error != nil {
-			return tmp.Error
-		}
+	var entry recordingSession
 
-		result = entry.Recording
-		return nil
-	})
+	tmp := m.db.Where(&recordingSession{Recording: common.Recording{ID: id}}).First(&entry)
+	if tmp.Error != nil {
+		m.err = tmp.Error
+		return common.Recording{}, tmp.Error
+	}
+
+	result := entry.Recording
+	return result, nil
 }
 
 func (m *persistenceManagerImpl) GetRecordingSessionByAlias(
 	ctxt context.Context, alias string,
 ) (common.Recording, error) {
-	var result common.Recording
-	return result, m.db.Transaction(func(tx *gorm.DB) error {
-		var entry recordingSession
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return common.Recording{},
+			fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
 
-		tmp := tx.Where(&recordingSession{Recording: common.Recording{Alias: &alias}}).First(&entry)
-		if tmp.Error != nil {
-			return tmp.Error
-		}
+	var entry recordingSession
+	tmp := m.db.Where(&recordingSession{Recording: common.Recording{Alias: &alias}}).First(&entry)
+	if tmp.Error != nil {
+		m.err = tmp.Error
+		return common.Recording{}, tmp.Error
+	}
 
-		result = entry.Recording
-		return nil
-	})
+	result := entry.Recording
+	return result, nil
 }
 
 func (m *persistenceManagerImpl) ListRecordingSessions(
 	ctxt context.Context,
 ) ([]common.Recording, error) {
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return nil, fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
 	var results []common.Recording
-	return results, m.db.Transaction(func(tx *gorm.DB) error {
-		var entries []recordingSession
+	var entries []recordingSession
 
-		if tmp := tx.Find(&entries); tmp.Error != nil {
-			return tmp.Error
-		}
+	if tmp := m.db.Find(&entries); tmp.Error != nil {
+		m.err = tmp.Error
+		return nil, tmp.Error
+	}
 
-		for _, entry := range entries {
-			results = append(results, entry.Recording)
-		}
-		return nil
-	})
+	for _, entry := range entries {
+		results = append(results, entry.Recording)
+	}
+	return results, nil
 }
 
 func (m *persistenceManagerImpl) ListRecordingSessionsOfSource(
 	ctxt context.Context, sourceID string, active bool,
 ) ([]common.Recording, error) {
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return nil, fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
 	var results []common.Recording
-	return results, m.db.Transaction(func(tx *gorm.DB) error {
-		var entries []recordingSession
+	var entries []recordingSession
 
-		query := tx.Where(&recordingSession{Recording: common.Recording{SourceID: sourceID}})
-		if active {
-			query = query.Where(&recordingSession{Recording: common.Recording{Active: 1}})
-		}
-		if tmp := query.Find(&entries); tmp.Error != nil {
-			return tmp.Error
-		}
+	query := m.db.Where(&recordingSession{Recording: common.Recording{SourceID: sourceID}})
+	if active {
+		query = query.Where(&recordingSession{Recording: common.Recording{Active: 1}})
+	}
+	if tmp := query.Find(&entries); tmp.Error != nil {
+		m.err = tmp.Error
+		return nil, tmp.Error
+	}
 
-		for _, entry := range entries {
-			results = append(results, entry.Recording)
-		}
-		return nil
-	})
+	for _, entry := range entries {
+		results = append(results, entry.Recording)
+	}
+	return results, nil
 }
 
 func (m *persistenceManagerImpl) MarkEndOfRecordingSession(
 	ctxt context.Context, id string, endTime time.Time,
 ) error {
-	return m.db.Transaction(func(tx *gorm.DB) error {
-		logTags := m.GetLogTagsForContext(ctxt)
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
 
-		if tmp := tx.Where(
-			&recordingSession{Recording: common.Recording{ID: id}},
-		).Updates(
-			&recordingSession{Recording: common.Recording{Active: -1, EndTime: endTime}},
-		); tmp.Error != nil {
-			return tmp.Error
-		}
+	logTags := m.GetLogTagsForContext(ctxt)
 
-		log.WithFields(logTags).WithField("recording", id).Info("Marking recording as complete")
+	if tmp := m.db.Where(
+		&recordingSession{Recording: common.Recording{ID: id}},
+	).Updates(
+		&recordingSession{Recording: common.Recording{Active: -1, EndTime: endTime}},
+	); tmp.Error != nil {
+		m.err = tmp.Error
+		return tmp.Error
+	}
 
-		return nil
-	})
+	log.WithFields(logTags).WithField("recording", id).Info("Marking recording as complete")
+
+	return nil
 }
 
 func (m *persistenceManagerImpl) UpdateRecordingSession(
 	ctxt context.Context, newSetting common.Recording,
 ) error {
-	return m.db.Transaction(func(tx *gorm.DB) error {
-		if tmp := tx.Where(
-			&recordingSession{Recording: common.Recording{ID: newSetting.ID}},
-		).Updates(
-			&recordingSession{Recording: common.Recording{
-				Alias: newSetting.Alias, Description: newSetting.Description,
-			}},
-		); tmp.Error != nil {
-			return tmp.Error
-		}
-		return nil
-	})
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
+	if tmp := m.db.Where(
+		&recordingSession{Recording: common.Recording{ID: newSetting.ID}},
+	).Updates(
+		&recordingSession{Recording: common.Recording{
+			Alias: newSetting.Alias, Description: newSetting.Description,
+		}},
+	); tmp.Error != nil {
+		m.err = tmp.Error
+		return tmp.Error
+	}
+	return nil
 }
 
 func (m *persistenceManagerImpl) DeleteRecordingSession(ctxt context.Context, id string) error {
-	return m.db.Transaction(func(tx *gorm.DB) error {
-		logTags := m.GetLogTagsForContext(ctxt)
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
 
-		// Get the recording entry first
-		var recording recordingSession
-		tmp := tx.Where(
-			&recordingSession{Recording: common.Recording{ID: id}},
-		).First(&recording)
-		if tmp.Error != nil {
-			log.
-				WithError(tmp.Error).
-				WithFields(logTags).
-				WithField("recording", id).
-				Error("Unable to read video recording session")
-			return tmp.Error
-		}
+	logTags := m.GetLogTagsForContext(ctxt)
 
-		// Delete the association between this session and segments
-		tmp = tx.
-			Where(&segmentToRecordingAssociation{RecordingID: id}).
-			Delete(&segmentToRecordingAssociation{})
-		if tmp.Error != nil {
-			log.
-				WithError(tmp.Error).
-				WithFields(logTags).
-				WithField("recording", id).
-				Error("Unable to delete associations between recording session and its segments")
-			return tmp.Error
-		}
+	// Get the recording entry first
+	var recording recordingSession
+	tmp := m.db.Where(
+		&recordingSession{Recording: common.Recording{ID: id}},
+	).First(&recording)
+	if tmp.Error != nil {
+		log.
+			WithError(tmp.Error).
+			WithFields(logTags).
+			WithField("recording", id).
+			Error("Unable to read video recording session")
+		m.err = tmp.Error
+		return tmp.Error
+	}
 
-		// Delete recording
-		if tmp = tx.Delete(&recording); tmp.Error != nil {
-			log.
-				WithError(tmp.Error).
-				WithFields(logTags).
-				WithField("recording", id).
-				Error("Unable to delete video recording session")
-			return tmp.Error
-		}
+	// Delete the association between this session and segments
+	tmp = m.db.
+		Where(&segmentToRecordingAssociation{RecordingID: id}).
+		Delete(&segmentToRecordingAssociation{})
+	if tmp.Error != nil {
+		log.
+			WithError(tmp.Error).
+			WithFields(logTags).
+			WithField("recording", id).
+			Error("Unable to delete associations between recording session and its segments")
+		m.err = tmp.Error
+		return tmp.Error
+	}
 
-		log.WithFields(logTags).WithField("recording", id).Info("Deleted recording session")
+	// Delete recording
+	if tmp = m.db.Delete(&recording); tmp.Error != nil {
+		log.
+			WithError(tmp.Error).
+			WithFields(logTags).
+			WithField("recording", id).
+			Error("Unable to delete video recording session")
+		m.err = tmp.Error
+		return tmp.Error
+	}
 
-		return nil
-	})
+	log.WithFields(logTags).WithField("recording", id).Info("Deleted recording session")
+
+	return nil
 }
 
 // =====================================================================================
@@ -1085,184 +1209,211 @@ func (m *persistenceManagerImpl) DeleteRecordingSession(ctxt context.Context, id
 func (m *persistenceManagerImpl) RegisterRecordingSegments(
 	ctxt context.Context, recordingIDs []string, segments []common.VideoSegment,
 ) error {
-	return m.db.Transaction(func(tx *gorm.DB) error {
-		logTags := m.GetLogTagsForContext(ctxt)
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
 
-		// Fetch the recording sessions first
-		var recordings []recordingSession
-		if tmp := tx.Where("id in ?", recordingIDs).Find(&recordings); tmp.Error != nil {
-			log.WithError(tmp.Error).WithFields(logTags).Error("Unable to find associated recordings")
-			return tmp.Error
-		}
+	logTags := m.GetLogTagsForContext(ctxt)
 
-		// Form the segment entries
-		entries := []recordingVideoSegment{}
-		for _, oneSegment := range segments {
-			entries = append(entries, recordingVideoSegment{
-				VideoSegment: common.VideoSegment{
-					ID:       oneSegment.ID,
-					SourceID: oneSegment.SourceID,
-					Segment:  oneSegment.Segment,
-				},
+	// Fetch the recording sessions first
+	var recordings []recordingSession
+	if tmp := m.db.Where("id in ?", recordingIDs).Find(&recordings); tmp.Error != nil {
+		log.WithError(tmp.Error).WithFields(logTags).Error("Unable to find associated recordings")
+		m.err = tmp.Error
+		return tmp.Error
+	}
+
+	// Form the segment entries
+	entries := []recordingVideoSegment{}
+	for _, oneSegment := range segments {
+		entries = append(entries, recordingVideoSegment{
+			VideoSegment: common.VideoSegment{
+				ID:       oneSegment.ID,
+				SourceID: oneSegment.SourceID,
+				Segment:  oneSegment.Segment,
+			},
+		})
+	}
+
+	// Form the segment to recording session associations
+	associations := []segmentToRecordingAssociation{}
+	for _, oneSegment := range segments {
+		for _, recordingID := range recordingIDs {
+			associations = append(associations, segmentToRecordingAssociation{
+				SegmentID: oneSegment.ID, RecordingID: recordingID,
 			})
 		}
+	}
 
-		// Form the segment to recording session associations
-		associations := []segmentToRecordingAssociation{}
-		for _, oneSegment := range segments {
-			for _, recordingID := range recordingIDs {
-				associations = append(associations, segmentToRecordingAssociation{
-					SegmentID: oneSegment.ID, RecordingID: recordingID,
-				})
-			}
-		}
+	// Install the segments first
+	if tmp := m.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&entries); tmp.Error != nil {
+		log.WithError(tmp.Error).WithFields(logTags).Error("Failed to create recording segments")
+		m.err = tmp.Error
+		return tmp.Error
+	}
 
-		// Install the segments first
-		if tmp := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&entries); tmp.Error != nil {
-			log.WithError(tmp.Error).WithFields(logTags).Error("Failed to create recording segments")
-			return tmp.Error
-		}
+	// Install the associations
+	tmp := m.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&associations)
+	if tmp.Error != nil {
+		log.
+			WithError(tmp.Error).
+			WithFields(logTags).
+			Error("Failed to create associations between recording sessions and its segments")
+		m.err = tmp.Error
+		return tmp.Error
+	}
 
-		// Install the associations
-		tmp := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&associations)
-		if tmp.Error != nil {
-			log.
-				WithError(tmp.Error).
-				WithFields(logTags).
-				Error("Failed to create associations between recording sessions and its segments")
-			return tmp.Error
-		}
-
-		return nil
-	})
+	return nil
 }
 
 func (m *persistenceManagerImpl) GetRecordingSegment(
 	ctxt context.Context, id string,
 ) (common.VideoSegment, error) {
-	var result common.VideoSegment
-	return result, m.db.Transaction(func(tx *gorm.DB) error {
-		var entry recordingVideoSegment
-		if tmp := tx.Where(
-			&recordingVideoSegment{VideoSegment: common.VideoSegment{ID: id}},
-		).First(&entry); tmp.Error != nil {
-			return tmp.Error
-		}
-		result = entry.VideoSegment
-		return nil
-	})
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return common.VideoSegment{},
+			fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
+	var entry recordingVideoSegment
+	if tmp := m.db.Where(
+		&recordingVideoSegment{VideoSegment: common.VideoSegment{ID: id}},
+	).First(&entry); tmp.Error != nil {
+		m.err = tmp.Error
+		return common.VideoSegment{}, tmp.Error
+	}
+	result := entry.VideoSegment
+	return result, nil
 }
 
 func (m *persistenceManagerImpl) GetRecordingSegmentByName(
 	ctxt context.Context, name string,
 ) (common.VideoSegment, error) {
-	var result common.VideoSegment
-	return result, m.db.Transaction(func(tx *gorm.DB) error {
-		var entry recordingVideoSegment
-		if tmp := tx.Where(
-			&recordingVideoSegment{VideoSegment: common.VideoSegment{Segment: hls.Segment{Name: name}}},
-		).First(&entry); tmp.Error != nil {
-			return tmp.Error
-		}
-		result = entry.VideoSegment
-		return nil
-	})
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return common.VideoSegment{},
+			fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
+	var entry recordingVideoSegment
+	if tmp := m.db.Where(
+		&recordingVideoSegment{VideoSegment: common.VideoSegment{Segment: hls.Segment{Name: name}}},
+	).First(&entry); tmp.Error != nil {
+		m.err = tmp.Error
+		return common.VideoSegment{}, tmp.Error
+	}
+	result := entry.VideoSegment
+	return result, nil
 }
 
 func (m *persistenceManagerImpl) ListAllRecordingSegments(
 	ctxt context.Context,
 ) ([]common.VideoSegment, error) {
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return nil, fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
 	var result []common.VideoSegment
-	return result, m.db.Transaction(func(tx *gorm.DB) error {
-		var entries []recordingVideoSegment
-		if tmp := tx.Find(&entries); tmp.Error != nil {
-			return tmp.Error
-		}
-		for _, entry := range entries {
-			result = append(result, entry.VideoSegment)
-		}
-		return nil
-	})
+	var entries []recordingVideoSegment
+	if tmp := m.db.Find(&entries); tmp.Error != nil {
+		m.err = tmp.Error
+		return nil, tmp.Error
+	}
+	for _, entry := range entries {
+		result = append(result, entry.VideoSegment)
+	}
+	return result, nil
 }
 
 func (m *persistenceManagerImpl) ListAllSegmentsOfRecording(
 	ctxt context.Context, recordingID string,
 ) ([]common.VideoSegment, error) {
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return nil, fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
 	var result []common.VideoSegment
-	return result, m.db.Transaction(func(tx *gorm.DB) error {
-		logTags := m.GetLogTagsForContext(ctxt)
+	logTags := m.GetLogTagsForContext(ctxt)
 
-		// Get the associations first
-		var associations []segmentToRecordingAssociation
-		tmp := tx.Where(&segmentToRecordingAssociation{RecordingID: recordingID}).Find(&associations)
-		if tmp.Error != nil {
-			log.
-				WithError(tmp.Error).
-				WithFields(logTags).
-				WithField("recording", recordingID).
-				Error("Unable to select segments associated with video recording session")
-			return tmp.Error
+	// Get the associations first
+	var associations []segmentToRecordingAssociation
+	tmp := m.db.Where(&segmentToRecordingAssociation{RecordingID: recordingID}).Find(&associations)
+	if tmp.Error != nil {
+		log.
+			WithError(tmp.Error).
+			WithFields(logTags).
+			WithField("recording", recordingID).
+			Error("Unable to select segments associated with video recording session")
+		m.err = tmp.Error
+		return nil, tmp.Error
+	}
+
+	if len(associations) > 0 {
+		segIDs := []string{}
+		for _, entry := range associations {
+			segIDs = append(segIDs, entry.SegmentID)
 		}
 
-		if len(associations) > 0 {
-			segIDs := []string{}
-			for _, entry := range associations {
-				segIDs = append(segIDs, entry.SegmentID)
-			}
-
-			// Get the associated segments
-			var entries []recordingVideoSegment
-			if tmp := tx.Where("id in ?", segIDs).Find(&entries); tmp.Error != nil {
-				return tmp.Error
-			}
-			for _, entry := range entries {
-				result = append(result, entry.VideoSegment)
-			}
+		// Get the associated segments
+		var entries []recordingVideoSegment
+		if tmp := m.db.Where("id in ?", segIDs).Find(&entries); tmp.Error != nil {
+			m.err = tmp.Error
+			return nil, tmp.Error
 		}
-		return nil
-	})
+		for _, entry := range entries {
+			result = append(result, entry.VideoSegment)
+		}
+	}
+	return result, nil
 }
 
 func (m *persistenceManagerImpl) PurgeUnassociatedRecordingSegments(
 	ctxt context.Context,
 ) ([]common.VideoSegment, error) {
-	var result []common.VideoSegment
-	return result, m.db.Transaction(func(tx *gorm.DB) error {
-		logTags := m.GetLogTagsForContext(ctxt)
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return nil, fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
 
-		// Get the set of distinct segments IDs still with association
-		var associations []segmentToRecordingAssociation
-		tmp := tx.Distinct("segment_id").Find(&associations)
+	var result []common.VideoSegment
+	logTags := m.GetLogTagsForContext(ctxt)
+
+	// Get the set of distinct segments IDs still with association
+	var associations []segmentToRecordingAssociation
+	tmp := m.db.Distinct("segment_id").Find(&associations)
+	if tmp.Error != nil {
+		log.
+			WithError(tmp.Error).
+			WithFields(logTags).
+			Error("Failed to read distinct segment IDs from 'segment_to_recording_association'")
+		m.err = tmp.Error
+		return nil, tmp.Error
+	}
+
+	if len(associations) > 0 {
+		// Read and delete the segments which are not mentioned in association table
+		segIDs := []string{}
+		for _, entry := range associations {
+			segIDs = append(segIDs, entry.SegmentID)
+		}
+
+		var entries []recordingVideoSegment
+		tmp = m.db.Clauses(clause.Returning{}).Not("id in ?", segIDs).Delete(&entries)
 		if tmp.Error != nil {
 			log.
 				WithError(tmp.Error).
 				WithFields(logTags).
-				Error("Failed to read distinct segment IDs from 'segment_to_recording_association'")
-			return tmp.Error
+				Error("Failed to delete segments not mentioned in 'segment_to_recording_association'")
+			m.err = tmp.Error
+			return nil, tmp.Error
 		}
 
-		if len(associations) > 0 {
-			// Read and delete the segments which are not mentioned in association table
-			segIDs := []string{}
-			for _, entry := range associations {
-				segIDs = append(segIDs, entry.SegmentID)
-			}
-
-			var entries []recordingVideoSegment
-			tmp = tx.Clauses(clause.Returning{}).Not("id in ?", segIDs).Delete(&entries)
-			if tmp.Error != nil {
-				log.
-					WithError(tmp.Error).
-					WithFields(logTags).
-					Error("Failed to delete segments not mentioned in 'segment_to_recording_association'")
-				return tmp.Error
-			}
-
-			for _, entry := range entries {
-				result = append(result, entry.VideoSegment)
-			}
+		for _, entry := range entries {
+			result = append(result, entry.VideoSegment)
 		}
-
-		return nil
-	})
+	}
+	return result, nil
 }

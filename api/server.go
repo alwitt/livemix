@@ -160,7 +160,7 @@ BuildCentralVODServer create control node VOD server. It is responsible for
 	@param parentCtxt context.Context - REST handler parent context
 	@param httpCfg common.APIServerConfig - HTTP server configuration
 	@param forwardCB VideoSegmentForwardCB - callback to forward newly received segments
-	@param dbClient db.PersistenceManager - DB persistence manager
+	@param dbConns db.ConnectionManager - DB connection manager
 	@param playlistBuilder vod.PlaylistBuilder - support HLS playlist builder
 	@param segments vod.SegmentManager - video segment manager
 	@returns HTTP server instance
@@ -169,7 +169,7 @@ func BuildCentralVODServer(
 	parentCtxt context.Context,
 	httpCfg common.APIServerConfig,
 	forwardCB VideoSegmentForwardCB,
-	dbClient db.PersistenceManager,
+	dbConns db.ConnectionManager,
 	playlistBuilder vod.PlaylistBuilder,
 	segments vod.SegmentManager,
 ) (*http.Server, error) {
@@ -180,7 +180,7 @@ func BuildCentralVODServer(
 		return nil, err
 	}
 	vodHandler, err := NewLiveStreamHandler(
-		dbClient, playlistBuilder, segments, httpCfg.APIs.RequestLogging,
+		dbConns, playlistBuilder, segments, httpCfg.APIs.RequestLogging,
 	)
 	if err != nil {
 		return nil, err
@@ -235,19 +235,19 @@ func BuildCentralVODServer(
 BuildVODServer create HLS VOD server
 
 	@param httpCfg common.APIServerConfig - HTTP server configuration
-	@param dbClient db.PersistenceManager - DB persistence manager
+	@param dbConns db.ConnectionManager - DB connection manager
 	@param playlistBuilder vod.PlaylistBuilder - support HLS playlist builder
 	@param segments vod.SegmentManager - video segment manager
 	@returns HTTP server instance
 */
 func BuildVODServer(
 	httpCfg common.APIServerConfig,
-	dbClient db.PersistenceManager,
+	dbConns db.ConnectionManager,
 	playlistBuilder vod.PlaylistBuilder,
 	segments vod.SegmentManager,
 ) (*http.Server, error) {
 	httpHandler, err := NewLiveStreamHandler(
-		dbClient, playlistBuilder, segments, httpCfg.APIs.RequestLogging,
+		dbConns, playlistBuilder, segments, httpCfg.APIs.RequestLogging,
 	)
 	if err != nil {
 		return nil, err

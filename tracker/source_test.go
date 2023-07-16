@@ -21,7 +21,10 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 	assert := assert.New(t)
 	log.SetLevel(log.DebugLevel)
 
+	mockSQL := mocks.NewConnectionManager(t)
 	mockDB := mocks.NewPersistenceManager(t)
+	mockSQL.On("NewPersistanceManager").Return(mockDB)
+	mockDB.On("Close").Return()
 
 	testSource := common.VideoSource{
 		ID:   uuid.NewString(),
@@ -34,7 +37,7 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 
 	trackingWindow := time.Second * 15
 
-	uut, err := tracker.NewSourceHLSTracker(testSource, mockDB, trackingWindow)
+	uut, err := tracker.NewSourceHLSTracker(testSource, mockSQL, trackingWindow)
 	assert.Nil(err)
 
 	utCtxt := context.Background()

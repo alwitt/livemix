@@ -68,7 +68,7 @@ type videoSourceOperatorImpl struct {
 	goutils.Component
 	self                common.VideoSource
 	selfReqRespTargetID string
-	db                  db.PersistenceManager
+	dbConns             db.ConnectionManager
 	reportStatus        VideoSourceStatusReportCB
 	reportTriggerTimer  goutils.IntervalTimer
 	wg                  sync.WaitGroup
@@ -82,7 +82,7 @@ NewManager define a new video source operator
 	@param parentCtxt context.Context - parent execution context
 	@param self common.VideoSource - information report the video source being operated
 	@param rrTargetID string - request-response target this edge node will respond on
-	@param dbClient db.PersistenceManager - persistence manager
+	@param dbConns db.ConnectionManager - DB connection manager
 	@param reportCB VideoSourceStatusReportCB - video source status report forwarding callback
 	@param reportInterval time.Duration - status report interval
 	@return new operator
@@ -91,7 +91,7 @@ func NewManager(
 	parentCtxt context.Context,
 	self common.VideoSource,
 	rrTargetID string,
-	dbClient db.PersistenceManager,
+	dbConns db.ConnectionManager,
 	reportCB VideoSourceStatusReportCB,
 	reportInterval time.Duration,
 ) (VideoSourceOperator, error) {
@@ -108,7 +108,7 @@ func NewManager(
 		},
 		self:                self,
 		selfReqRespTargetID: rrTargetID,
-		db:                  dbClient,
+		dbConns:             dbConns,
 		reportStatus:        reportCB,
 		wg:                  sync.WaitGroup{},
 	}
@@ -145,7 +145,9 @@ func NewManager(
 }
 
 func (o *videoSourceOperatorImpl) Ready(ctxt context.Context) error {
-	return o.db.Ready(ctxt)
+	dbClient := o.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+	return dbClient.Ready(ctxt)
 }
 
 func (o *videoSourceOperatorImpl) Stop(ctxt context.Context) error {
@@ -163,7 +165,9 @@ func (o *videoSourceOperatorImpl) RecordKnownVideoSource(
 	playlistURI, description *string,
 	streaming int,
 ) error {
-	return o.db.RecordKnownVideoSource(
+	dbClient := o.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+	return dbClient.RecordKnownVideoSource(
 		ctxt, id, name, segmentLen, playlistURI, description, streaming,
 	)
 }
@@ -171,7 +175,9 @@ func (o *videoSourceOperatorImpl) RecordKnownVideoSource(
 func (o *videoSourceOperatorImpl) ChangeVideoSourceStreamState(
 	ctxt context.Context, id string, streaming int,
 ) error {
-	return o.db.ChangeVideoSourceStreamState(ctxt, id, streaming)
+	dbClient := o.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+	return dbClient.ChangeVideoSourceStreamState(ctxt, id, streaming)
 }
 
 func (o *videoSourceOperatorImpl) sendSourceStatusReport() error {

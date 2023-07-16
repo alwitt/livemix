@@ -209,7 +209,7 @@ type SystemManager interface {
 // systemManagerImpl implements SystemManager
 type systemManagerImpl struct {
 	goutils.Component
-	db                          db.PersistenceManager
+	dbConns                     db.ConnectionManager
 	rrClient                    EdgeRequestClient
 	maxAgeForSourceStatusReport time.Duration
 }
@@ -217,7 +217,7 @@ type systemManagerImpl struct {
 /*
 NewManager define a new system manager
 
-	@param dbClient db.PersistenceManager - persistence manager
+	@param dbConns db.ConnectionManager - DB connection manager
 	@param rrClient EdgeRequestClient - request-response client
 	@param maxAgeForSourceStatusReport time.Duration - for the system to send a requests to a
 	    particular video source, this source must have sent out a video source status report
@@ -226,7 +226,7 @@ NewManager define a new system manager
 	@returns new manager
 */
 func NewManager(
-	dbClient db.PersistenceManager,
+	dbConns db.ConnectionManager,
 	rrClient EdgeRequestClient,
 	maxAgeForSourceStatusReport time.Duration,
 ) (SystemManager, error) {
@@ -238,7 +238,7 @@ func NewManager(
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
 		},
-		db:                          dbClient,
+		dbConns:                     dbConns,
 		rrClient:                    rrClient,
 		maxAgeForSourceStatusReport: maxAgeForSourceStatusReport,
 	}, nil
@@ -266,35 +266,47 @@ func (m *systemManagerImpl) canRequestVideoSource(source common.VideoSource) err
 // Video sources
 
 func (m *systemManagerImpl) Ready(ctxt context.Context) error {
-	return m.db.Ready(ctxt)
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+	return dbClient.Ready(ctxt)
 }
 
 func (m *systemManagerImpl) DefineVideoSource(
 	ctxt context.Context, name string, segmentLen int, playlistURI, description *string,
 ) (string, error) {
-	return m.db.DefineVideoSource(ctxt, name, segmentLen, playlistURI, description)
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+	return dbClient.DefineVideoSource(ctxt, name, segmentLen, playlistURI, description)
 }
 
 func (m *systemManagerImpl) GetVideoSource(
 	ctxt context.Context, id string,
 ) (common.VideoSource, error) {
-	return m.db.GetVideoSource(ctxt, id)
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+	return dbClient.GetVideoSource(ctxt, id)
 }
 
 func (m *systemManagerImpl) GetVideoSourceByName(
 	ctxt context.Context, name string,
 ) (common.VideoSource, error) {
-	return m.db.GetVideoSourceByName(ctxt, name)
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+	return dbClient.GetVideoSourceByName(ctxt, name)
 }
 
 func (m *systemManagerImpl) ListVideoSources(ctxt context.Context) ([]common.VideoSource, error) {
-	return m.db.ListVideoSources(ctxt)
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+	return dbClient.ListVideoSources(ctxt)
 }
 
 func (m *systemManagerImpl) UpdateVideoSource(
 	ctxt context.Context, newSetting common.VideoSource,
 ) error {
-	return m.db.UpdateVideoSource(ctxt, newSetting)
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+	return dbClient.UpdateVideoSource(ctxt, newSetting)
 }
 
 func (m *systemManagerImpl) ChangeVideoSourceStreamState(
@@ -302,8 +314,11 @@ func (m *systemManagerImpl) ChangeVideoSourceStreamState(
 ) error {
 	logTags := m.GetLogTagsForContext(ctxt)
 
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+
 	// Fetch entry
-	entry, err := m.db.GetVideoSource(ctxt, id)
+	entry, err := dbClient.GetVideoSource(ctxt, id)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Errorf("Unable to find video source '%s'", id)
 		return err
@@ -330,7 +345,7 @@ func (m *systemManagerImpl) ChangeVideoSourceStreamState(
 	}
 
 	// Update persistence
-	if err := m.db.ChangeVideoSourceStreamState(ctxt, id, streaming); err != nil {
+	if err := dbClient.ChangeVideoSourceStreamState(ctxt, id, streaming); err != nil {
 		log.
 			WithError(err).
 			WithFields(logTags).
@@ -343,7 +358,9 @@ func (m *systemManagerImpl) ChangeVideoSourceStreamState(
 }
 
 func (m *systemManagerImpl) DeleteVideoSource(ctxt context.Context, id string) error {
-	return m.db.DeleteVideoSource(ctxt, id)
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+	return dbClient.DeleteVideoSource(ctxt, id)
 }
 
 // =====================================================================================
@@ -356,7 +373,10 @@ func (m *systemManagerImpl) DefineRecordingSession(
 ) (string, error) {
 	logTags := m.GetLogTagsForContext(ctxt)
 
-	source, err := m.db.GetVideoSource(ctxt, sourceID)
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+
+	source, err := dbClient.GetVideoSource(ctxt, sourceID)
 	if err != nil {
 		log.
 			WithError(err).
@@ -377,7 +397,7 @@ func (m *systemManagerImpl) DefineRecordingSession(
 	}
 
 	// Define new recording entry
-	recordingID, err := m.db.DefineRecordingSession(ctxt, sourceID, alias, description, startTime)
+	recordingID, err := dbClient.DefineRecordingSession(ctxt, sourceID, alias, description, startTime)
 	if err != nil {
 		log.
 			WithError(err).
@@ -386,7 +406,7 @@ func (m *systemManagerImpl) DefineRecordingSession(
 			Error("Unable to define new recording for source")
 		return "", err
 	}
-	recording, err := m.db.GetRecordingSession(ctxt, recordingID)
+	recording, err := dbClient.GetRecordingSession(ctxt, recordingID)
 	if err != nil {
 		log.
 			WithError(err).
@@ -426,23 +446,31 @@ func (m *systemManagerImpl) DefineRecordingSession(
 func (m *systemManagerImpl) GetRecordingSession(
 	ctxt context.Context, id string,
 ) (common.Recording, error) {
-	return m.db.GetRecordingSession(ctxt, id)
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+	return dbClient.GetRecordingSession(ctxt, id)
 }
 
 func (m *systemManagerImpl) GetRecordingSessionByAlias(
 	ctxt context.Context, alias string,
 ) (common.Recording, error) {
-	return m.db.GetRecordingSessionByAlias(ctxt, alias)
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+	return dbClient.GetRecordingSessionByAlias(ctxt, alias)
 }
 
 func (m *systemManagerImpl) ListRecordingSessions(ctxt context.Context) ([]common.Recording, error) {
-	return m.db.ListRecordingSessions(ctxt)
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+	return dbClient.ListRecordingSessions(ctxt)
 }
 
 func (m *systemManagerImpl) ListRecordingSessionsOfSource(
 	ctxt context.Context, sourceID string, active bool,
 ) ([]common.Recording, error) {
-	return m.db.ListRecordingSessionsOfSource(ctxt, sourceID, active)
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+	return dbClient.ListRecordingSessionsOfSource(ctxt, sourceID, active)
 }
 
 func (m *systemManagerImpl) MarkEndOfRecordingSession(
@@ -450,8 +478,11 @@ func (m *systemManagerImpl) MarkEndOfRecordingSession(
 ) error {
 	logTags := m.GetLogTagsForContext(ctxt)
 
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+
 	// Get the recording entry
-	recording, err := m.db.GetRecordingSession(ctxt, id)
+	recording, err := dbClient.GetRecordingSession(ctxt, id)
 	if err != nil {
 		log.
 			WithError(err).
@@ -462,7 +493,7 @@ func (m *systemManagerImpl) MarkEndOfRecordingSession(
 	}
 
 	// Get the source supporting the recording
-	source, err := m.db.GetVideoSource(ctxt, recording.SourceID)
+	source, err := dbClient.GetVideoSource(ctxt, recording.SourceID)
 	if err != nil {
 		log.
 			WithError(err).
@@ -507,7 +538,7 @@ func (m *systemManagerImpl) MarkEndOfRecordingSession(
 		Info("Source has stop recording")
 
 	// Stop the recording entry
-	if err := m.db.MarkEndOfRecordingSession(ctxt, id, endTime); err != nil {
+	if err := dbClient.MarkEndOfRecordingSession(ctxt, id, endTime); err != nil {
 		log.
 			WithError(err).
 			WithFields(logTags).
@@ -523,7 +554,9 @@ func (m *systemManagerImpl) MarkEndOfRecordingSession(
 func (m *systemManagerImpl) UpdateRecordingSession(
 	ctxt context.Context, newSetting common.Recording,
 ) error {
-	return m.db.UpdateRecordingSession(ctxt, newSetting)
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+	return dbClient.UpdateRecordingSession(ctxt, newSetting)
 }
 
 func (m *systemManagerImpl) DeleteRecordingSession(ctxt context.Context, id string) error {
@@ -536,7 +569,10 @@ func (m *systemManagerImpl) StopAllActiveRecordingOfSource(
 ) error {
 	logTags := m.GetLogTagsForContext(ctxt)
 
-	source, err := m.db.GetVideoSource(ctxt, id)
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+
+	source, err := dbClient.GetVideoSource(ctxt, id)
 	if err != nil {
 		log.
 			WithError(err).
@@ -562,7 +598,7 @@ func (m *systemManagerImpl) StopAllActiveRecordingOfSource(
 		Info("Stopping all associated recording sessions")
 
 	// Get the active recording session for a source
-	sessions, err := m.db.ListRecordingSessionsOfSource(ctxt, id, true)
+	sessions, err := dbClient.ListRecordingSessionsOfSource(ctxt, id, true)
 	if err != nil {
 		log.
 			WithError(err).
@@ -578,7 +614,7 @@ func (m *systemManagerImpl) StopAllActiveRecordingOfSource(
 
 	// Close all the sessions
 	for _, session := range sessions {
-		if err := m.db.MarkEndOfRecordingSession(ctxt, session.ID, currentTime); err != nil {
+		if err := dbClient.MarkEndOfRecordingSession(ctxt, session.ID, currentTime); err != nil {
 			log.
 				WithError(err).
 				WithFields(logTags).
@@ -613,6 +649,9 @@ func (m *systemManagerImpl) ProcessBroadcastMsgs(
 ) error {
 	logTags := m.GetLogTagsForContext(ctxt)
 
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+
 	// Parse the message
 	parsed, err := ipc.ParseRawMessage(msg)
 	if err != nil {
@@ -626,7 +665,7 @@ func (m *systemManagerImpl) ProcessBroadcastMsgs(
 	case reflect.TypeOf(ipc.VideoSourceStatusReport{}):
 		statusReport := parsed.(ipc.VideoSourceStatusReport)
 		// Record
-		if err := m.db.RefreshVideoSourceStats(
+		if err := dbClient.RefreshVideoSourceStats(
 			ctxt,
 			statusReport.SourceID,
 			statusReport.RequestResponseTargetID,

@@ -19,10 +19,13 @@ func TestCentralSegmentManagerRecordSegment(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	utCtxt := context.Background()
 
+	mockSQL := mocks.NewConnectionManager(t)
 	mockDB := mocks.NewPersistenceManager(t)
+	mockSQL.On("NewPersistanceManager").Return(mockDB)
+	mockDB.On("Close").Return()
 	mockCache := mocks.NewVideoSegmentCache(t)
 
-	uut, err := control.NewSegmentManager(utCtxt, mockDB, mockCache, time.Minute)
+	uut, err := control.NewSegmentManager(utCtxt, mockSQL, mockCache, time.Minute)
 	assert.Nil(err)
 
 	testSourceID := uuid.NewString()

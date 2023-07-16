@@ -90,10 +90,9 @@ func DefineControlNode(
 		return nil, err
 	}
 
-	// Define the persistence manager
-	dbManager, err := db.NewManager(sqlDSN, logger.Error)
+	dbConns, err := db.NewSQLConnection(sqlDSN, logger.Error)
 	if err != nil {
-		log.WithError(err).WithFields(logTags).Error("Failed to define persistence manager")
+		log.WithError(err).WithFields(logTags).Error("Failed to define SQL connection manager")
 		return nil, err
 	}
 
@@ -173,7 +172,7 @@ func DefineControlNode(
 
 	// Define the system manager
 	systemManager, err := control.NewManager(
-		dbManager,
+		dbConns,
 		ctrlToEdgeRRClient,
 		time.Second*time.Duration(config.Management.SourceManagment.StatusReportMaxDelayInSec),
 	)
@@ -195,7 +194,7 @@ func DefineControlNode(
 	// Build segment manager
 	theNode.segmentMgmt, err = control.NewSegmentManager(
 		parentCtxt,
-		dbManager,
+		dbConns,
 		cache,
 		time.Second*time.Duration(config.VODConfig.SegReceiverTrackingWindowInSec),
 	)
@@ -225,7 +224,7 @@ func DefineControlNode(
 	}
 
 	// Define live VOD playlist builder
-	plBuilder, err := vod.NewPlaylistBuilder(dbManager, config.VODConfig.LiveVODSegmentCount)
+	plBuilder, err := vod.NewPlaylistBuilder(dbConns, config.VODConfig.LiveVODSegmentCount)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create VOD playlist builder")
 		return nil, err
@@ -236,7 +235,7 @@ func DefineControlNode(
 		parentCtxt,
 		config.VODConfig.APIServer,
 		theNode.segmentMgmt.RegisterLiveStreamSegment,
-		dbManager,
+		dbConns,
 		plBuilder,
 		segmentMgnt,
 	)

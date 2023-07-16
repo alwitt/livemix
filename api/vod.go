@@ -19,7 +19,7 @@ import (
 type LiveStreamHandler struct {
 	goutils.RestAPIHandler
 	validate  *validator.Validate
-	dbClient  db.PersistenceManager
+	dbConns   db.ConnectionManager
 	playlists vod.PlaylistBuilder
 	segments  vod.SegmentManager
 }
@@ -27,14 +27,14 @@ type LiveStreamHandler struct {
 /*
 NewLiveStreamHandler define a new HLS live stream hosting handler
 
-	@param dbClient db.PersistenceManager - DB access client
+	@param dbConns db.ConnectionManager - DB connection manager
 	@param playlists vod.PlaylistBuilder - support playlist builder
 	@param segments vod.SegmentManager - support playlist segment manager
 	@param logConfig common.HTTPRequestLogging - handler log settings
 	@returns new LiveStreamHandler
 */
 func NewLiveStreamHandler(
-	dbClient db.PersistenceManager,
+	dbConns db.ConnectionManager,
 	playlists vod.PlaylistBuilder,
 	segments vod.SegmentManager,
 	logConfig common.HTTPRequestLogging,
@@ -56,7 +56,7 @@ func NewLiveStreamHandler(
 				return result
 			}(),
 			LogLevel: logConfig.LogLevel,
-		}, validate: validator.New(), dbClient: dbClient, playlists: playlists, segments: segments,
+		}, validate: validator.New(), dbConns: dbConns, playlists: playlists, segments: segments,
 	}, nil
 }
 
@@ -88,6 +88,9 @@ func (h LiveStreamHandler) GetVideoFiles(w http.ResponseWriter, r *http.Request)
 		}
 	}()
 
+	dbClient := h.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+
 	vars := mux.Vars(r)
 	videoSourceID, ok := vars["videoSourceID"]
 	if !ok {
@@ -109,7 +112,7 @@ func (h LiveStreamHandler) GetVideoFiles(w http.ResponseWriter, r *http.Request)
 	log.WithFields(logTags).WithField("target-file", fileName).Debug("User requested file")
 
 	// Verify the video source is valid
-	videoSource, err := h.dbClient.GetVideoSource(r.Context(), videoSourceID)
+	videoSource, err := dbClient.GetVideoSource(r.Context(), videoSourceID)
 	if err != nil {
 		msg := "Unknown video source"
 		log.WithError(err).WithFields(logTags).Error(msg)
@@ -169,7 +172,7 @@ func (h LiveStreamHandler) GetVideoFiles(w http.ResponseWriter, r *http.Request)
 	// MPEG-TS Video Segment
 	case "ts":
 		// Find the segment entry from the system
-		segmentEntry, err := h.dbClient.GetLiveStreamSegmentByName(r.Context(), fileName)
+		segmentEntry, err := dbClient.GetLiveStreamSegmentByName(r.Context(), fileName)
 		if err != nil {
 			msg := "Unknown segment name"
 			log.WithError(err).WithFields(logTags).Error(msg)

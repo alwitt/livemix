@@ -35,7 +35,7 @@ type LiveStreamSegmentForwarder interface {
 // httpLiveStreamSegmentForwarder HTTP version of LiveStreamSegmentForwarder
 type httpLiveStreamSegmentForwarder struct {
 	goutils.Component
-	db               db.PersistenceManager
+	dbConns          db.ConnectionManager
 	client           SegmentSender
 	workers          goutils.TaskProcessor
 	wg               sync.WaitGroup
@@ -47,14 +47,14 @@ type httpLiveStreamSegmentForwarder struct {
 NewHTTPLiveStreamSegmentForwarder define new HTTP version of LiveStreamSegmentForwarder
 
 	@param parentCtxt context.Context - forwarder's parent execution context
-	@param db db.PersistenceManager - persistence manager
+	@param dbConns db.ConnectionManager - DB connection manager
 	@param sender SegmentSender - client for forwarding video segments to system control node
 	@param maxInFlightSegments int - max number of segment being forwarded at anyone time
 	@returns new LiveStreamSegmentForwarder
 */
 func NewHTTPLiveStreamSegmentForwarder(
 	parentCtxt context.Context,
-	db db.PersistenceManager,
+	dbConns db.ConnectionManager,
 	sender SegmentSender,
 	maxInFlightSegments int,
 ) (LiveStreamSegmentForwarder, error) {
@@ -70,9 +70,9 @@ func NewHTTPLiveStreamSegmentForwarder(
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
 		},
-		db:     db,
-		client: sender,
-		wg:     sync.WaitGroup{},
+		dbConns: dbConns,
+		client:  sender,
+		wg:      sync.WaitGroup{},
 	}
 
 	// Worker context
@@ -175,8 +175,11 @@ func (f *httpLiveStreamSegmentForwarder) handleForwardSegment(
 ) error {
 	logTags := f.GetLogTagsForContext(f.workerCtxt)
 
+	dbClient := f.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+
 	// Verify forwarding is enabled first
-	source, err := f.db.GetVideoSource(f.workerCtxt, segment.SourceID)
+	source, err := dbClient.GetVideoSource(f.workerCtxt, segment.SourceID)
 	if err != nil {
 		log.
 			WithError(err).

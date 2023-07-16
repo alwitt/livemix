@@ -19,10 +19,13 @@ func TestHTTPLiveStreamForwarder(t *testing.T) {
 
 	utCtxt := context.Background()
 
+	mockSQL := mocks.NewConnectionManager(t)
 	mockDB := mocks.NewPersistenceManager(t)
+	mockSQL.On("NewPersistanceManager").Return(mockDB)
+	mockDB.On("Close").Return()
 	mockSender := mocks.NewSegmentSender(t)
 
-	uut, err := NewHTTPLiveStreamSegmentForwarder(utCtxt, mockDB, mockSender, 2)
+	uut, err := NewHTTPLiveStreamSegmentForwarder(utCtxt, mockSQL, mockSender, 2)
 	assert.Nil(err)
 
 	uutCast, ok := uut.(*httpLiveStreamSegmentForwarder)

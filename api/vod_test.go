@@ -23,12 +23,15 @@ func TestVodLiveStreamHandler(t *testing.T) {
 	assert := assert.New(t)
 	log.SetLevel(log.DebugLevel)
 
+	mockSQL := mocks.NewConnectionManager(t)
 	mockDB := mocks.NewPersistenceManager(t)
+	mockSQL.On("NewPersistanceManager").Return(mockDB)
+	mockDB.On("Close").Return()
 	mockPlaylist := mocks.NewPlaylistBuilder(t)
 	mockSegment := mocks.NewSegmentManager(t)
 
 	uut, err := api.NewLiveStreamHandler(
-		mockDB, mockPlaylist, mockSegment, common.HTTPRequestLogging{
+		mockSQL, mockPlaylist, mockSegment, common.HTTPRequestLogging{
 			RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
 		},
 	)

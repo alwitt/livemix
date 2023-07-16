@@ -50,7 +50,7 @@ type CentralSegmentManager interface {
 // centrlSegmentManager implements CentralSegmentManager
 type centralSegmentManagerImpl struct {
 	goutils.Component
-	db               db.PersistenceManager
+	dbConns          db.ConnectionManager
 	cache            utils.VideoSegmentCache
 	trackingWindow   time.Duration
 	supportTimer     goutils.IntervalTimer
@@ -63,7 +63,7 @@ type centralSegmentManagerImpl struct {
 NewSegmentManager define a new central segment manager
 
 	@param parentCtxt context.Context - parent context
-	@param dbClient db.PersistenceManager - DB access client
+	@param dbConns db.ConnectionManager - DB connection manager
 	@param cache utils.VideoSegmentCache - video segment cache
 	@param trackingWindow time.Duration - tracking window is the duration in time a video
 	    segment is tracked. Recorded segments are forgotten after this tracking window.
@@ -71,7 +71,7 @@ NewSegmentManager define a new central segment manager
 */
 func NewSegmentManager(
 	parentCtxt context.Context,
-	dbClient db.PersistenceManager,
+	dbConns db.ConnectionManager,
 	cache utils.VideoSegmentCache,
 	trackingWindow time.Duration,
 ) (CentralSegmentManager, error) {
@@ -84,7 +84,7 @@ func NewSegmentManager(
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
 		},
-		db:             dbClient,
+		dbConns:        dbConns,
 		cache:          cache,
 		trackingWindow: trackingWindow,
 		wg:             sync.WaitGroup{},
@@ -109,7 +109,9 @@ func NewSegmentManager(
 }
 
 func (m *centralSegmentManagerImpl) Ready(ctxt context.Context) error {
-	return m.db.Ready(ctxt)
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+	return dbClient.Ready(ctxt)
 }
 
 func (m *centralSegmentManagerImpl) RegisterLiveStreamSegment(
@@ -117,8 +119,11 @@ func (m *centralSegmentManagerImpl) RegisterLiveStreamSegment(
 ) error {
 	logTags := m.GetLogTagsForContext(ctxt)
 
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+
 	// Persist segment record
-	segmentID, err := m.db.RegisterLiveStreamSegment(ctxt, sourceID, segment)
+	segmentID, err := dbClient.RegisterLiveStreamSegment(ctxt, sourceID, segment)
 	if err != nil {
 		log.
 			WithError(err).
@@ -153,7 +158,9 @@ func (m *centralSegmentManagerImpl) RegisterLiveStreamSegment(
 
 func (m *centralSegmentManagerImpl) purgeOldSegments() error {
 	timeLimit := time.Now().UTC().Add(-m.trackingWindow)
-	return m.db.PurgeOldLiveStreamSegments(m.workerCtxt, timeLimit)
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+	return dbClient.PurgeOldLiveStreamSegments(m.workerCtxt, timeLimit)
 }
 
 func (m *centralSegmentManagerImpl) Stop(ctxt context.Context) error {

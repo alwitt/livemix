@@ -27,14 +27,19 @@ func TestSourceHLSMonitor(t *testing.T) {
 
 	testInstance := fmt.Sprintf("ut-%s", uuid.NewString())
 	testDB := fmt.Sprintf("/tmp/%s.db", testInstance)
-	dbClient, err := db.NewManager(db.GetSqliteDialector(testDB), logger.Info)
+	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB), logger.Info)
 	assert.Nil(err)
 
-	testSourceName := fmt.Sprintf("vid-%s.m3u8", uuid.NewString())
-	testSourceID, err := dbClient.DefineVideoSource(utCtxt, testSourceName, 4, nil, nil)
-	assert.Nil(err)
-	testSource, err := dbClient.GetVideoSource(utCtxt, testSourceID)
-	assert.Nil(err)
+	var testSource common.VideoSource
+	{
+		dbClient := conns.NewPersistanceManager()
+		testSourceName := fmt.Sprintf("vid-%s.m3u8", uuid.NewString())
+		testSourceID, err := dbClient.DefineVideoSource(utCtxt, testSourceName, 4, nil, nil)
+		assert.Nil(err)
+		testSource, err = dbClient.GetVideoSource(utCtxt, testSourceID)
+		assert.Nil(err)
+		dbClient.Close()
+	}
 
 	trackingWindow := time.Second * 15
 	segmentLength := time.Second * 5
@@ -51,7 +56,7 @@ func TestSourceHLSMonitor(t *testing.T) {
 
 	// Define SourceHLSMonitor
 	uut, err := tracker.NewSourceHLSMonitor(
-		utCtxt, testSource, dbClient, trackingWindow, testCache, mockSegReader, receiveSegCB,
+		utCtxt, testSource, conns, trackingWindow, testCache, mockSegReader, receiveSegCB,
 	)
 	assert.Nil(err)
 

@@ -24,22 +24,32 @@ func TestDBManagerVideoSource(t *testing.T) {
 
 	testInstance := fmt.Sprintf("ut-%s", uuid.NewString())
 	testDB := fmt.Sprintf("/tmp/%s.db", testInstance)
-	uut, err := db.NewManager(db.GetSqliteDialector(testDB), logger.Info)
+	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB), logger.Info)
 	assert.Nil(err)
 
 	log.Debugf("Using %s", testDB)
 
 	utCtxt := context.Background()
 
-	assert.Nil(uut.Ready(utCtxt))
+	{
+		uut := conns.NewPersistanceManager()
+		assert.Nil(uut.Ready(utCtxt))
+		uut.Close()
+	}
 
 	// Case 0: no sources
 	{
+		uut := conns.NewPersistanceManager()
 		_, err := uut.GetVideoSource(utCtxt, uuid.NewString())
 		assert.NotNil(err)
+		uut.Close()
+	}
+	{
+		uut := conns.NewPersistanceManager()
 		result, err := uut.ListVideoSources(utCtxt)
 		assert.Nil(err)
 		assert.Len(result, 0)
+		uut.Close()
 	}
 
 	getURI := func(name string) *string {
@@ -49,10 +59,12 @@ func TestDBManagerVideoSource(t *testing.T) {
 
 	// Case 1: create video source
 	source1 := fmt.Sprintf("src-1-%s", uuid.NewString())
-	sourceID1, err := uut.DefineVideoSource(utCtxt, source1, 2, getURI(source1), nil)
-	assert.Nil(err)
-	log.Debugf("Source ID1 %s", sourceID1)
+	var sourceID1 string
 	{
+		uut := conns.NewPersistanceManager()
+		sourceID1, err = uut.DefineVideoSource(utCtxt, source1, 2, getURI(source1), nil)
+		assert.Nil(err)
+		log.Debugf("Source ID1 %s", sourceID1)
 		entry, err := uut.GetVideoSource(utCtxt, sourceID1)
 		assert.Nil(err)
 		assert.Equal(source1, entry.Name)
@@ -62,20 +74,25 @@ func TestDBManagerVideoSource(t *testing.T) {
 		assert.Nil(err)
 		assert.Equal(source1, entry.Name)
 		assert.Equal(*getURI(source1), *entry.PlaylistURI)
+		uut.Close()
 	}
 
 	// Case 2: create another with same name
 	{
+		uut := conns.NewPersistanceManager()
 		_, err = uut.DefineVideoSource(utCtxt, source1, 2, getURI(source1), nil)
 		assert.NotNil(err)
+		uut.Close()
 	}
 
 	// Case 3: create another source
 	source2 := fmt.Sprintf("src-2-%s", uuid.NewString())
-	sourceID2, err := uut.DefineVideoSource(utCtxt, source2, 2, getURI(source2), nil)
-	assert.Nil(err)
-	log.Debugf("Source ID2 %s", sourceID2)
+	var sourceID2 string
 	{
+		uut := conns.NewPersistanceManager()
+		sourceID2, err = uut.DefineVideoSource(utCtxt, source2, 2, getURI(source2), nil)
+		assert.Nil(err)
+		log.Debugf("Source ID2 %s", sourceID2)
 		entries, err := uut.ListVideoSources(utCtxt)
 		assert.Nil(err)
 		asMap := map[string]common.VideoSource{}
@@ -89,28 +106,38 @@ func TestDBManagerVideoSource(t *testing.T) {
 		assert.True(ok)
 		assert.Equal(source2, entry.Name)
 		assert.Equal(*getURI(source2), *entry.PlaylistURI)
+		uut.Close()
 	}
 
 	// Case 4: update entry
 	newName := fmt.Sprintf("src-new-%s", uuid.NewString())
-	assert.Nil(uut.UpdateVideoSource(
-		utCtxt, common.VideoSource{ID: sourceID1, Name: newName, PlaylistURI: getURI(source1)},
-	))
 	{
+		uut := conns.NewPersistanceManager()
+		assert.Nil(uut.UpdateVideoSource(
+			utCtxt, common.VideoSource{ID: sourceID1, Name: newName, PlaylistURI: getURI(source1)},
+		))
+		uut.Close()
+	}
+	{
+		uut := conns.NewPersistanceManager()
 		entry, err := uut.GetVideoSource(utCtxt, sourceID1)
 		assert.Nil(err)
 		assert.Equal(newName, entry.Name)
 		assert.Equal(*getURI(source1), *entry.PlaylistURI)
 		assert.Equal(-1, entry.Streaming)
+		uut.Close()
 	}
 	{
+		uut := conns.NewPersistanceManager()
 		assert.Nil(uut.ChangeVideoSourceStreamState(utCtxt, sourceID1, 1))
 		entry, err := uut.GetVideoSource(utCtxt, sourceID1)
 		assert.Nil(err)
 		assert.Equal(1, entry.Streaming)
 		assert.Nil(entry.ReqRespTargetID)
+		uut.Close()
 	}
 	{
+		uut := conns.NewPersistanceManager()
 		assert.Nil(uut.ChangeVideoSourceStreamState(utCtxt, sourceID1, -1))
 		reqRespID := uuid.NewString()
 		timestamp := time.Now().UTC()
@@ -120,12 +147,18 @@ func TestDBManagerVideoSource(t *testing.T) {
 		assert.Equal(-1, entry.Streaming)
 		assert.Equal(reqRespID, *entry.ReqRespTargetID)
 		assert.Equal(timestamp, entry.SourceLocalTime)
+		uut.Close()
 	}
 
 	// Case 5: recreate existing entry
 	source3 := fmt.Sprintf("src-3-%s", uuid.NewString())
-	assert.Nil(uut.RecordKnownVideoSource(utCtxt, sourceID2, source3, 4, getURI(source3), nil, 1))
 	{
+		uut := conns.NewPersistanceManager()
+		assert.Nil(uut.RecordKnownVideoSource(utCtxt, sourceID2, source3, 4, getURI(source3), nil, 1))
+		uut.Close()
+	}
+	{
+		uut := conns.NewPersistanceManager()
 		entries, err := uut.ListVideoSources(utCtxt)
 		assert.Nil(err)
 		asMap := map[string]common.VideoSource{}
@@ -140,15 +173,23 @@ func TestDBManagerVideoSource(t *testing.T) {
 		assert.Equal(4, entry.TargetSegmentLength)
 		assert.Equal(*getURI(source3), *entry.PlaylistURI)
 		assert.Equal(1, entry.Streaming)
+		uut.Close()
 	}
 
 	// Case 6: delete entry
-	assert.Nil(uut.DeleteVideoSource(utCtxt, sourceID1))
 	{
-		_, err := uut.GetVideoSource(utCtxt, sourceID1)
-		assert.NotNil(err)
+		uut := conns.NewPersistanceManager()
+		assert.Nil(uut.DeleteVideoSource(utCtxt, sourceID1))
+		uut.Close()
 	}
 	{
+		uut := conns.NewPersistanceManager()
+		_, err := uut.GetVideoSource(utCtxt, sourceID1)
+		assert.NotNil(err)
+		uut.Close()
+	}
+	{
+		uut := conns.NewPersistanceManager()
 		entries, err := uut.ListVideoSources(utCtxt)
 		assert.Nil(err)
 		asMap := map[string]common.VideoSource{}
@@ -161,6 +202,7 @@ func TestDBManagerVideoSource(t *testing.T) {
 		assert.True(ok)
 		assert.Equal(source3, entry.Name)
 		assert.Equal(*getURI(source3), *entry.PlaylistURI)
+		uut.Close()
 	}
 }
 
@@ -170,28 +212,41 @@ func TestDBManagerVideoSegment(t *testing.T) {
 
 	testInstance := fmt.Sprintf("ut-%s", uuid.NewString())
 	testDB := fmt.Sprintf("/tmp/%s.db", testInstance)
-	uut, err := db.NewManager(db.GetSqliteDialector(testDB), logger.Info)
+	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB), logger.Info)
 	assert.Nil(err)
 
 	log.Debugf("Using %s", testDB)
 
 	utCtxt := context.Background()
 
-	assert.Nil(uut.Ready(utCtxt))
+	{
+		uut := conns.NewPersistanceManager()
+		assert.Nil(uut.Ready(utCtxt))
+		uut.Close()
+	}
 
 	// Create a source
-	sourceID, err := uut.DefineVideoSource(
-		utCtxt, uuid.NewString(), 4, nil, nil,
-	)
-	assert.Nil(err)
+	var sourceID string
+	{
+		uut := conns.NewPersistanceManager()
+		sourceID, err = uut.DefineVideoSource(utCtxt, uuid.NewString(), 4, nil, nil)
+		assert.Nil(err)
+		uut.Close()
+	}
 
 	// Case 0: no segments
 	{
+		uut := conns.NewPersistanceManager()
 		_, err := uut.GetLiveStreamSegment(utCtxt, uuid.NewString())
 		assert.NotNil(err)
+		uut.Close()
+	}
+	{
+		uut := conns.NewPersistanceManager()
 		entries, err := uut.ListAllLiveStreamSegments(utCtxt, sourceID)
 		assert.Nil(err)
 		assert.Empty(entries)
+		uut.Close()
 	}
 
 	startTime := time.Now().UTC()
@@ -201,15 +256,17 @@ func TestDBManagerVideoSegment(t *testing.T) {
 	segment0 := fmt.Sprintf("seg-0-%s.ts", uuid.NewString())
 	segStart0 := startTime
 	segStop0 := segStart0.Add(segDuration)
-	segmentID0, err := uut.RegisterLiveStreamSegment(utCtxt, sourceID, hls.Segment{
-		Name:      segment0,
-		StartTime: segStart0,
-		EndTime:   segStop0,
-		Length:    segDuration.Seconds(),
-		URI:       fmt.Sprintf("file:///%s", segment0),
-	})
-	assert.Nil(err)
+	var segmentID0 string
 	{
+		uut := conns.NewPersistanceManager()
+		segmentID0, err = uut.RegisterLiveStreamSegment(utCtxt, sourceID, hls.Segment{
+			Name:      segment0,
+			StartTime: segStart0,
+			EndTime:   segStop0,
+			Length:    segDuration.Seconds(),
+			URI:       fmt.Sprintf("file:///%s", segment0),
+		})
+		assert.Nil(err)
 		seg, err := uut.GetLiveStreamSegmentByName(utCtxt, segment0)
 		assert.Nil(err)
 		assert.Equal(segment0, seg.Name)
@@ -224,21 +281,24 @@ func TestDBManagerVideoSegment(t *testing.T) {
 		assert.Equal(segStart0, seg.StartTime)
 		assert.Equal(segStop0, seg.EndTime)
 		assert.Equal(fmt.Sprintf("file:///%s", segment0), seg.URI)
+		uut.Close()
 	}
 
 	// Case 2: register new segment
 	segment1 := fmt.Sprintf("seg-1-%s.ts", uuid.NewString())
 	segStart1 := segStop0
 	segStop1 := segStart1.Add(segDuration)
-	segmentID1, err := uut.RegisterLiveStreamSegment(utCtxt, sourceID, hls.Segment{
-		Name:      segment1,
-		StartTime: segStart1,
-		EndTime:   segStop1,
-		Length:    segDuration.Seconds(),
-		URI:       fmt.Sprintf("file:///%s", segment1),
-	})
-	assert.Nil(err)
+	var segmentID1 string
 	{
+		uut := conns.NewPersistanceManager()
+		segmentID1, err = uut.RegisterLiveStreamSegment(utCtxt, sourceID, hls.Segment{
+			Name:      segment1,
+			StartTime: segStart1,
+			EndTime:   segStop1,
+			Length:    segDuration.Seconds(),
+			URI:       fmt.Sprintf("file:///%s", segment1),
+		})
+		assert.Nil(err)
 		entries, err := uut.ListAllLiveStreamSegments(utCtxt, sourceID)
 		assert.Nil(err)
 		assert.Len(entries, 2)
@@ -252,11 +312,13 @@ func TestDBManagerVideoSegment(t *testing.T) {
 		assert.Equal(segStart1, seg.StartTime)
 		assert.Equal(segStop1, seg.EndTime)
 		assert.Equal(fmt.Sprintf("file:///%s", segment1), seg.URI)
+		uut.Close()
 	}
 
 	// Case 3: fetch segment conditionally
 	// By time
 	{
+		uut := conns.NewPersistanceManager()
 		targetTime := startTime.Add(segDuration).Add(segDuration / 2)
 		entries, err := uut.ListAllLiveStreamSegmentsAfterTime(utCtxt, sourceID, targetTime)
 		assert.Nil(err)
@@ -271,8 +333,10 @@ func TestDBManagerVideoSegment(t *testing.T) {
 		assert.Equal(segStart1, seg.StartTime)
 		assert.Equal(segStop1, seg.EndTime)
 		assert.Equal(fmt.Sprintf("file:///%s", segment1), seg.URI)
+		uut.Close()
 	}
 	{
+		uut := conns.NewPersistanceManager()
 		targetTime := startTime.Add(segDuration / 2)
 		entries, err := uut.ListAllLiveStreamSegmentsAfterTime(utCtxt, sourceID, targetTime)
 		assert.Nil(err)
@@ -288,9 +352,11 @@ func TestDBManagerVideoSegment(t *testing.T) {
 		assert.Equal(segStart0, seg.StartTime)
 		assert.Equal(segStop0, seg.EndTime)
 		assert.Equal(fmt.Sprintf("file:///%s", segment0), seg.URI)
+		uut.Close()
 	}
 	// Get latest
 	{
+		uut := conns.NewPersistanceManager()
 		entries, err := uut.GetLatestLiveStreamSegments(utCtxt, sourceID, 2)
 		assert.Nil(err)
 		assert.Len(entries, 2)
@@ -304,11 +370,13 @@ func TestDBManagerVideoSegment(t *testing.T) {
 		assert.Equal(segStart1, entries[0].StartTime)
 		assert.Equal(segStop1, entries[0].EndTime)
 		assert.Equal(fmt.Sprintf("file:///%s", segment1), entries[0].URI)
+		uut.Close()
 	}
 
 	// Case 4: delete segment
-	assert.Nil(uut.DeleteLiveStreamSegment(utCtxt, segmentID1))
 	{
+		uut := conns.NewPersistanceManager()
+		assert.Nil(uut.DeleteLiveStreamSegment(utCtxt, segmentID1))
 		entries, err := uut.ListAllLiveStreamSegments(utCtxt, sourceID)
 		assert.Nil(err)
 		assert.Len(entries, 1)
@@ -317,56 +385,72 @@ func TestDBManagerVideoSegment(t *testing.T) {
 		assert.Equal(segStart0, seg.StartTime)
 		assert.Equal(segStop0, seg.EndTime)
 		assert.Equal(fmt.Sprintf("file:///%s", segment0), seg.URI)
+		uut.Close()
 	}
 
 	// Case 5: batch create segments
-	segments := []string{
-		fmt.Sprintf("seg-2-%s.ts", uuid.NewString()),
-		fmt.Sprintf("seg-3-%s.ts", uuid.NewString()),
-	}
-	segmentEntries := []hls.Segment{}
-	segStart := segStop1
-	segStop := segStart.Add(segDuration)
-	for _, segName := range segments {
-		segmentEntries = append(segmentEntries, hls.Segment{
-			Name:      segName,
-			StartTime: segStart,
-			EndTime:   segStop,
-			Length:    segDuration.Seconds(),
-			URI:       fmt.Sprintf("file:///%s", segName),
-		})
-		segStart = segStop
-		segStop = segStart.Add(segDuration)
-	}
-	segIDs, err := uut.BulkRegisterLiveStreamSegments(utCtxt, sourceID, segmentEntries)
-	assert.Nil(err)
-	assert.Len(segIDs, 2)
-	for _, segName := range segments {
-		_, ok := segIDs[segName]
-		assert.True(ok)
+	var segIDs map[string]string
+	{
+		uut := conns.NewPersistanceManager()
+		segments := []string{
+			fmt.Sprintf("seg-2-%s.ts", uuid.NewString()),
+			fmt.Sprintf("seg-3-%s.ts", uuid.NewString()),
+		}
+		segmentEntries := []hls.Segment{}
+		segStart := segStop1
+		segStop := segStart.Add(segDuration)
+		for _, segName := range segments {
+			segmentEntries = append(segmentEntries, hls.Segment{
+				Name:      segName,
+				StartTime: segStart,
+				EndTime:   segStop,
+				Length:    segDuration.Seconds(),
+				URI:       fmt.Sprintf("file:///%s", segName),
+			})
+			segStart = segStop
+			segStop = segStart.Add(segDuration)
+		}
+		segIDs, err = uut.BulkRegisterLiveStreamSegments(utCtxt, sourceID, segmentEntries)
+		assert.Nil(err)
+		assert.Len(segIDs, 2)
+		for _, segName := range segments {
+			_, ok := segIDs[segName]
+			assert.True(ok)
+		}
+		uut.Close()
 	}
 
 	// Case 6: batch delete segments
 	{
+		uut := conns.NewPersistanceManager()
 		deleteIDs := []string{}
 		for _, segID := range segIDs {
 			deleteIDs = append(deleteIDs, segID)
 		}
 		assert.Nil(uut.BulkDeleteLiveStreamSegment(utCtxt, deleteIDs))
+		uut.Close()
 	}
 	{
+		uut := conns.NewPersistanceManager()
 		entries, err := uut.ListAllLiveStreamSegments(utCtxt, sourceID)
 		assert.Nil(err)
 		assert.Len(entries, 1)
 		assert.Equal(segmentID0, entries[0].ID)
+		uut.Close()
 	}
 
 	// Case #: delete video source
-	assert.Nil(uut.DeleteVideoSource(utCtxt, sourceID))
 	{
+		uut := conns.NewPersistanceManager()
+		assert.Nil(uut.DeleteVideoSource(utCtxt, sourceID))
+		uut.Close()
+	}
+	{
+		uut := conns.NewPersistanceManager()
 		entries, err := uut.ListAllLiveStreamSegments(utCtxt, sourceID)
 		assert.Nil(err)
 		assert.Len(entries, 0)
+		uut.Close()
 	}
 }
 
@@ -376,52 +460,68 @@ func TestDBManagerVideoSegmentPurgeOldSegments(t *testing.T) {
 
 	testInstance := fmt.Sprintf("ut-%s", uuid.NewString())
 	testDB := fmt.Sprintf("/tmp/%s.db", testInstance)
-	uut, err := db.NewManager(db.GetSqliteDialector(testDB), logger.Info)
+	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB), logger.Info)
 	assert.Nil(err)
 
 	log.Debugf("Using %s", testDB)
 
 	utCtxt := context.Background()
 
-	assert.Nil(uut.Ready(utCtxt))
+	{
+		uut := conns.NewPersistanceManager()
+		assert.Nil(uut.Ready(utCtxt))
+		uut.Close()
+	}
 
 	// Create a source
-	sourceID, err := uut.DefineVideoSource(
-		utCtxt, uuid.NewString(), 4, nil, nil,
-	)
-	assert.Nil(err)
+	var sourceID string
+	{
+		uut := conns.NewPersistanceManager()
+		sourceID, err = uut.DefineVideoSource(
+			utCtxt, uuid.NewString(), 4, nil, nil,
+		)
+		assert.Nil(err)
+		uut.Close()
+	}
 
 	currentTime := time.Now().UTC()
 	segmentLength := time.Second * 10
 
 	// Define test segments
 	testSegments := []hls.Segment{}
-	for itr := 0; itr < 6; itr++ {
-		segmentName := fmt.Sprintf("ut-seg-%s.ts", uuid.NewString())
-		testSegments = append(testSegments, hls.Segment{
-			Name:      segmentName,
-			StartTime: currentTime.Add(segmentLength * time.Duration(itr)),
-			EndTime:   currentTime.Add(segmentLength * time.Duration(itr+1)),
-			Length:    segmentLength.Seconds(),
-			URI:       fmt.Sprintf("file:///tmp/%s", segmentName),
-		})
+	{
+		uut := conns.NewPersistanceManager()
+		for itr := 0; itr < 6; itr++ {
+			segmentName := fmt.Sprintf("ut-seg-%s.ts", uuid.NewString())
+			testSegments = append(testSegments, hls.Segment{
+				Name:      segmentName,
+				StartTime: currentTime.Add(segmentLength * time.Duration(itr)),
+				EndTime:   currentTime.Add(segmentLength * time.Duration(itr+1)),
+				Length:    segmentLength.Seconds(),
+				URI:       fmt.Sprintf("file:///tmp/%s", segmentName),
+			})
+		}
+		// Install segments
+		_, err = uut.BulkRegisterLiveStreamSegments(utCtxt, sourceID, testSegments)
+		assert.Nil(err)
+		uut.Close()
 	}
-	// Install segments
-	_, err = uut.BulkRegisterLiveStreamSegments(utCtxt, sourceID, testSegments)
-	assert.Nil(err)
 
 	// Case 0: read back segments
 	{
+		uut := conns.NewPersistanceManager()
 		segments, err := uut.ListAllLiveStreamSegments(utCtxt, sourceID)
 		assert.Nil(err)
 		assert.Len(segments, 6)
 		for idx, segment := range segments {
 			assert.Equal(testSegments[idx].Name, segment.Name)
 		}
+		uut.Close()
 	}
 
 	// Case 1: delete segments older than time
 	{
+		uut := conns.NewPersistanceManager()
 		markTime := currentTime.Add(segmentLength * 3)
 		assert.Nil(uut.PurgeOldLiveStreamSegments(utCtxt, markTime))
 		segments, err := uut.ListAllLiveStreamSegments(utCtxt, sourceID)
@@ -430,16 +530,19 @@ func TestDBManagerVideoSegmentPurgeOldSegments(t *testing.T) {
 		for idx, segment := range segments {
 			assert.Equal(testSegments[idx+2].Name, segment.Name)
 		}
+		uut.Close()
 	}
 
 	// Case 2: delete segments older than time
 	{
+		uut := conns.NewPersistanceManager()
 		markTime := currentTime.Add(segmentLength * 6)
 		assert.Nil(uut.PurgeOldLiveStreamSegments(utCtxt, markTime))
 		segments, err := uut.ListAllLiveStreamSegments(utCtxt, sourceID)
 		assert.Nil(err)
 		assert.Len(segments, 1)
 		assert.Equal(testSegments[5].Name, segments[0].Name)
+		uut.Close()
 	}
 }
 
@@ -449,25 +552,39 @@ func TestDBManagerVideoRecording(t *testing.T) {
 
 	testInstance := fmt.Sprintf("ut-%s", uuid.NewString())
 	testDB := fmt.Sprintf("/tmp/%s.db", testInstance)
-	uut, err := db.NewManager(db.GetSqliteDialector(testDB), logger.Info)
+	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB), logger.Info)
 	assert.Nil(err)
 
 	log.Debugf("Using %s", testDB)
 
 	utCtxt := context.Background()
 
-	assert.Nil(uut.Ready(utCtxt))
+	{
+		uut := conns.NewPersistanceManager()
+		assert.Nil(uut.Ready(utCtxt))
+		uut.Close()
+	}
 
 	// Case 0: no recordings
 	{
+		uut := conns.NewPersistanceManager()
 		_, err := uut.GetRecordingSession(utCtxt, uuid.NewString())
 		assert.NotNil(err)
+		uut.Close()
+	}
+	{
+		uut := conns.NewPersistanceManager()
 		result, err := uut.ListRecordingSessions(utCtxt)
 		assert.Nil(err)
 		assert.Len(result, 0)
-		result, err = uut.ListRecordingSessionsOfSource(utCtxt, uuid.NewString(), false)
+		uut.Close()
+	}
+	{
+		uut := conns.NewPersistanceManager()
+		result, err := uut.ListRecordingSessionsOfSource(utCtxt, uuid.NewString(), false)
 		assert.Nil(err)
 		assert.Len(result, 0)
+		uut.Close()
 	}
 
 	testSource0 := uuid.NewString()
@@ -476,21 +593,26 @@ func TestDBManagerVideoRecording(t *testing.T) {
 	// Case 1: define new recording
 	recordingID0 := ""
 	{
+		uut := conns.NewPersistanceManager()
 		entryID, err := uut.DefineRecordingSession(utCtxt, testSource0, nil, nil, currentTime)
 		assert.Nil(err)
 		recordingID0 = entryID
+		uut.Close()
 	}
 	{
+		uut := conns.NewPersistanceManager()
 		entry, err := uut.GetRecordingSession(utCtxt, recordingID0)
 		assert.Nil(err)
 		assert.Equal(recordingID0, entry.ID)
 		assert.Equal(testSource0, entry.SourceID)
 		assert.Equal(1, entry.Active)
 		assert.Equal(currentTime.Unix(), entry.StartTime.Unix())
+		uut.Close()
 	}
 
 	// Case 2: update recording entry
 	{
+		uut := conns.NewPersistanceManager()
 		testAlias := uuid.NewString()
 		testDescription := uuid.NewString()
 		assert.Nil(uut.UpdateRecordingSession(utCtxt, common.Recording{
@@ -501,16 +623,20 @@ func TestDBManagerVideoRecording(t *testing.T) {
 		assert.Nil(err)
 		assert.Equal(testAlias, *entry.Alias)
 		assert.Equal(testDescription, *entry.Description)
+		uut.Close()
 	}
 
 	// Case 3: create new recording
 	recordingID1 := ""
 	{
+		uut := conns.NewPersistanceManager()
 		entryID, err := uut.DefineRecordingSession(utCtxt, testSource0, nil, nil, currentTime)
 		assert.Nil(err)
 		recordingID1 = entryID
+		uut.Close()
 	}
 	{
+		uut := conns.NewPersistanceManager()
 		entries, err := uut.ListRecordingSessions(utCtxt)
 		assert.Nil(err)
 		assert.Len(entries, 2)
@@ -525,11 +651,17 @@ func TestDBManagerVideoRecording(t *testing.T) {
 		assert.Equal(testSource0, entry.SourceID)
 		assert.Equal(1, entry.Active)
 		assert.Equal(currentTime.Unix(), entry.StartTime.Unix())
+		uut.Close()
 	}
 
 	// Case 4: mark one recording finished
-	assert.Nil(uut.MarkEndOfRecordingSession(utCtxt, recordingID1, currentTime))
 	{
+		uut := conns.NewPersistanceManager()
+		assert.Nil(uut.MarkEndOfRecordingSession(utCtxt, recordingID1, currentTime))
+		uut.Close()
+	}
+	{
+		uut := conns.NewPersistanceManager()
 		entries, err := uut.ListRecordingSessionsOfSource(utCtxt, testSource0, false)
 		assert.Nil(err)
 		assert.Len(entries, 2)
@@ -543,6 +675,7 @@ func TestDBManagerVideoRecording(t *testing.T) {
 		assert.Nil(err)
 		assert.Len(entries, 1)
 		assert.Equal(recordingID0, entries[0].ID)
+		uut.Close()
 	}
 
 	testSource1 := uuid.NewString()
@@ -550,11 +683,14 @@ func TestDBManagerVideoRecording(t *testing.T) {
 	// Case 5: create new recording with different source
 	recordingID2 := ""
 	{
+		uut := conns.NewPersistanceManager()
 		entryID, err := uut.DefineRecordingSession(utCtxt, testSource1, nil, nil, currentTime)
 		assert.Nil(err)
 		recordingID2 = entryID
+		uut.Close()
 	}
 	{
+		uut := conns.NewPersistanceManager()
 		entries, err := uut.ListRecordingSessions(utCtxt)
 		assert.Nil(err)
 		assert.Len(entries, 3)
@@ -566,33 +702,52 @@ func TestDBManagerVideoRecording(t *testing.T) {
 		assert.Equal(testSource1, entry.SourceID)
 		assert.Equal(1, entry.Active)
 		assert.Equal(currentTime.Unix(), entry.StartTime.Unix())
+		uut.Close()
 	}
 
-	recording1, err := uut.GetRecordingSession(utCtxt, recordingID1)
-	assert.Nil(err)
+	var recording1 common.Recording
+	{
+		uut := conns.NewPersistanceManager()
+		recording1, err = uut.GetRecordingSession(utCtxt, recordingID1)
+		assert.Nil(err)
+		uut.Close()
+	}
 
 	// Case 6: delete recording
-	assert.Nil(uut.DeleteRecordingSession(utCtxt, recordingID1))
+	{
+		uut := conns.NewPersistanceManager()
+		assert.Nil(uut.DeleteRecordingSession(utCtxt, recordingID1))
+		uut.Close()
+	}
 
 	// Case 7: recreate deleted record
-	assert.Nil(uut.RecordKnownRecordingSession(utCtxt, recording1))
 	{
+		uut := conns.NewPersistanceManager()
+		assert.Nil(uut.RecordKnownRecordingSession(utCtxt, recording1))
+		uut.Close()
+	}
+	{
+		uut := conns.NewPersistanceManager()
 		entry, err := uut.GetRecordingSession(utCtxt, recordingID1)
 		assert.Nil(err)
 		assert.Equal(recordingID1, entry.ID)
 		assert.Equal(testSource0, entry.SourceID)
 		assert.Equal(-1, entry.Active)
 		assert.Equal(currentTime.Unix(), entry.StartTime.Unix())
+		uut.Close()
 	}
 	{
+		uut := conns.NewPersistanceManager()
 		entries, err := uut.ListRecordingSessionsOfSource(utCtxt, testSource0, true)
 		assert.Nil(err)
 		assert.Len(entries, 1)
 		assert.Equal(recordingID0, entries[0].ID)
+		uut.Close()
 	}
 
 	// Case 8: query recording by alias
 	{
+		uut := conns.NewPersistanceManager()
 		newAlias := uuid.NewString()
 		entry, err := uut.GetRecordingSession(utCtxt, recordingID0)
 		assert.Nil(err)
@@ -603,6 +758,7 @@ func TestDBManagerVideoRecording(t *testing.T) {
 		assert.Nil(err)
 		assert.Equal(recordingID0, entry.ID)
 		assert.Equal(newAlias, *entry.Alias)
+		uut.Close()
 	}
 }
 
@@ -631,12 +787,16 @@ func TestDBManagerRecordingSegments(t *testing.T) {
 	sqlDialector, err := db.GetPostgresDialector(getUnitTestPSQLConfig(assert))
 	assert.Nil(err)
 
-	uut, err := db.NewManager(sqlDialector, logger.Info)
+	conns, err := db.NewSQLConnection(sqlDialector, logger.Info)
 	assert.Nil(err)
 
 	utCtxt := context.Background()
 
-	assert.Nil(uut.Ready(utCtxt))
+	{
+		uut := conns.NewPersistanceManager()
+		assert.Nil(uut.Ready(utCtxt))
+		uut.Close()
+	}
 
 	testSourceID := uuid.NewString()
 
@@ -644,14 +804,19 @@ func TestDBManagerRecordingSegments(t *testing.T) {
 
 	// Prepare test sessions
 	sessionIDs := []string{}
-	for itr := 0; itr < 3; itr++ {
-		entryID, err := uut.DefineRecordingSession(utCtxt, testSourceID, nil, nil, timestamp)
-		assert.Nil(err)
-		sessionIDs = append(sessionIDs, entryID)
+	{
+		uut := conns.NewPersistanceManager()
+		for itr := 0; itr < 3; itr++ {
+			entryID, err := uut.DefineRecordingSession(utCtxt, testSourceID, nil, nil, timestamp)
+			assert.Nil(err)
+			sessionIDs = append(sessionIDs, entryID)
+		}
+		uut.Close()
 	}
 
 	// Case 0: create segment associated with unknown recording
 	{
+		uut := conns.NewPersistanceManager()
 		testSegment := common.VideoSegment{
 			ID:       ulid.Make().String(),
 			SourceID: testSourceID,
@@ -665,6 +830,7 @@ func TestDBManagerRecordingSegments(t *testing.T) {
 				utCtxt, []string{uuid.NewString()}, []common.VideoSegment{testSegment},
 			),
 		)
+		uut.Close()
 	}
 
 	// Create test segments
@@ -683,8 +849,13 @@ func TestDBManagerRecordingSegments(t *testing.T) {
 	}
 
 	// Case 1: install segment with recording association
-	assert.Nil(uut.RegisterRecordingSegments(utCtxt, []string{sessionIDs[0]}, testSegments0[0:2]))
 	{
+		uut := conns.NewPersistanceManager()
+		assert.Nil(uut.RegisterRecordingSegments(utCtxt, []string{sessionIDs[0]}, testSegments0[0:2]))
+		uut.Close()
+	}
+	{
+		uut := conns.NewPersistanceManager()
 		segments, err := uut.ListAllSegmentsOfRecording(utCtxt, sessionIDs[0])
 		assert.Nil(err)
 		assert.Len(segments, 2)
@@ -696,11 +867,17 @@ func TestDBManagerRecordingSegments(t *testing.T) {
 		assert.EqualValues(testSegments0[0].Name, segByID[testSegments0[0].ID].Name)
 		assert.Contains(segByID, testSegments0[1].ID)
 		assert.EqualValues(testSegments0[1].Name, segByID[testSegments0[1].ID].Name)
+		uut.Close()
 	}
 
 	// Case 2: install the same segments, but with more associations
-	assert.Nil(uut.RegisterRecordingSegments(utCtxt, sessionIDs[0:2], testSegments0[0:2]))
 	{
+		uut := conns.NewPersistanceManager()
+		assert.Nil(uut.RegisterRecordingSegments(utCtxt, sessionIDs[0:2], testSegments0[0:2]))
+		uut.Close()
+	}
+	{
+		uut := conns.NewPersistanceManager()
 		segments, err := uut.ListAllSegmentsOfRecording(utCtxt, sessionIDs[0])
 		assert.Nil(err)
 		assert.Len(segments, 2)
@@ -713,11 +890,17 @@ func TestDBManagerRecordingSegments(t *testing.T) {
 		}
 		assert.Contains(segByID, testSegments0[0].ID)
 		assert.Contains(segByID, testSegments0[1].ID)
+		uut.Close()
 	}
 
 	// Case 3: install segment with recording association
-	assert.Nil(uut.RegisterRecordingSegments(utCtxt, sessionIDs[1:3], testSegments0[2:3]))
 	{
+		uut := conns.NewPersistanceManager()
+		assert.Nil(uut.RegisterRecordingSegments(utCtxt, sessionIDs[1:3], testSegments0[2:3]))
+		uut.Close()
+	}
+	{
+		uut := conns.NewPersistanceManager()
 		segments, err := uut.ListAllSegmentsOfRecording(utCtxt, sessionIDs[1])
 		assert.Nil(err)
 		assert.Len(segments, 3)
@@ -728,18 +911,26 @@ func TestDBManagerRecordingSegments(t *testing.T) {
 		assert.Contains(segByID, testSegments0[0].ID)
 		assert.Contains(segByID, testSegments0[1].ID)
 		assert.Contains(segByID, testSegments0[2].ID)
+		uut.Close()
 	}
 	{
+		uut := conns.NewPersistanceManager()
 		segments, err := uut.ListAllSegmentsOfRecording(utCtxt, sessionIDs[2])
 		assert.Nil(err)
 		assert.Len(segments, 1)
 		assert.Equal(testSegments0[2].Name, segments[0].Name)
+		uut.Close()
 	}
 
 	// Case 4: delete recording
-	assert.Nil(uut.DeleteRecordingSession(utCtxt, sessionIDs[0]))
-	assert.Nil(uut.DeleteRecordingSession(utCtxt, sessionIDs[1]))
 	{
+		uut := conns.NewPersistanceManager()
+		assert.Nil(uut.DeleteRecordingSession(utCtxt, sessionIDs[0]))
+		assert.Nil(uut.DeleteRecordingSession(utCtxt, sessionIDs[1]))
+		uut.Close()
+	}
+	{
+		uut := conns.NewPersistanceManager()
 		segments, err := uut.ListAllSegmentsOfRecording(utCtxt, sessionIDs[0])
 		assert.Nil(err)
 		assert.Len(segments, 0)
@@ -758,10 +949,12 @@ func TestDBManagerRecordingSegments(t *testing.T) {
 		assert.Contains(segByID, testSegments0[0].ID)
 		assert.Contains(segByID, testSegments0[1].ID)
 		assert.Contains(segByID, testSegments0[2].ID)
+		uut.Close()
 	}
 
 	// Case 5: purge the segments not associated with any recordings
 	{
+		uut := conns.NewPersistanceManager()
 		deleted, err := uut.PurgeUnassociatedRecordingSegments(utCtxt)
 		assert.Nil(err)
 		segByID := map[string]common.VideoSegment{}
@@ -770,8 +963,10 @@ func TestDBManagerRecordingSegments(t *testing.T) {
 		}
 		assert.Contains(segByID, testSegments0[0].ID)
 		assert.Contains(segByID, testSegments0[1].ID)
+		uut.Close()
 	}
 	{
+		uut := conns.NewPersistanceManager()
 		segments, err := uut.ListAllRecordingSegments(utCtxt)
 		assert.Nil(err)
 		segByID := map[string]common.VideoSegment{}
@@ -781,5 +976,6 @@ func TestDBManagerRecordingSegments(t *testing.T) {
 		assert.NotContains(segByID, testSegments0[0].ID)
 		assert.NotContains(segByID, testSegments0[1].ID)
 		assert.Contains(segByID, testSegments0[2].ID)
+		uut.Close()
 	}
 }

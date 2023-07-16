@@ -17,6 +17,7 @@ fix: .prepare ## Lint and fix vialoations
 .PHONY: mock
 mock: .prepare ## Generate test mock interfaces
 	@mockery --dir db --name PersistenceManager
+	@mockery --dir db --name ConnectionManager
 	@mockery --dir utils --name SegmentReader
 	@mockery --dir utils --name VideoSegmentCache
 	@mockery --dir vod --name PlaylistBuilder

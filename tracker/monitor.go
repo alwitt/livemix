@@ -74,7 +74,7 @@ after that.
 
 	@param parentContext context.Context - context from which to define the worker context
 	@param source common.VideoSource - the HLS source to tracker
-	@param dbClient db.Manager - DB access client
+	@param dbConns db.ConnectionManager - DB connection manager
 	@param trackingWindow time.Duration - see note
 	@param segmentCache utils.VideoSegmentCache - HLS video segment cache
 	@param reader utils.SegmentReader - HLS video segment data reader
@@ -84,7 +84,7 @@ after that.
 func NewSourceHLSMonitor(
 	parentContext context.Context,
 	source common.VideoSource,
-	dbClient db.PersistenceManager,
+	dbConns db.ConnectionManager,
 	trackingWindow time.Duration,
 	segmentCache utils.VideoSegmentCache,
 	reader utils.SegmentReader,
@@ -101,7 +101,7 @@ func NewSourceHLSMonitor(
 	// Setup components
 
 	// Playlist tracker
-	tracker, err := NewSourceHLSTracker(source, dbClient, trackingWindow)
+	tracker, err := NewSourceHLSTracker(source, dbConns, trackingWindow)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Unable to define playlist tracker")
 		return nil, err

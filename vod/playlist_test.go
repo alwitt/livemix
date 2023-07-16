@@ -22,7 +22,10 @@ func TestBuildLiveStreamPlaylist(t *testing.T) {
 
 	utCtxt := context.Background()
 
+	mockSQL := mocks.NewConnectionManager(t)
 	mockDB := mocks.NewPersistenceManager(t)
+	mockSQL.On("NewPersistanceManager").Return(mockDB)
+	mockDB.On("Close").Return()
 
 	testSource := common.VideoSource{
 		ID:                  uuid.NewString(),
@@ -38,7 +41,7 @@ func TestBuildLiveStreamPlaylist(t *testing.T) {
 
 	segmentPerPlaylist := 3
 
-	uut, err := vod.NewPlaylistBuilder(mockDB, segmentPerPlaylist)
+	uut, err := vod.NewPlaylistBuilder(mockSQL, segmentPerPlaylist)
 	assert.Nil(err)
 
 	startTime := time.Now().UTC()
