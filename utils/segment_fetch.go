@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"strings"
 	"sync"
 
 	"github.com/alwitt/goutils"
@@ -45,6 +46,7 @@ type segmentReader struct {
 	wg               sync.WaitGroup
 	workerContext    context.Context
 	workerCtxtCancel context.CancelFunc
+	s3               S3Client
 }
 
 /*
@@ -52,9 +54,12 @@ NewSegmentReader define new SegmentReader
 
 	@param parentContext context.Context - context from which to define the worker context
 	@param workerCount int - number of parallel read worker to define
+	@param s3 S3Client - S3 client for operating against the S3 server
 	@return new SegmentReader
 */
-func NewSegmentReader(parentContext context.Context, workerCount int) (SegmentReader, error) {
+func NewSegmentReader(
+	parentContext context.Context, workerCount int, s3 S3Client,
+) (SegmentReader, error) {
 	logTags := log.Fields{
 		"module":    "utils",
 		"component": "hls-video-segment-reader",
@@ -80,6 +85,7 @@ func NewSegmentReader(parentContext context.Context, workerCount int) (SegmentRe
 		wg:               sync.WaitGroup{},
 		workerContext:    workerCtxt,
 		workerCtxtCancel: cancel,
+		s3:               s3,
 	}
 
 	// Define supported tasks
@@ -146,6 +152,8 @@ func (r *segmentReader) coreReadSegment(
 	switch segment.Scheme {
 	case "file":
 		return r.readSegmentFromFile(segmentID, segment, returnCB)
+	case "s3":
+		return r.readSegmentFromS3(segmentID, segment, returnCB)
 	default:
 		err := fmt.Errorf("invalid segment path URL")
 		log.
@@ -195,6 +203,72 @@ func (r *segmentReader) readSegmentFromFile(
 		log.
 			WithError(err).
 			WithFields(logTags).
+			WithField("segment-url", segment.String()).
+			Error("Unable to pass on read segment content")
+		return err
+	}
+	return nil
+}
+
+func (r *segmentReader) readSegmentFromS3(
+	segmentID string, segment *url.URL, returnCB SegmentReturnCallback,
+) error {
+	logTags := r.GetLogTagsForContext(r.workerContext)
+
+	if r.s3 == nil {
+		err := fmt.Errorf("no S3 client specified")
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("segment-id", segmentID).
+			WithField("segment-url", segment.String()).
+			Error("Unable to to read segment from S3")
+		return err
+	}
+
+	sourceBucket := segment.Host
+	segmentObjectKey := segment.Path
+	// Remove any leading `/` from object key
+	{
+		parts := strings.Split(segmentObjectKey, "/")
+		keep := []string{}
+		for _, onePart := range parts {
+			if onePart != "" {
+				keep = append(keep, onePart)
+			}
+		}
+		segmentObjectKey = strings.Join(keep, "/")
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("segment-id", segmentID).
+		WithField("segment-url", segment.String()).
+		Debug("Fetching segment from S3")
+
+	content, err := r.s3.GetObject(r.workerContext, sourceBucket, segmentObjectKey)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("segment-id", segmentID).
+			WithField("segment-url", segment.String()).
+			Error("Fetching segment failed")
+		return err
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("segment-id", segmentID).
+		WithField("segment-url", segment.String()).
+		WithField("length", len(content)).
+		Debug("Read segment from S3")
+
+	if err := returnCB(r.workerContext, segmentID, content); err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("segment-id", segmentID).
 			WithField("segment-url", segment.String()).
 			Error("Unable to pass on read segment content")
 		return err

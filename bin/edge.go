@@ -209,7 +209,7 @@ func DefineEdgeNode(
 
 	// Define video segment reader
 	theNode.segmentReader, err = utils.NewSegmentReader(
-		parentCtxt, config.MonitorConfig.SegmentReaderWorkerCount,
+		parentCtxt, config.MonitorConfig.SegmentReaderWorkerCount, nil,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create video segment reader")
