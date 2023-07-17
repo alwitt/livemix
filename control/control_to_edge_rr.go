@@ -105,6 +105,10 @@ func NewEdgeRequestClient(
 		reflect.TypeOf(ipc.GetVideoSourceByNameRequest{}),
 		instance.processInboundVideoSourceInfoRequest,
 	)
+	instance.InstallHandler(
+		reflect.TypeOf(ipc.ListActiveRecordingsRequest{}),
+		instance.processInboundActiveRecordingsOfSource,
+	)
 
 	return instance, nil
 }
@@ -152,6 +156,48 @@ func (c *edgeRequestClientImpl) processInboundVideoSourceInfoRequest(
 		response = ipc.NewGeneralResponse(false, err.Error())
 	} else {
 		response = ipc.NewGetVideoSourceByNameResponse(sourceInfo)
+	}
+
+	return response, nil
+}
+
+func (c *edgeRequestClientImpl) processInboundActiveRecordingsOfSource(
+	ctxt context.Context, requestRaw interface{}, origMsg goutils.ReqRespMessage,
+) (interface{}, error) {
+	logTag := c.GetLogTagsForContext(ctxt)
+
+	request, ok := requestRaw.(ipc.ListActiveRecordingsRequest)
+	if !ok {
+		return nil, fmt.Errorf(
+			"incorrect request type '%s' for 'list active recordings of source'",
+			reflect.TypeOf(requestRaw),
+		)
+	}
+
+	if c.core == nil {
+		err := fmt.Errorf("no reference to SystemManager set yet")
+		log.
+			WithError(err).
+			WithFields(logTag).
+			WithField("request-sender", origMsg.SenderID).
+			WithField("request-id", origMsg.RequestID).
+			Error("Unable to start request handling")
+		return nil, err
+	}
+
+	// List active recording source
+	recordings, err := c.core.ListRecordingSessionsOfSource(ctxt, request.SourceID, true)
+	var response interface{}
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTag).
+			WithField("request-sender", origMsg.SenderID).
+			WithField("request-id", origMsg.RequestID).
+			Errorf("Failed to get active recording of source '%s'", request.SourceID)
+		response = ipc.NewGeneralResponse(false, err.Error())
+	} else {
+		response = ipc.NewListActiveRecordingsResponse(recordings)
 	}
 
 	return response, nil

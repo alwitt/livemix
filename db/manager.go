@@ -314,7 +314,7 @@ type PersistenceManager interface {
 			@param ctxt context.Context - execution context
 			@param sourceID string - the video source ID
 			@param active bool - if 1, select only the active recording sessions; else return all.
-			@returns all recording sessions of a video source source
+			@returns all recording sessions of a video source
 	*/
 	ListRecordingSessionsOfSource(
 		ctxt context.Context, sourceID string, active bool,

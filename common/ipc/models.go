@@ -53,11 +53,12 @@ func ParseRawMessage(rawMsg []byte) (interface{}, error) {
 type baseRequestTypeDT string
 
 const (
-	ipcRequestTypeGetVideoSource    baseRequestTypeDT = "get_video_source"
-	ipcRequestTypeChangeStreamState baseRequestTypeDT = "change_stream_state"
-	ipcRequestTypeStartRecording    baseRequestTypeDT = "start_recording"
-	ipcRequestTypeStopRecording     baseRequestTypeDT = "stop_recording"
-	ipcRequestTypeCloseAllRecording baseRequestTypeDT = "close_all_active_recording"
+	ipcRequestTypeGetVideoSource       baseRequestTypeDT = "get_video_source"
+	ipcRequestTypeChangeStreamState    baseRequestTypeDT = "change_stream_state"
+	ipcRequestTypeStartRecording       baseRequestTypeDT = "start_recording"
+	ipcRequestTypeStopRecording        baseRequestTypeDT = "stop_recording"
+	ipcRequestTypeCloseAllRecording    baseRequestTypeDT = "close_all_active_recording"
+	ipcRequestTypeListActiveRecordings baseRequestTypeDT = "list_active_recordings"
 )
 
 // BaseRequest base request IPC message payload. All other requests must be built
@@ -189,6 +190,29 @@ func NewCloseAllActiveRecordingRequest(sourceID string) CloseAllActiveRecordingR
 	}
 }
 
+// ListActiveRecordingsRequest RR request list all active recording sessions associated
+// with a video source
+type ListActiveRecordingsRequest struct {
+	BaseRequest
+	// SourceID video source ID
+	SourceID string `json:"source_id" validate:"required"`
+}
+
+/*
+NewListActiveRecordingsRequest define new ListActiveRecordingsRequest message
+
+	@param sourceID string - video source ID
+	@returns defined structure
+*/
+func NewListActiveRecordingsRequest(sourceID string) ListActiveRecordingsRequest {
+	return ListActiveRecordingsRequest{
+		BaseRequest: BaseRequest{
+			BaseMessage: BaseMessage{Type: ipcMessageTypeRequest},
+			RequestType: ipcRequestTypeListActiveRecordings,
+		}, SourceID: sourceID,
+	}
+}
+
 /*
 parseRawRequestMessage parse raw IPC request message
 
@@ -242,6 +266,14 @@ func parseRawRequestMessage(rawMsg []byte) (interface{}, error) {
 		}
 		return request, nil
 
+	// List All Active Recording Sessions Associated With Video Source
+	case ipcRequestTypeListActiveRecordings:
+		var request ListActiveRecordingsRequest
+		if err := json.Unmarshal(rawMsg, &request); err != nil {
+			return nil, err
+		}
+		return request, nil
+
 	default:
 		return nil, fmt.Errorf("unknown IPC request message type '%s'", asRequestMsg.Type)
 	}
@@ -253,8 +285,9 @@ func parseRawRequestMessage(rawMsg []byte) (interface{}, error) {
 type baseResponseTypeDT string
 
 const (
-	ipcResponseTypeGeneralResponse baseResponseTypeDT = "general_resp"
-	ipcResponseTypeGetVideoSource  baseResponseTypeDT = "get_video_source_resp"
+	ipcResponseTypeGeneralResponse  baseResponseTypeDT = "general_resp"
+	ipcResponseTypeGetVideoSource   baseResponseTypeDT = "get_video_source_resp"
+	ipcResponseTypeActiveRecordings baseResponseTypeDT = "list_active_recordings_resp"
 )
 
 // BaseResponse base response IPC message payload. All other responses must be built
@@ -312,6 +345,29 @@ func NewGetVideoSourceByNameResponse(sourceInfo common.VideoSource) GetVideoSour
 	}
 }
 
+// ListActiveRecordingsResponse RR response containing a list of active recording sessions
+type ListActiveRecordingsResponse struct {
+	BaseResponse
+	// Recordings list of active recordings
+	Recordings []common.Recording `json:"recordings" validate:"required,gte=1,dive"`
+}
+
+/*
+NewListActiveRecordingsResponse define new ListActiveRecordingsResponse message
+
+	@param recordings []common.Recording - list of active recording sessions
+	@returns defined structure
+*/
+func NewListActiveRecordingsResponse(recordings []common.Recording) ListActiveRecordingsResponse {
+	return ListActiveRecordingsResponse{
+		BaseResponse: BaseResponse{
+			BaseMessage:  BaseMessage{Type: ipcMessageTypeResponse},
+			ResponseType: ipcResponseTypeActiveRecordings,
+		},
+		Recordings: recordings,
+	}
+}
+
 /*
 parseRawResponseMessage parse raw IPC response message
 
@@ -336,6 +392,14 @@ func parseRawResponseMessage(rawMsg []byte) (interface{}, error) {
 	// Video Source Info Response
 	case ipcResponseTypeGetVideoSource:
 		var response GetVideoSourceByNameResponse
+		if err := json.Unmarshal(rawMsg, &response); err != nil {
+			return nil, err
+		}
+		return response, nil
+
+	// List Of Active Recording Sessions Response
+	case ipcResponseTypeActiveRecordings:
+		var response ListActiveRecordingsResponse
 		if err := json.Unmarshal(rawMsg, &response); err != nil {
 			return nil, err
 		}

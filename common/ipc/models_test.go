@@ -62,6 +62,14 @@ func TestIPCMessageParsing(t *testing.T) {
 			input:     ipc.NewRecordingSegmentReport([]string{uuid.NewString(), uuid.NewString()}, nil),
 			inputType: reflect.TypeOf(ipc.RecordingSegmentReport{}),
 		},
+		{
+			input:     ipc.NewListActiveRecordingsRequest(uuid.NewString()),
+			inputType: reflect.TypeOf(ipc.ListActiveRecordingsRequest{}),
+		},
+		{
+			input:     ipc.NewListActiveRecordingsResponse([]common.Recording{}),
+			inputType: reflect.TypeOf(ipc.ListActiveRecordingsResponse{}),
+		},
 	}
 
 	for idx, oneTest := range testCases {

@@ -43,6 +43,15 @@ type ControlRequestClient interface {
 	GetVideoSourceInfo(ctxt context.Context, sourceName string) (common.VideoSource, error)
 
 	/*
+		ListActiveRecordingsOfSource list all active video recording sessions of a video source
+
+			@param ctxt context.Context - execution context
+			@param sourceID string - the video source ID
+			@returns all active recording sessions of a video source
+	*/
+	ListActiveRecordingsOfSource(ctxt context.Context, sourceID string) ([]common.Recording, error)
+
+	/*
 		StopAllAssociatedRecordings request all recording associated this this source is stopped
 
 			@param ctxt context.Context - execution context
@@ -218,6 +227,69 @@ func (c *controlRequestClientImpl) GetVideoSourceInfo(
 			WithField("video-source", sourceName).
 			Error("Unable to parse video source info response")
 		return common.VideoSource{}, err
+	}
+}
+
+func (c *controlRequestClientImpl) ListActiveRecordingsOfSource(
+	ctxt context.Context, sourceID string,
+) ([]common.Recording, error) {
+	logTags := c.GetLogTagsForContext(ctxt)
+
+	// Build the request
+	msg := ipc.NewListActiveRecordingsRequest(sourceID)
+	msgStr, err := json.Marshal(&msg)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Failed to build list all active recordings of source request IPC msg")
+		return nil, err
+	}
+
+	// Prepare the request parameters
+	callParam := goutils.RequestCallParam{
+		ExpectedResponsesCount: 1,
+		Blocking:               false,
+		Timeout:                c.requestTimeout,
+	}
+
+	// Make request
+	results, err := c.MakeRequest(
+		ctxt,
+		fmt.Sprintf("Get active recordings of video source '%s'", sourceID),
+		c.controlRRTargetID,
+		msgStr,
+		nil,
+		callParam,
+	)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", sourceID).
+			Error("Stop all recording session of source request failed")
+		return nil, err
+	}
+
+	// Process the responses
+	answer := results[0]
+	switch reflect.TypeOf(answer) {
+	case reflect.TypeOf(ipc.GeneralResponse{}):
+		response := answer.(ipc.GeneralResponse)
+		return nil, fmt.Errorf(response.ErrorMsg)
+
+	case reflect.TypeOf(ipc.ListActiveRecordingsResponse{}):
+		response := answer.(ipc.ListActiveRecordingsResponse)
+		return response.Recordings, nil
+
+	default:
+		err := fmt.Errorf("unknown supported response type '%s'", reflect.TypeOf(answer))
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", sourceID).
+			Error("Unable to parse list active recording sessions response")
+		return nil, err
 	}
 }
 

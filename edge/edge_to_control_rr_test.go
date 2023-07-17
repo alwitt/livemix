@@ -14,6 +14,7 @@ import (
 	"github.com/alwitt/livemix/mocks"
 	"github.com/apex/log"
 	"github.com/google/uuid"
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -420,4 +421,108 @@ func TestEdgeToControlStopAllRecordings(t *testing.T) {
 	err = uut.StopAllAssociatedRecordings(utCtxt, testSourceID)
 	assert.NotNil(err)
 	assert.Equal("dummy response", err.Error())
+}
+
+func TestEdgeToControlListActiveRecordingsOfSource(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+	utCtxt := context.Background()
+
+	mockRRClient := mocks.NewRequestResponseClient(t)
+
+	// --------------------------------------------------------------------------
+	// Prepare mocks for object initialization
+
+	// var requestInject goutils.ReqRespMessageHandler
+	mockRRClient.On(
+		"SetInboundRequestHandler",
+		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("goutils.ReqRespMessageHandler"),
+	).Return(nil).Once()
+
+	edgeName := "unit-tester"
+	controlName := "ut-controller"
+	uut, err := edge.NewControlRequestClient(utCtxt, edgeName, controlName, mockRRClient, time.Second)
+	assert.Nil(err)
+
+	// --------------------------------------------------------------------------
+	// Case 0: success response
+
+	testSourceID := uuid.NewString()
+	testResponse0 := ipc.NewListActiveRecordingsResponse(
+		[]common.Recording{
+			{ID: ulid.Make().String(), SourceID: testSourceID, Active: 1},
+			{ID: ulid.Make().String(), SourceID: testSourceID, Active: 1},
+			{ID: ulid.Make().String(), SourceID: testSourceID, Active: 1},
+		},
+	)
+
+	// Prepare mocks for the request
+	mockRRClient.On(
+		"Request",
+		mock.AnythingOfType("*context.emptyCtx"),
+		controlName,
+		mock.AnythingOfType("[]uint8"),
+		mock.AnythingOfType("map[string]string"),
+		mock.AnythingOfType("goutils.RequestCallParam"),
+	).Run(func(args mock.Arguments) {
+		requestRaw := args.Get(2).([]byte)
+		requestParam := args.Get(4).(goutils.RequestCallParam)
+
+		// Parse the request
+		p, err := ipc.ParseRawMessage(requestRaw)
+		assert.Nil(err)
+		assert.IsType(ipc.ListActiveRecordingsRequest{}, p)
+		request, ok := p.(ipc.ListActiveRecordingsRequest)
+		assert.True(ok)
+		assert.Equal(testSourceID, request.SourceID)
+
+		// Send a response back
+		t, err := json.Marshal(&testResponse0)
+		assert.Nil(err)
+		assert.Nil(requestParam.RespHandler(utCtxt, goutils.ReqRespMessage{Payload: t}))
+	}).Return(uuid.NewString(), nil).Once()
+
+	received, err := uut.ListActiveRecordingsOfSource(utCtxt, testSourceID)
+	assert.Nil(err)
+	assert.Len(received, len(testResponse0.Recordings))
+	for idx, entry := range received {
+		assert.Equal(testResponse0.Recordings[idx].ID, entry.ID)
+		assert.Equal(testResponse0.Recordings[idx].SourceID, entry.SourceID)
+	}
+
+	// --------------------------------------------------------------------------
+	// Case 1: failure response
+
+	testSourceID = uuid.NewString()
+	testResponse1 := ipc.NewGeneralResponse(false, "dummy error")
+
+	// Prepare mocks for the request
+	mockRRClient.On(
+		"Request",
+		mock.AnythingOfType("*context.emptyCtx"),
+		controlName,
+		mock.AnythingOfType("[]uint8"),
+		mock.AnythingOfType("map[string]string"),
+		mock.AnythingOfType("goutils.RequestCallParam"),
+	).Run(func(args mock.Arguments) {
+		requestRaw := args.Get(2).([]byte)
+		requestParam := args.Get(4).(goutils.RequestCallParam)
+
+		// Parse the request
+		p, err := ipc.ParseRawMessage(requestRaw)
+		assert.Nil(err)
+		assert.IsType(ipc.ListActiveRecordingsRequest{}, p)
+		request, ok := p.(ipc.ListActiveRecordingsRequest)
+		assert.True(ok)
+		assert.Equal(testSourceID, request.SourceID)
+
+		// Send a response back
+		t, err := json.Marshal(&testResponse1)
+		assert.Nil(err)
+		assert.Nil(requestParam.RespHandler(utCtxt, goutils.ReqRespMessage{Payload: t}))
+	}).Return(uuid.NewString(), nil).Once()
+
+	_, err = uut.ListActiveRecordingsOfSource(utCtxt, testSourceID)
+	assert.NotNil(err)
 }

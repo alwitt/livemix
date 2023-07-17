@@ -14,6 +14,7 @@ import (
 	"github.com/alwitt/livemix/mocks"
 	"github.com/apex/log"
 	"github.com/google/uuid"
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -110,13 +111,145 @@ func TestControlToEdgeGetVideoSourceInfoResponse(t *testing.T) {
 	assert.Nil(requestInject(utCtxt, request))
 
 	// --------------------------------------------------------------------------
-	// Case 1: send request for video source, but failed
+	// Case 2: send request for video source, but failed
 
 	mockSystem.On(
 		"GetVideoSourceByName",
 		mock.AnythingOfType("*context.emptyCtx"),
 		"video-00",
 	).Return(videoInfo, fmt.Errorf("dummy error")).Once()
+	mockRRClient.On(
+		"Respond",
+		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("goutils.ReqRespMessage"),
+		mock.AnythingOfType("[]uint8"),
+		mock.AnythingOfType("map[string]string"),
+		false,
+	).Run(func(args mock.Arguments) {
+		origRequest := args.Get(1).(goutils.ReqRespMessage)
+		rawResponse := args.Get(2).([]byte)
+
+		// Verify the original request
+		assert.EqualValues(request, origRequest)
+
+		// Parse the response
+		parsed, err := ipc.ParseRawMessage(rawResponse)
+		assert.Nil(err)
+		assert.IsType(ipc.GeneralResponse{}, parsed)
+
+		asType := parsed.(ipc.GeneralResponse)
+		assert.False(asType.Success)
+		assert.Equal("dummy error", asType.ErrorMsg)
+	}).Return(nil).Once()
+
+	assert.Nil(requestInject(utCtxt, request))
+}
+
+func TestControlToEdgeListActiveRecordingOfSource(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+	utCtxt := context.Background()
+
+	mockRRClient := mocks.NewRequestResponseClient(t)
+	mockSystem := mocks.NewSystemManager(t)
+
+	// --------------------------------------------------------------------------
+	// Prepare mocks for object initialization
+
+	var requestInject goutils.ReqRespMessageHandler
+	mockRRClient.On(
+		"SetInboundRequestHandler",
+		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("goutils.ReqRespMessageHandler"),
+	).Run(func(args mock.Arguments) {
+		requestInject = args.Get(1).(goutils.ReqRespMessageHandler)
+	}).Return(nil).Once()
+
+	controlName := "ut-controller"
+	uut, err := control.NewEdgeRequestClient(utCtxt, controlName, mockRRClient, time.Second)
+	assert.Nil(err)
+
+	// --------------------------------------------------------------------------
+	// Case 0: send request without a manager installed
+	{
+		request := ipc.NewListActiveRecordingsRequest(uuid.NewString())
+		requestStr, err := json.Marshal(&request)
+		assert.Nil(err)
+		assert.NotNil(requestInject(utCtxt, goutils.ReqRespMessage{
+			SenderID:  controlName,
+			RequestID: uuid.NewString(),
+			Payload:   requestStr,
+		}))
+	}
+
+	// Install manager
+	uut.InstallReferenceToManager(mockSystem)
+
+	// --------------------------------------------------------------------------
+	// Case 1: send request for active recording of source
+
+	testSourceID := uuid.NewString()
+	var request goutils.ReqRespMessage
+	{
+		requestCore := ipc.NewListActiveRecordingsRequest(testSourceID)
+		requestStr, err := json.Marshal(&requestCore)
+		assert.Nil(err)
+		request = goutils.ReqRespMessage{
+			SenderID:  controlName,
+			RequestID: uuid.NewString(),
+			Payload:   requestStr,
+		}
+	}
+	recordings := []common.Recording{
+		{ID: ulid.Make().String(), SourceID: testSourceID, Active: 1},
+		{ID: ulid.Make().String(), SourceID: testSourceID, Active: 1},
+		{ID: ulid.Make().String(), SourceID: testSourceID, Active: 1},
+	}
+
+	mockSystem.On(
+		"ListRecordingSessionsOfSource",
+		mock.AnythingOfType("*context.emptyCtx"),
+		testSourceID,
+		true,
+	).Return(recordings, nil).Once()
+	mockRRClient.On(
+		"Respond",
+		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("goutils.ReqRespMessage"),
+		mock.AnythingOfType("[]uint8"),
+		mock.AnythingOfType("map[string]string"),
+		false,
+	).Run(func(args mock.Arguments) {
+		origRequest := args.Get(1).(goutils.ReqRespMessage)
+		rawResponse := args.Get(2).([]byte)
+
+		// Verify the original request
+		assert.EqualValues(request, origRequest)
+
+		// Parse the response
+		parsed, err := ipc.ParseRawMessage(rawResponse)
+		assert.Nil(err)
+		assert.IsType(ipc.ListActiveRecordingsResponse{}, parsed)
+
+		asType := parsed.(ipc.ListActiveRecordingsResponse)
+		assert.Len(asType.Recordings, len(recordings))
+		for idx, entry := range asType.Recordings {
+			assert.Equal(recordings[idx].ID, entry.ID)
+			assert.Equal(recordings[idx].SourceID, entry.SourceID)
+		}
+	}).Return(nil).Once()
+
+	assert.Nil(requestInject(utCtxt, request))
+
+	// --------------------------------------------------------------------------
+	// Case 1: send request for active recording of source, but failed
+
+	mockSystem.On(
+		"ListRecordingSessionsOfSource",
+		mock.AnythingOfType("*context.emptyCtx"),
+		testSourceID,
+		true,
+	).Return(recordings, fmt.Errorf("dummy error")).Once()
 	mockRRClient.On(
 		"Respond",
 		mock.AnythingOfType("*context.emptyCtx"),
