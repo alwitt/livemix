@@ -37,6 +37,16 @@ type PersistenceManager interface {
 	*/
 	Error() error
 
+	/*
+		MarkExternalError record an external error with the manager to indicate failure that
+		is unrelated to SQL operations but required SQL transaction rollback.
+
+		This would force a transaction rollback when `Close` is called
+
+			@param err error - the external error
+	*/
+	MarkExternalError(err error)
+
 	// =====================================================================================
 	// Video sources
 
@@ -449,6 +459,10 @@ func (m *persistenceManagerImpl) Close() {
 
 func (m *persistenceManagerImpl) Error() error {
 	return m.err
+}
+
+func (m *persistenceManagerImpl) MarkExternalError(err error) {
+	m.err = err
 }
 
 // =====================================================================================

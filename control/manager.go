@@ -334,16 +334,6 @@ func (m *systemManagerImpl) ChangeVideoSourceStreamState(
 		return err
 	}
 
-	// Request state change first
-	if err := m.rrClient.ChangeVideoStreamingState(ctxt, entry, streaming); err != nil {
-		log.
-			WithError(err).
-			WithFields(logTags).
-			WithField("source-id", id).
-			Error("Streaming state change request failed")
-		return err
-	}
-
 	// Update persistence
 	if err := dbClient.ChangeVideoSourceStreamState(ctxt, id, streaming); err != nil {
 		log.
@@ -351,6 +341,17 @@ func (m *systemManagerImpl) ChangeVideoSourceStreamState(
 			WithFields(logTags).
 			WithField("source-id", id).
 			Error("Failed to persist streaming state change")
+		return err
+	}
+
+	// Request state change
+	if err := m.rrClient.ChangeVideoStreamingState(ctxt, entry, streaming); err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", id).
+			Error("Streaming state change request failed")
+		dbClient.MarkExternalError(err)
 		return err
 	}
 
@@ -365,8 +366,6 @@ func (m *systemManagerImpl) DeleteVideoSource(ctxt context.Context, id string) e
 
 // =====================================================================================
 // Video Recording Sessions
-
-// TODO FIXME: continue after refactoring the session management in the persistence layer
 
 func (m *systemManagerImpl) DefineRecordingSession(
 	ctxt context.Context, sourceID string, alias, description *string, startTime time.Time,
@@ -431,6 +430,7 @@ func (m *systemManagerImpl) DefineRecordingSession(
 			WithField("source-id", sourceID).
 			WithField("recording", recordingID).
 			Error("Unable to command source to start recording")
+		dbClient.MarkExternalError(err)
 		return "", err
 	}
 
@@ -514,6 +514,17 @@ func (m *systemManagerImpl) MarkEndOfRecordingSession(
 		return err
 	}
 
+	// Stop the recording entry
+	if err := dbClient.MarkEndOfRecordingSession(ctxt, id, endTime); err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", source.ID).
+			WithField("recording", id).
+			Error("Failed to mark recording as ended")
+		return err
+	}
+
 	log.
 		WithFields(logTags).
 		WithField("source-id", source.ID).
@@ -528,6 +539,7 @@ func (m *systemManagerImpl) MarkEndOfRecordingSession(
 			WithField("source-id", source.ID).
 			WithField("recording", id).
 			Error("Unable to command source to stop recording")
+		dbClient.MarkExternalError(err)
 		return err
 	}
 
@@ -536,17 +548,6 @@ func (m *systemManagerImpl) MarkEndOfRecordingSession(
 		WithField("source-id", source.ID).
 		WithField("recording", id).
 		Info("Source has stop recording")
-
-	// Stop the recording entry
-	if err := dbClient.MarkEndOfRecordingSession(ctxt, id, endTime); err != nil {
-		log.
-			WithError(err).
-			WithFields(logTags).
-			WithField("source-id", source.ID).
-			WithField("recording", id).
-			Error("Failed to mark recording as ended")
-		return err
-	}
 
 	return nil
 }
@@ -560,8 +561,22 @@ func (m *systemManagerImpl) UpdateRecordingSession(
 }
 
 func (m *systemManagerImpl) DeleteRecordingSession(ctxt context.Context, id string) error {
-	// Mark end of session first if running
-	return nil
+	logTags := m.GetLogTagsForContext(ctxt)
+
+	currentTime := time.Now().UTC()
+	if err := m.MarkEndOfRecordingSession(ctxt, id, currentTime); err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("recording", id).
+			Error("Unable to mark recording session ended")
+		return err
+	}
+
+	// Delete the entry
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+	return dbClient.DeleteRecordingSession(ctxt, id)
 }
 
 func (m *systemManagerImpl) StopAllActiveRecordingOfSource(
@@ -612,7 +627,7 @@ func (m *systemManagerImpl) StopAllActiveRecordingOfSource(
 		return nil
 	}
 
-	// Close all the sessions
+	// Mark end of recording in persistence
 	for _, session := range sessions {
 		if err := dbClient.MarkEndOfRecordingSession(ctxt, session.ID, currentTime); err != nil {
 			log.
@@ -622,7 +637,10 @@ func (m *systemManagerImpl) StopAllActiveRecordingOfSource(
 				WithField("recording-session", session.ID).
 				Error("Failed to mark recording session as ended")
 		}
-		// Make the RPC request
+	}
+
+	// Request edge nodes to stop recording
+	for _, session := range sessions {
 		if err := m.rrClient.StopRecordingSession(ctxt, source, session.ID, currentTime); err != nil {
 			log.
 				WithError(err).

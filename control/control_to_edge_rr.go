@@ -14,14 +14,6 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-/*
-
-TODO FIXME:
-
-* Support inbound request to close all recording associated with a video source
-
-*/
-
 // EdgeRequestClient request-response client for control to call edge
 type EdgeRequestClient interface {
 	/*

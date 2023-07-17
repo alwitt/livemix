@@ -116,10 +116,10 @@ func TestSystemManagerRequestStreamingStateChange(t *testing.T) {
 			mock.AnythingOfType("*context.emptyCtx"),
 			testSource.ID,
 		).Return(testSource, nil).Once()
-		mockRR.On(
-			"ChangeVideoStreamingState",
+		mockDB.On(
+			"ChangeVideoSourceStreamState",
 			mock.AnythingOfType("*context.emptyCtx"),
-			testSource,
+			testSource.ID,
 			1,
 		).Return(fmt.Errorf("dummy error")).Once()
 
@@ -155,6 +155,312 @@ func TestSystemManagerRequestStreamingStateChange(t *testing.T) {
 		).Return(nil).Once()
 
 		assert.Nil(uut.ChangeVideoSourceStreamState(utCtxt, testSource.ID, 1))
+	}
+}
+
+func TestSystemManagerDefineRecordingSession(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+	utCtxt := context.Background()
+
+	mockSQL := mocks.NewConnectionManager(t)
+	mockDB := mocks.NewPersistenceManager(t)
+	mockSQL.On("NewPersistanceManager").Return(mockDB)
+	mockDB.On("Close").Return()
+	mockRR := mocks.NewEdgeRequestClient(t)
+
+	currentTime := time.Now().UTC()
+
+	uut, err := control.NewManager(mockSQL, mockRR, time.Minute)
+	assert.Nil(err)
+
+	// Case 0: unknown video source
+	{
+		testSourceID := uuid.NewString()
+
+		// Prepare mock
+		mockDB.On(
+			"GetVideoSource",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSourceID,
+		).Return(common.VideoSource{}, fmt.Errorf("dummy error")).Once()
+
+		_, err := uut.DefineRecordingSession(utCtxt, testSourceID, nil, nil, currentTime)
+		assert.NotNil(err)
+		assert.Equal("dummy error", err.Error())
+	}
+
+	// Case 1: known video source, but failed to define recording session
+	{
+		testRRTargetID := uuid.NewString()
+		testSource := common.VideoSource{
+			ID: uuid.NewString(), ReqRespTargetID: &testRRTargetID, SourceLocalTime: currentTime,
+		}
+
+		// Prepare mock
+		mockDB.On(
+			"GetVideoSource",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource.ID,
+		).Return(testSource, nil).Once()
+		mockDB.On(
+			"DefineRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource.ID,
+			mock.AnythingOfType("*string"),
+			mock.AnythingOfType("*string"),
+			currentTime,
+		).Return(uuid.NewString(), fmt.Errorf("dummy error")).Once()
+
+		_, err := uut.DefineRecordingSession(utCtxt, testSource.ID, nil, nil, currentTime)
+		assert.NotNil(err)
+		assert.Equal("dummy error", err.Error())
+	}
+
+	// Case 2: defined recording session, but failed to make the request
+	{
+		testRRTargetID := uuid.NewString()
+		testSource := common.VideoSource{
+			ID: uuid.NewString(), ReqRespTargetID: &testRRTargetID, SourceLocalTime: currentTime,
+		}
+		testRecording := common.Recording{ID: uuid.NewString(), SourceID: testSource.ID}
+
+		// Prepare mock
+		mockDB.On(
+			"GetVideoSource",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource.ID,
+		).Return(testSource, nil).Once()
+		mockDB.On(
+			"DefineRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource.ID,
+			mock.AnythingOfType("*string"),
+			mock.AnythingOfType("*string"),
+			currentTime,
+		).Return(testRecording.ID, nil).Once()
+		mockDB.On(
+			"GetRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testRecording.ID,
+		).Return(testRecording, nil).Once()
+		mockRR.On(
+			"StartRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource,
+			testRecording,
+		).Return(fmt.Errorf("dummy error")).Once()
+		mockDB.On(
+			"MarkExternalError",
+			fmt.Errorf("dummy error"),
+		).Return().Once()
+
+		_, err := uut.DefineRecordingSession(utCtxt, testSource.ID, nil, nil, currentTime)
+		assert.NotNil(err)
+		assert.Equal("dummy error", err.Error())
+	}
+
+	// Case 3: complete call
+	{
+		testRRTargetID := uuid.NewString()
+		testSource := common.VideoSource{
+			ID: uuid.NewString(), ReqRespTargetID: &testRRTargetID, SourceLocalTime: currentTime,
+		}
+		testRecording := common.Recording{ID: uuid.NewString(), SourceID: testSource.ID}
+
+		// Prepare mock
+		mockDB.On(
+			"GetVideoSource",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource.ID,
+		).Return(testSource, nil).Once()
+		mockDB.On(
+			"DefineRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource.ID,
+			mock.AnythingOfType("*string"),
+			mock.AnythingOfType("*string"),
+			currentTime,
+		).Return(testRecording.ID, nil).Once()
+		mockDB.On(
+			"GetRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testRecording.ID,
+		).Return(testRecording, nil).Once()
+		mockRR.On(
+			"StartRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource,
+			testRecording,
+		).Return(nil).Once()
+
+		_, err := uut.DefineRecordingSession(utCtxt, testSource.ID, nil, nil, currentTime)
+		assert.Nil(err)
+	}
+}
+
+func TestSystemManagerMarkEndOfRecordingSession(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+	utCtxt := context.Background()
+
+	mockSQL := mocks.NewConnectionManager(t)
+	mockDB := mocks.NewPersistenceManager(t)
+	mockSQL.On("NewPersistanceManager").Return(mockDB)
+	mockDB.On("Close").Return()
+	mockRR := mocks.NewEdgeRequestClient(t)
+
+	currentTime := time.Now().UTC()
+
+	uut, err := control.NewManager(mockSQL, mockRR, time.Minute)
+	assert.Nil(err)
+
+	// Case 0: unknown recording
+	{
+		testRecordingID := uuid.NewString()
+
+		// Prepare mock
+		mockDB.On(
+			"GetRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testRecordingID,
+		).Return(common.Recording{}, fmt.Errorf("dummy error")).Once()
+
+		err := uut.MarkEndOfRecordingSession(utCtxt, testRecordingID, currentTime)
+		assert.NotNil(err)
+		assert.Equal("dummy error", err.Error())
+	}
+
+	// Case 1: known recording, but failed to find video source
+	{
+		testSourceID := uuid.NewString()
+		testRecording := common.Recording{ID: uuid.NewString(), SourceID: testSourceID}
+
+		// Prepare mock
+		mockDB.On(
+			"GetRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testRecording.ID,
+		).Return(testRecording, nil).Once()
+		mockDB.On(
+			"GetVideoSource",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSourceID,
+		).Return(common.VideoSource{}, fmt.Errorf("dummy error")).Once()
+
+		err := uut.MarkEndOfRecordingSession(utCtxt, testRecording.ID, currentTime)
+		assert.NotNil(err)
+		assert.Equal("dummy error", err.Error())
+	}
+
+	// Case 2: good recording and source, but failed to end recording session
+	{
+		testRRTargetID := uuid.NewString()
+		testSource := common.VideoSource{
+			ID: uuid.NewString(), ReqRespTargetID: &testRRTargetID, SourceLocalTime: currentTime,
+		}
+		testRecording := common.Recording{ID: uuid.NewString(), SourceID: testSource.ID}
+
+		// Prepare mock
+		mockDB.On(
+			"GetRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testRecording.ID,
+		).Return(testRecording, nil).Once()
+		mockDB.On(
+			"GetVideoSource",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource.ID,
+		).Return(testSource, nil).Once()
+		mockDB.On(
+			"MarkEndOfRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testRecording.ID,
+			currentTime,
+		).Return(fmt.Errorf("dummy error")).Once()
+
+		err := uut.MarkEndOfRecordingSession(utCtxt, testRecording.ID, currentTime)
+		assert.NotNil(err)
+		assert.Equal("dummy error", err.Error())
+	}
+
+	// Case 3: DB operations passed, but RR failed
+	{
+		testRRTargetID := uuid.NewString()
+		testSource := common.VideoSource{
+			ID: uuid.NewString(), ReqRespTargetID: &testRRTargetID, SourceLocalTime: currentTime,
+		}
+		testRecording := common.Recording{ID: uuid.NewString(), SourceID: testSource.ID}
+
+		// Prepare mock
+		mockDB.On(
+			"GetRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testRecording.ID,
+		).Return(testRecording, nil).Once()
+		mockDB.On(
+			"GetVideoSource",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource.ID,
+		).Return(testSource, nil).Once()
+		mockDB.On(
+			"MarkEndOfRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testRecording.ID,
+			currentTime,
+		).Return(nil).Once()
+		mockRR.On(
+			"StopRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource,
+			testRecording.ID,
+			currentTime,
+		).Return(fmt.Errorf("dummy error")).Once()
+		mockDB.On(
+			"MarkExternalError",
+			fmt.Errorf("dummy error"),
+		).Return().Once()
+
+		err := uut.MarkEndOfRecordingSession(utCtxt, testRecording.ID, currentTime)
+		assert.NotNil(err)
+		assert.Equal("dummy error", err.Error())
+	}
+
+	// Case 4: complete call
+	{
+		testRRTargetID := uuid.NewString()
+		testSource := common.VideoSource{
+			ID: uuid.NewString(), ReqRespTargetID: &testRRTargetID, SourceLocalTime: currentTime,
+		}
+		testRecording := common.Recording{ID: uuid.NewString(), SourceID: testSource.ID}
+
+		// Prepare mock
+		mockDB.On(
+			"GetRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testRecording.ID,
+		).Return(testRecording, nil).Once()
+		mockDB.On(
+			"GetVideoSource",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource.ID,
+		).Return(testSource, nil).Once()
+		mockDB.On(
+			"MarkEndOfRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testRecording.ID,
+			currentTime,
+		).Return(nil).Once()
+		mockRR.On(
+			"StopRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource,
+			testRecording.ID,
+			currentTime,
+		).Return(nil).Once()
+
+		err := uut.MarkEndOfRecordingSession(utCtxt, testRecording.ID, currentTime)
+		assert.Nil(err)
 	}
 }
 
