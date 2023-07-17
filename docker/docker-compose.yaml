@@ -29,3 +29,24 @@ services:
       - 10m
       - -p
       - '18080'
+
+  minio:
+    container_name: livemix-ctrl-minio
+    restart: always
+    hostname: minio
+    image: quay.io/minio/minio:RELEASE.2023-07-07T07-13-57Z
+    command:
+      - server
+      - /data
+      - --console-address
+      - ":9090"
+    environment:
+      LOG_LEVEL: info
+      MINIO_ROOT_USER: root
+      MINIO_ROOT_PASSWORD: password
+    expose:
+      - 9000
+      - 9090
+    ports:
+      - 127.0.0.1:9000:9000
+      - 127.0.0.1:9090:9090

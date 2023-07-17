@@ -143,6 +143,14 @@ type SqliteConfig struct {
 	DBFile string `mapstructure:"db" json:"db" validate:"required"`
 }
 
+// S3Config S3 object store config
+type S3Config struct {
+	// ServerEndpoint S3 server endpoint
+	ServerEndpoint string `mapstructure:"endpoint" json:"endpoint" validate:"required,url"`
+	// UseTLS whether to TLS when connecting
+	UseTLS bool `mapstructure:"useTLS" json:"useTLS"`
+}
+
 // ===============================================================================
 // GCP PubSub Configuration Structures
 
