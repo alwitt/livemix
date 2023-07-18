@@ -204,7 +204,7 @@ func (f *httpLiveStreamSegmentForwarder) handleForwardSegment(
 		WithField("source-id", segment.SourceID).
 		WithField("segment-name", segment.Name).
 		Debug("Sending out segment")
-	err = f.client.ForwardSegment(f.workerCtxt, segment.SourceID, segment.Segment, segment.Content)
+	err = f.client.ForwardSegment(f.workerCtxt, segment)
 	if err != nil {
 		log.
 			WithError(err).

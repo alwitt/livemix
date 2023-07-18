@@ -10,14 +10,17 @@ import (
 	"time"
 
 	"github.com/alwitt/goutils"
+	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/common/ipc"
 	"github.com/alwitt/livemix/forwarder"
 	"github.com/alwitt/livemix/hls"
+	"github.com/alwitt/livemix/mocks"
 	"github.com/apex/log"
 	"github.com/go-resty/resty/v2"
 	"github.com/google/uuid"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestHTTPSegmentSender(t *testing.T) {
@@ -81,7 +84,17 @@ func TestHTTPSegmentSender(t *testing.T) {
 
 	lclCtxt, lclCancel := context.WithTimeout(utCtxt, time.Second)
 	go func() {
-		assert.Nil(uut.ForwardSegment(lclCtxt, testSourceID, testSegment, testContent))
+		assert.Nil(uut.ForwardSegment(
+			lclCtxt,
+			common.VideoSegmentWithData{
+				VideoSegment: common.VideoSegment{
+					ID:       uuid.NewString(),
+					SourceID: testSourceID,
+					Segment:  testSegment,
+				},
+				Content: testContent,
+			},
+		))
 		waitChan <- true
 	}()
 
@@ -92,4 +105,52 @@ func TestHTTPSegmentSender(t *testing.T) {
 		break
 	}
 	lclCancel()
+}
+
+func TestS3SegmentSender(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	utCtxt := context.Background()
+
+	mockS3 := mocks.NewS3Client(t)
+	mockSQL := mocks.NewConnectionManager(t)
+	mockDB := mocks.NewPersistenceManager(t)
+	mockSQL.On("NewPersistanceManager").Return(mockDB)
+	mockDB.On("Close").Return()
+
+	uut, err := forwarder.NewS3SegmentSender(mockS3, mockSQL)
+	assert.Nil(err)
+
+	testSegmentID := uuid.NewString()
+	testBucket := uuid.NewString()
+	testObjectKey := fmt.Sprintf("segments/%s.ts", testSegmentID)
+	testSegment := common.VideoSegmentWithData{
+		VideoSegment: common.VideoSegment{
+			ID:       testSegmentID,
+			SourceID: uuid.NewString(),
+			Segment: hls.Segment{
+				Name: uuid.NewString(),
+				URI:  fmt.Sprintf("s3://%s/%s", testBucket, testObjectKey),
+			},
+		},
+		Content: []byte(uuid.NewString()),
+	}
+
+	// Prepare mock
+	mockDB.On(
+		"MarkLiveStreamSegmentsUploaded",
+		mock.AnythingOfType("*context.emptyCtx"),
+		[]string{testSegmentID},
+	).Return(nil).Once()
+	mockS3.On(
+		"PutObject",
+		mock.AnythingOfType("*context.emptyCtx"),
+		testBucket,
+		testObjectKey,
+		testSegment.Content,
+	).Return(nil).Once()
+
+	// Make the request
+	assert.Nil(uut.ForwardSegment(utCtxt, testSegment))
 }

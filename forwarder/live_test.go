@@ -74,13 +74,13 @@ func TestHTTPLiveStreamForwarder(t *testing.T) {
 		mockSender.On(
 			"ForwardSegment",
 			mock.AnythingOfType("*context.cancelCtx"),
-			testSource.ID,
-			mock.AnythingOfType("hls.Segment"),
-			newSegment.Content,
+			mock.AnythingOfType("common.VideoSegmentWithData"),
 		).Run(func(args mock.Arguments) {
-			segment, ok := args.Get(2).(hls.Segment)
+			segment, ok := args.Get(1).(common.VideoSegmentWithData)
 			assert.True(ok)
+			assert.Equal(testSource.ID, segment.SourceID)
 			assert.Equal(newSegment.Name, segment.Name)
+			assert.Equal(newSegment.Content, segment.Content)
 		}).Return(nil).Once()
 
 		assert.Nil(uutCast.handleForwardSegment(newSegment))
