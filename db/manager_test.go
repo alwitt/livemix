@@ -280,6 +280,7 @@ func TestDBManagerVideoSegment(t *testing.T) {
 		assert.Equal(segment0, seg.Name)
 		assert.Equal(segStart0, seg.StartTime)
 		assert.Equal(segStop0, seg.EndTime)
+		assert.Nil(seg.Uploaded)
 		assert.Equal(fmt.Sprintf("file:///%s", segment0), seg.URI)
 		uut.Close()
 	}
@@ -311,11 +312,27 @@ func TestDBManagerVideoSegment(t *testing.T) {
 		assert.Equal(segment1, seg.Name)
 		assert.Equal(segStart1, seg.StartTime)
 		assert.Equal(segStop1, seg.EndTime)
+		assert.Nil(seg.Uploaded)
 		assert.Equal(fmt.Sprintf("file:///%s", segment1), seg.URI)
 		uut.Close()
 	}
 
-	// Case 3: fetch segment conditionally
+	// Case 3: mark that a segment is uploaded
+	{
+		uut := conns.NewPersistanceManager()
+		assert.Nil(uut.MarkLiveStreamSegmentsUploaded(utCtxt, []string{segmentID1}))
+		uut.Close()
+	}
+	{
+		uut := conns.NewPersistanceManager()
+		seg, err := uut.GetLiveStreamSegment(utCtxt, segmentID1)
+		assert.Nil(err)
+		assert.NotNil(seg.Uploaded)
+		assert.Equal(1, *seg.Uploaded)
+		uut.Close()
+	}
+
+	// Case 4: fetch segment conditionally
 	// By time
 	{
 		uut := conns.NewPersistanceManager()
@@ -373,7 +390,7 @@ func TestDBManagerVideoSegment(t *testing.T) {
 		uut.Close()
 	}
 
-	// Case 4: delete segment
+	// Case 5: delete segment
 	{
 		uut := conns.NewPersistanceManager()
 		assert.Nil(uut.DeleteLiveStreamSegment(utCtxt, segmentID1))
@@ -388,7 +405,7 @@ func TestDBManagerVideoSegment(t *testing.T) {
 		uut.Close()
 	}
 
-	// Case 5: batch create segments
+	// Case 6: batch create segments
 	var segIDs map[string]string
 	{
 		uut := conns.NewPersistanceManager()
@@ -420,7 +437,7 @@ func TestDBManagerVideoSegment(t *testing.T) {
 		uut.Close()
 	}
 
-	// Case 6: batch delete segments
+	// Case 7: batch delete segments
 	{
 		uut := conns.NewPersistanceManager()
 		deleteIDs := []string{}
@@ -873,7 +890,7 @@ func TestDBManagerRecordingSegments(t *testing.T) {
 	// Case 2: install the same segments, but with more associations
 	{
 		uut := conns.NewPersistanceManager()
-		assert.Nil(uut.RegisterRecordingSegments(utCtxt, sessionIDs[0:2], testSegments0[0:2]))
+		assert.Nil(uut.RegisterRecordingSegments(utCtxt, sessionIDs[1:2], testSegments0[0:2]))
 		uut.Close()
 	}
 	{

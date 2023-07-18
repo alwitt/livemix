@@ -232,6 +232,14 @@ type PersistenceManager interface {
 	) ([]common.VideoSegment, error)
 
 	/*
+		MarkLiveStreamSegmentsUploaded mark a set of live segment as uploaded
+
+			@param ctxt context.Context - execution context
+			@param ids []string - segment IDs
+	*/
+	MarkLiveStreamSegmentsUploaded(ctxt context.Context, ids []string) error
+
+	/*
 		DeleteLiveStreamSegment delete a segment
 
 			@param ctxt context.Context - execution context
@@ -443,10 +451,7 @@ func newManager(connections ConnectionManager) PersistenceManager {
 }
 
 func (m *persistenceManagerImpl) Ready(ctxt context.Context) error {
-	return m.db.Transaction(func(tx *gorm.DB) error {
-		tmp := tx.Find(&[]videoSource{}).Limit(1)
-		return tmp.Error
-	})
+	return m.db.Find(&[]videoSource{}).Limit(1).Error
 }
 
 func (m *persistenceManagerImpl) Close() {
@@ -891,6 +896,25 @@ func (m *persistenceManagerImpl) GetLatestLiveStreamSegments(
 		results[len(entries)-idx-1] = entry.VideoSegment
 	}
 	return results, nil
+}
+
+func (m *persistenceManagerImpl) MarkLiveStreamSegmentsUploaded(
+	ctxt context.Context, ids []string,
+) error {
+	// Do not continue if class instance already logged an error
+	if m.err != nil {
+		return fmt.Errorf("sql operation can't continue due to existing error '%s'", m.err.Error())
+	}
+
+	val := 1
+	tmp := m.db.Where("id in ?", ids).Updates(
+		&liveStreamVideoSegment{VideoSegment: common.VideoSegment{Uploaded: &val}},
+	)
+	if tmp.Error != nil {
+		m.err = tmp.Error
+		return tmp.Error
+	}
+	return nil
 }
 
 func (m *persistenceManagerImpl) DeleteLiveStreamSegment(ctxt context.Context, id string) error {

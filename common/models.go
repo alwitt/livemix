@@ -33,7 +33,9 @@ type VideoSegment struct {
 	ID string `json:"id" gorm:"column:id;primaryKey;unique" validate:"required"`
 	hls.Segment
 	// SourceID link to parent video source
-	SourceID  string    `json:"source" gorm:"column:source;not null;primaryKey" validate:"required"`
+	SourceID string `json:"source" gorm:"column:source;not null;primaryKey" validate:"required"`
+	// Uploaded whether this segment had already been uploaded for a recording session
+	Uploaded  *int      `json:"uploaded,omitempty" gorm:"column:uploaded;default:null" validate:"omitempty,oneof=-1 1"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
