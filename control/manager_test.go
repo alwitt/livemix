@@ -10,6 +10,7 @@ import (
 	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/common/ipc"
 	"github.com/alwitt/livemix/control"
+	"github.com/alwitt/livemix/hls"
 	"github.com/alwitt/livemix/mocks"
 	"github.com/apex/log"
 	"github.com/google/uuid"
@@ -46,6 +47,47 @@ func TestSystemManagerProcessSourceStatusBroadcast(t *testing.T) {
 		testMessage.SourceID,
 		testMessage.RequestResponseTargetID,
 		currentTime,
+	).Return(nil).Once()
+
+	// Process the broadcast message
+	assert.Nil(uut.ProcessBroadcastMsgs(utCtxt, currentTime, broadcastMsg, nil))
+}
+
+func TestSystemManagerProcessNewRecordingSegmentsBroadcast(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+	utCtxt := context.Background()
+
+	mockSQL := mocks.NewConnectionManager(t)
+	mockDB := mocks.NewPersistenceManager(t)
+	mockSQL.On("NewPersistanceManager").Return(mockDB)
+	mockDB.On("Close").Return()
+
+	uut, err := control.NewManager(mockSQL, nil, time.Minute)
+	assert.Nil(err)
+
+	currentTime := time.Now().UTC()
+
+	testMessage := ipc.NewRecordingSegmentReport(
+		[]string{uuid.NewString(), uuid.NewString(), uuid.NewString()},
+		[]common.VideoSegment{
+			{
+				ID:       uuid.NewString(),
+				SourceID: uuid.NewString(),
+				Segment:  hls.Segment{Name: uuid.NewString()},
+			},
+		},
+	)
+
+	broadcastMsg, err := json.Marshal(&testMessage)
+	assert.Nil(err)
+
+	// Setup mock
+	mockDB.On(
+		"RegisterRecordingSegments",
+		mock.AnythingOfType("*context.emptyCtx"),
+		testMessage.RecordingIDs,
+		testMessage.Segments,
 	).Return(nil).Once()
 
 	// Process the broadcast message

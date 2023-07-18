@@ -191,8 +191,6 @@ type SystemManager interface {
 	// =====================================================================================
 	// Utilities
 
-	// TODO FIXME: support new recording segment broadcast
-
 	/*
 		ProcessBroadcastMsgs process received broadcast messages
 
@@ -674,6 +672,7 @@ func (m *systemManagerImpl) ProcessBroadcastMsgs(
 	parsed, err := ipc.ParseRawMessage(msg)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Unable to parse the broadcast message")
+		dbClient.MarkExternalError(err)
 		return err
 	}
 
@@ -694,6 +693,20 @@ func (m *systemManagerImpl) ProcessBroadcastMsgs(
 				WithFields(logTags).
 				WithField("source-id", statusReport.SourceID).
 				Error("Unable to record new video source status report")
+			return err
+		}
+
+	case reflect.TypeOf(ipc.RecordingSegmentReport{}):
+		newSegmentReport := parsed.(ipc.RecordingSegmentReport)
+		// Record the new segments
+		if err := dbClient.RegisterRecordingSegments(
+			ctxt, newSegmentReport.RecordingIDs, newSegmentReport.Segments,
+		); err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				WithField("recordings", newSegmentReport.RecordingIDs).
+				Error("Unable to record new recording video segments report")
 			return err
 		}
 
