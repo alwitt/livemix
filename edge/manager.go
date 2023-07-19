@@ -9,11 +9,9 @@ import (
 	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/common/ipc"
 	"github.com/alwitt/livemix/db"
+	"github.com/alwitt/livemix/utils"
 	"github.com/apex/log"
 )
-
-// VideoSourceStatusReportCB function signature of callback for forwarding video status reports
-type VideoSourceStatusReportCB func(ctxt context.Context, report ipc.VideoSourceStatusReport) error
 
 // VideoSourceOperator video source operations manager
 type VideoSourceOperator interface {
@@ -69,7 +67,7 @@ type videoSourceOperatorImpl struct {
 	self                common.VideoSource
 	selfReqRespTargetID string
 	dbConns             db.ConnectionManager
-	reportStatus        VideoSourceStatusReportCB
+	broadcastClient     utils.Broadcaster
 	reportTriggerTimer  goutils.IntervalTimer
 	wg                  sync.WaitGroup
 	workerCtxt          context.Context
@@ -83,7 +81,7 @@ NewManager define a new video source operator
 	@param self common.VideoSource - information report the video source being operated
 	@param rrTargetID string - request-response target this edge node will respond on
 	@param dbConns db.ConnectionManager - DB connection manager
-	@param reportCB VideoSourceStatusReportCB - video source status report forwarding callback
+	@param broadcastClient utils.Broadcaster - message broadcast client
 	@param reportInterval time.Duration - status report interval
 	@return new operator
 */
@@ -92,7 +90,7 @@ func NewManager(
 	self common.VideoSource,
 	rrTargetID string,
 	dbConns db.ConnectionManager,
-	reportCB VideoSourceStatusReportCB,
+	broadcastClient utils.Broadcaster,
 	reportInterval time.Duration,
 ) (VideoSourceOperator, error) {
 	logTags := log.Fields{
@@ -109,7 +107,7 @@ func NewManager(
 		self:                self,
 		selfReqRespTargetID: rrTargetID,
 		dbConns:             dbConns,
-		reportStatus:        reportCB,
+		broadcastClient:     broadcastClient,
 		wg:                  sync.WaitGroup{},
 	}
 	instance.workerCtxt, instance.workerCtxtCancel = context.WithCancel(parentCtxt)
@@ -185,7 +183,7 @@ func (o *videoSourceOperatorImpl) sendSourceStatusReport() error {
 
 	report := ipc.NewVideoSourceStatusReport(o.self.ID, o.selfReqRespTargetID, time.Now().UTC())
 
-	if err := o.reportStatus(o.workerCtxt, report); err != nil {
+	if err := o.broadcastClient.Broadcast(o.workerCtxt, &report); err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to send status report message")
 		return err
 	}

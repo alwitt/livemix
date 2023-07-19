@@ -2,7 +2,6 @@ package bin
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"time"
@@ -10,7 +9,6 @@ import (
 	"github.com/alwitt/goutils"
 	"github.com/alwitt/livemix/api"
 	"github.com/alwitt/livemix/common"
-	"github.com/alwitt/livemix/common/ipc"
 	"github.com/alwitt/livemix/db"
 	"github.com/alwitt/livemix/edge"
 	"github.com/alwitt/livemix/forwarder"
@@ -175,15 +173,16 @@ func DefineEdgeNode(
 		dbClient.Close()
 	}
 
-	forwardStatusReports := func(
-		ctxt context.Context, report ipc.VideoSourceStatusReport,
-	) error {
-		payload, err := json.Marshal(&report)
-		if err != nil {
-			return err
-		}
-		_, err = theNode.psClient.Publish(ctxt, config.BroadcastSystem.PubSub.Topic, payload, nil, true)
-		return err
+	// Define PubSub message broadcaster client
+	psBroadcast, err := utils.NewPubSubBroadcaster(
+		theNode.psClient, config.BroadcastSystem.PubSub.Topic,
+	)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Failed to create PubSub message broadcast client")
+		return theNode, err
 	}
 
 	// Define video source operator
@@ -192,7 +191,7 @@ func DefineEdgeNode(
 		sourceInfo,
 		config.RRClient.InboudRequestTopic.Topic,
 		dbConns,
-		forwardStatusReports,
+		psBroadcast,
 		time.Second*time.Duration(config.VideoSource.StatusReportIncInSec),
 	)
 	if err != nil {

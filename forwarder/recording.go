@@ -10,12 +10,9 @@ import (
 	"github.com/alwitt/goutils"
 	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/common/ipc"
+	"github.com/alwitt/livemix/utils"
 	"github.com/apex/log"
 )
-
-// NewRecordingSegmentsReportCB function signature of callback for forwarding new
-// recording video segment reports
-type NewRecordingSegmentsReportCB func(ctxt context.Context, report ipc.RecordingSegmentReport) error
 
 // RecordingSegmentForwarder forward video segments associated with active recording sessions
 type RecordingSegmentForwarder interface {
@@ -43,7 +40,7 @@ type s3RecordingSegmentForwarder struct {
 	goutils.Component
 	storageCfg       common.RecordingStorageConfig
 	s3Client         SegmentSender
-	reportCB         NewRecordingSegmentsReportCB
+	broadcastClient  utils.Broadcaster
 	txWorkers        goutils.TaskProcessor
 	wg               sync.WaitGroup
 	workerCtxt       context.Context
@@ -56,8 +53,7 @@ NewS3RecordingSegmentForwarder define new S3 version of RecordingSegmentForwarde
 	@param parentCtxt context.Context - forwarder's parent execution context
 	@param storageCfg common.RecordingStorageConfig - segment storage config
 	@param s3Client SegmentSender - S3 segment transport client
-	@param newSegmentReportCB NewRecordingSegmentsReportCB - callback function for send broadcast
-	    messages regarding stored segments.
+	@param broadcastClient utils.Broadcaster - message broadcast client
 	@param maxInFlightSegments int - max number of segment being stored at any one time
 	@returns new RecordingSegmentForwarder
 */
@@ -65,7 +61,7 @@ func NewS3RecordingSegmentForwarder(
 	parentCtxt context.Context,
 	storageCfg common.RecordingStorageConfig,
 	s3Client SegmentSender,
-	newSegmentReportCB NewRecordingSegmentsReportCB,
+	broadcastClient utils.Broadcaster,
 	maxInFlightSegments int,
 ) (RecordingSegmentForwarder, error) {
 	logTags := log.Fields{
@@ -80,10 +76,10 @@ func NewS3RecordingSegmentForwarder(
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
 		},
-		storageCfg: storageCfg,
-		s3Client:   s3Client,
-		reportCB:   newSegmentReportCB,
-		wg:         sync.WaitGroup{},
+		storageCfg:      storageCfg,
+		s3Client:        s3Client,
+		broadcastClient: broadcastClient,
+		wg:              sync.WaitGroup{},
 	}
 
 	// Worker context
@@ -242,12 +238,10 @@ func (f *s3RecordingSegmentForwarder) handleForwardSegment(
 	}
 
 	// Send a broadcast that this segment has been forwarded to storage
-	if err := f.reportCB(
-		f.workerCtxt,
-		ipc.NewRecordingSegmentReport(
-			param.recording, []common.VideoSegment{param.segment.VideoSegment},
-		),
-	); err != nil {
+	report := ipc.NewRecordingSegmentReport(
+		param.recording, []common.VideoSegment{param.segment.VideoSegment},
+	)
+	if err := f.broadcastClient.Broadcast(f.workerCtxt, &report); err != nil {
 		log.
 			WithError(err).
 			WithFields(logTags).

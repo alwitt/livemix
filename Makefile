@@ -21,6 +21,7 @@ mock: .prepare ## Generate test mock interfaces
 	@mockery --dir utils --name SegmentReader
 	@mockery --dir utils --name VideoSegmentCache
 	@mockery --dir utils --name S3Client
+	@mockery --dir utils --name Broadcaster
 	@mockery --dir vod --name PlaylistBuilder
 	@mockery --dir vod --name SegmentManager
 	@mockery --dir api --name RequestResponseClient

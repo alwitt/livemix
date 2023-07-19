@@ -23,18 +23,15 @@ func TestS3RecordingSegmentForwarder(t *testing.T) {
 	utCtxt := context.Background()
 
 	mockS3 := mocks.NewSegmentSender(t)
-
-	broadcasts := make(chan ipc.RecordingSegmentReport, 4)
-	rxBroadcast := func(ctxt context.Context, report ipc.RecordingSegmentReport) error {
-		broadcasts <- report
-		return nil
-	}
+	mockBroadcaster := mocks.NewBroadcaster(t)
 
 	storageCfg := common.RecordingStorageConfig{
 		StorageBucket: uuid.NewString(), StorageObjectPrefix: uuid.NewString(),
 	}
 
-	uut, err := forwarder.NewS3RecordingSegmentForwarder(utCtxt, storageCfg, mockS3, rxBroadcast, 2)
+	uut, err := forwarder.NewS3RecordingSegmentForwarder(
+		utCtxt, storageCfg, mockS3, mockBroadcaster, 2,
+	)
 	assert.Nil(err)
 
 	// ------------------------------------------------------------------------------------
@@ -61,6 +58,7 @@ func TestS3RecordingSegmentForwarder(t *testing.T) {
 			testSegments = append(testSegments, segment)
 			testSegmentByID[segment.ID] = segment
 		}
+		broadcasts := make(chan ipc.RecordingSegmentReport, 2)
 
 		// Prepare mocks
 		receivedSegment := map[string]bool{}
@@ -77,6 +75,15 @@ func TestS3RecordingSegmentForwarder(t *testing.T) {
 			assert.Equal(expected.Name, segment.Name)
 			assert.EqualValues(expected.Content, segment.Content)
 			receivedSegment[segment.ID] = true
+		}).Return(nil).Times(len(testSegments))
+		mockBroadcaster.On(
+			"Broadcast",
+			mock.AnythingOfType("*context.cancelCtx"),
+			mock.Anything,
+		).Run(func(args mock.Arguments) {
+			msg, ok := args.Get(1).(*ipc.RecordingSegmentReport)
+			assert.True(ok)
+			broadcasts <- *msg
 		}).Return(nil).Times(len(testSegments))
 
 		// Call
@@ -133,6 +140,7 @@ func TestS3RecordingSegmentForwarder(t *testing.T) {
 		}
 		uploaded := 1
 		testSegments[0].Uploaded = &uploaded
+		broadcasts := make(chan ipc.RecordingSegmentReport, 2)
 
 		// Prepare mocks
 		receivedSegment := map[string]bool{}
@@ -151,6 +159,15 @@ func TestS3RecordingSegmentForwarder(t *testing.T) {
 			assert.EqualValues(expected.Content, segment.Content)
 			receivedSegment[segment.ID] = true
 		}).Return(nil).Once()
+		mockBroadcaster.On(
+			"Broadcast",
+			mock.AnythingOfType("*context.cancelCtx"),
+			mock.Anything,
+		).Run(func(args mock.Arguments) {
+			msg, ok := args.Get(1).(*ipc.RecordingSegmentReport)
+			assert.True(ok)
+			broadcasts <- *msg
+		}).Return(nil).Times(len(testSegments))
 
 		// Call
 		assert.Nil(uut.ForwardSegment(utCtxt, testRecordings, testSegments))
