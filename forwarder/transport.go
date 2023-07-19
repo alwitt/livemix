@@ -164,7 +164,9 @@ func NewS3SegmentSender(
 	}, nil
 }
 
-func (s *s3SegmentSender) ForwardSegment(ctxt context.Context, segment common.VideoSegmentWithData) error {
+func (s *s3SegmentSender) ForwardSegment(
+	ctxt context.Context, segment common.VideoSegmentWithData,
+) error {
 	logTags := s.GetLogTagsForContext(ctxt)
 
 	dbClient := s.dbConns.NewPersistanceManager()

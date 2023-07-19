@@ -49,7 +49,7 @@ NewHTTPLiveStreamSegmentForwarder define new HTTP version of LiveStreamSegmentFo
 	@param parentCtxt context.Context - forwarder's parent execution context
 	@param dbConns db.ConnectionManager - DB connection manager
 	@param sender SegmentSender - client for forwarding video segments to system control node
-	@param maxInFlightSegments int - max number of segment being forwarded at anyone time
+	@param maxInFlightSegments int - max number of segment being forwarded at any one time
 	@returns new LiveStreamSegmentForwarder
 */
 func NewHTTPLiveStreamSegmentForwarder(

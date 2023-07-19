@@ -146,9 +146,19 @@ type SqliteConfig struct {
 // S3Config S3 object store config
 type S3Config struct {
 	// ServerEndpoint S3 server endpoint
-	ServerEndpoint string `mapstructure:"endpoint" json:"endpoint" validate:"required,url"`
+	ServerEndpoint string `mapstructure:"endpoint" json:"endpoint" validate:"required"`
 	// UseTLS whether to TLS when connecting
 	UseTLS bool `mapstructure:"useTLS" json:"useTLS"`
+}
+
+// RecordingStorageConfig video recording storage config
+type RecordingStorageConfig struct {
+	// S3 object store config
+	S3 S3Config `mapstructure:"s3" json:"s3" validate:"required,dive"`
+	// StorageBucket the storage bucket to place all the recording video segments in
+	StorageBucket string `mapstructure:"bucket" json:"bucket" validate:"required"`
+	// StorageObjectPrefix the prefix used when defining the object key to store a segment with
+	StorageObjectPrefix string `mapstructure:"objectPrefix" json:"objectPrefix" validate:"required"`
 }
 
 // ===============================================================================
