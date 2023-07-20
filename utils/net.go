@@ -16,8 +16,8 @@ func setHTTPClientRetryParam(
 ) *resty.Client {
 	return client.
 		SetRetryCount(config.MaxAttempts).
-		SetRetryWaitTime(time.Second * time.Duration(config.InitWaitTimeInSec)).
-		SetRetryMaxWaitTime(time.Second * time.Duration(config.MaxWaitTimeInSec))
+		SetRetryWaitTime(config.InitWaitTime()).
+		SetRetryMaxWaitTime(config.MaxWaitTime())
 }
 
 // installHTTPClientAuthMiddleware install OAuth middleware on HTTP client

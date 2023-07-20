@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/url"
-	"time"
 
 	"github.com/alwitt/goutils"
 	"github.com/alwitt/livemix/api"
@@ -108,7 +107,7 @@ func DefineEdgeNode(
 
 	// Define video segment cache
 	cache, err := utils.NewLocalVideoSegmentCache(
-		parentCtxt, time.Second*time.Duration(config.SegmentCache.RetentionCheckIntInSec),
+		parentCtxt, config.SegmentCache.RetentionCheckInt(),
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to define video segment cache")
@@ -133,7 +132,7 @@ func DefineEdgeNode(
 		nodeName,
 		config.RRClient.ControlRRTopic,
 		theNode.rrClient,
-		time.Second*time.Duration(config.RRClient.MaxOutboundRequestDurationInSec),
+		config.RRClient.MaxOutboundRequestDuration(),
 	)
 	if err != nil {
 		log.
@@ -185,15 +184,20 @@ func DefineEdgeNode(
 		return theNode, err
 	}
 
+	// TODO FIXME: add live stream and recording segment forwarder
+	edgeOperatorConfig := edge.VideoSourceOperatorConfig{
+		Self:                       sourceInfo,
+		SelfReqRespTargetID:        config.RRClient.InboudRequestTopic.Topic,
+		DBConns:                    dbConns,
+		VideoCache:                 cache,
+		BroadcastClient:            psBroadcast,
+		RecordingSegmentForwarder:  nil,
+		LiveStreamSegmentForwarder: nil,
+		StatusReportInterval:       config.VideoSource.StatusReportInt(),
+	}
+
 	// Define video source operator
-	edgeOperator, err := edge.NewManager(
-		parentCtxt,
-		sourceInfo,
-		config.RRClient.InboudRequestTopic.Topic,
-		dbConns,
-		psBroadcast,
-		time.Second*time.Duration(config.VideoSource.StatusReportIncInSec),
-	)
+	edgeOperator, err := edge.NewManager(parentCtxt, edgeOperatorConfig)
 	if err != nil {
 		log.
 			WithError(err).
@@ -249,7 +253,7 @@ func DefineEdgeNode(
 		parentCtxt,
 		sourceInfo,
 		dbConns,
-		time.Second*time.Duration(config.MonitorConfig.TrackingWindowInSec),
+		config.MonitorConfig.TrackingWindow(),
 		cache,
 		theNode.segmentReader,
 		theNode.liveForwarder.ForwardSegment,
@@ -270,7 +274,7 @@ func DefineEdgeNode(
 
 	// Define segment manager
 	segmentMgnt, err := vod.NewSegmentManager(
-		cache, theNode.segmentReader, time.Second*time.Duration(config.VODConfig.SegmentCacheTTLInSec),
+		cache, theNode.segmentReader, config.VODConfig.SegmentCacheTTL(),
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create video segment manager")

@@ -119,7 +119,7 @@ func DefineControlNode(
 				parentCtxt,
 				config.BroadcastSystem.PubSub.Topic,
 				&pubsub.TopicConfig{
-					RetentionDuration: time.Second * time.Duration(config.BroadcastSystem.PubSub.MsgTTLInSec),
+					RetentionDuration: config.BroadcastSystem.PubSub.MsgTTL(),
 				},
 			)
 			if err != nil {
@@ -140,7 +140,7 @@ func DefineControlNode(
 				config.BroadcastSystem.PubSub.Topic,
 				broadcastSubName,
 				pubsub.SubscriptionConfig{
-					RetentionDuration: time.Second * time.Duration(config.BroadcastSystem.PubSub.MsgTTLInSec),
+					RetentionDuration: config.BroadcastSystem.PubSub.MsgTTL(),
 				},
 			)
 			if err != nil {
@@ -160,7 +160,7 @@ func DefineControlNode(
 		parentCtxt,
 		nodeName,
 		theNode.rrClient,
-		time.Second*time.Duration(config.Management.RRClient.MaxOutboundRequestDurationInSec),
+		config.Management.RRClient.MaxOutboundRequestDuration(),
 	)
 	if err != nil {
 		log.
@@ -174,7 +174,7 @@ func DefineControlNode(
 	systemManager, err := control.NewManager(
 		dbConns,
 		ctrlToEdgeRRClient,
-		time.Second*time.Duration(config.Management.SourceManagment.StatusReportMaxDelayInSec),
+		config.Management.SourceManagment.StatusReportMaxDelay(),
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to define system manager")
@@ -196,7 +196,7 @@ func DefineControlNode(
 		parentCtxt,
 		dbConns,
 		cache,
-		time.Second*time.Duration(config.VODConfig.SegReceiverTrackingWindowInSec),
+		config.VODConfig.SegReceiverTrackingWindow(),
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to define segment manager")
@@ -215,9 +215,7 @@ func DefineControlNode(
 
 	// Define segment manager
 	// TODO FIXME: add S3 segment reader once implemented
-	segmentMgnt, err := vod.NewSegmentManager(
-		cache, nil, time.Second*time.Duration(config.VODConfig.SegmentCacheTTLInSec),
-	)
+	segmentMgnt, err := vod.NewSegmentManager(cache, nil, config.VODConfig.SegmentCacheTTL())
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create video segment manager")
 		return nil, err

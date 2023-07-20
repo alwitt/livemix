@@ -76,8 +76,13 @@ type APIServerConfig struct {
 type VideoSourceConfig struct {
 	// Name video source system entry name (as recorded by the system control node)
 	Name string `mapstructure:"name" json:"name" validate:"required"`
-	// StatusReportIncInSec interval in secs between video source status report to system controller
-	StatusReportIncInSec uint32 `mapstructure:"statusReportIntInSec" json:"statusReportIntInSec" validate:"gte=10"`
+	// StatusReportIntInSec interval in secs between video source status report to system controller
+	StatusReportIntInSec uint32 `mapstructure:"statusReportIntInSec" json:"statusReportIntInSec" validate:"gte=10"`
+}
+
+// StatusReportInt convert StatusReportIntInSec to time.Duration
+func (c VideoSourceConfig) StatusReportInt() time.Duration {
+	return time.Second * time.Duration(c.StatusReportIntInSec)
 }
 
 // HTTPClientAuthConfig HTTP client OAuth middleware configuration
@@ -102,6 +107,16 @@ type HTTPClientRetryConfig struct {
 	InitWaitTimeInSec uint32 `mapstructure:"initialWaitTimeInSec" json:"initialWaitTimeInSec" validate:"gte=1"`
 	// MaxWaitTimeInSec max wait time
 	MaxWaitTimeInSec uint32 `mapstructure:"maxWaitTimeInSec" json:"maxWaitTimeInSec" validate:"gte=1"`
+}
+
+// InitWaitTime convert InitWaitTimeInSec to time.Duration
+func (c HTTPClientRetryConfig) InitWaitTime() time.Duration {
+	return time.Second * time.Duration(c.InitWaitTimeInSec)
+}
+
+// MaxWaitTime convert MaxWaitTimeInSec to time.Duration
+func (c HTTPClientRetryConfig) MaxWaitTime() time.Duration {
+	return time.Second * time.Duration(c.MaxWaitTimeInSec)
 }
 
 // HTTPClientConfig HTTP client config targeting `go-resty`
@@ -172,6 +187,11 @@ type PubSubSubcriptionConfig struct {
 	MsgTTLInSec uint32 `mapstructure:"msgTTL" json:"msgTTL" validate:"gte=600,lte=604800"`
 }
 
+// MsgTTL convert MsgTTLInSec to time.Duration
+func (c PubSubSubcriptionConfig) MsgTTL() time.Duration {
+	return time.Second * time.Duration(c.MsgTTLInSec)
+}
+
 // ReqRespClientConfig PubSub request-response client config
 type ReqRespClientConfig struct {
 	// GCPProject the GCP project to operate in
@@ -184,6 +204,16 @@ type ReqRespClientConfig struct {
 	MaxOutboundRequestDurationInSec uint32 `mapstructure:"outboundRequestDurationInSec" json:"outboundRequestDurationInSec" validate:"gte=5,lte=60"`
 	// RequestTimeoutEnforceIntInSec outbound request timeout enforcement check interval in secs
 	RequestTimeoutEnforceIntInSec uint32 `mapstructure:"requestTimeoutEnforceIntInSec" json:"requestTimeoutEnforceIntInSec" validate:"gte=15,lte=120"`
+}
+
+// MaxOutboundRequestDuration convert MaxOutboundRequestDurationInSec to time.Duration
+func (c ReqRespClientConfig) MaxOutboundRequestDuration() time.Duration {
+	return time.Second * time.Duration(c.MaxOutboundRequestDurationInSec)
+}
+
+// RequestTimeoutEnforceInt convert RequestTimeoutEnforceIntInSec to time.Duration
+func (c ReqRespClientConfig) RequestTimeoutEnforceInt() time.Duration {
+	return time.Second * time.Duration(c.RequestTimeoutEnforceIntInSec)
 }
 
 // EdgeReqRespClientConfig PubSub request-response client config for edge-to-control requests
@@ -206,6 +236,11 @@ type BroadcastSystemConfig struct {
 type RAMSegmentCacheConfig struct {
 	// RetentionCheckIntInSec cache entry retention check interval in secs
 	RetentionCheckIntInSec uint32 `mapstructure:"retentionCheckIntInSec" json:"retentionCheckIntInSec" validate:"gte=10,lte=300"`
+}
+
+// RetentionCheckInt convert RetentionCheckIntInSec to time.Duration
+func (c RAMSegmentCacheConfig) RetentionCheckInt() time.Duration {
+	return time.Second * time.Duration(c.RetentionCheckIntInSec)
 }
 
 // MemcachedSegementCacheConfig memcached video segment cache config
@@ -249,6 +284,11 @@ type VideoSourceManagementConfig struct {
 	StatusReportMaxDelayInSec uint32 `mapstructure:"statusReportMaxDelayInSec" json:"statusReportMaxDelayInSec" validate:"required,gte=20"`
 }
 
+// StatusReportMaxDelay convert StatusReportMaxDelayInSec to time.Duration
+func (c VideoSourceManagementConfig) StatusReportMaxDelay() time.Duration {
+	return time.Second * time.Duration(c.StatusReportMaxDelayInSec)
+}
+
 // SystemManagementConfig define control node management sub-module config
 type SystemManagementConfig struct {
 	// APIServer management REST API server config
@@ -271,6 +311,11 @@ type HLSMonitorConfig struct {
 	SegmentReaderWorkerCount int `mapstructure:"segmentReaderWorkerCount" json:"segmentReaderWorkerCount" validate:"gte=2,lte=64"`
 }
 
+// TrackingWindow convert TrackingWindowInSec to time.Duration
+func (c HLSMonitorConfig) TrackingWindow() time.Duration {
+	return time.Second * time.Duration(c.TrackingWindowInSec)
+}
+
 // VODServerConfig HLS VOD server config
 type VODServerConfig struct {
 	// APIServer HLS VOD REST API server config
@@ -283,6 +328,11 @@ type VODServerConfig struct {
 	SegmentCacheTTLInSec uint32 `mapstructure:"segmentCacheTTLInSec" json:"segmentCacheTTLInSec" validate:"gte=30,lte=7200"`
 }
 
+// SegmentCacheTTL convert SegmentCacheTTLInSec to time.Duration
+func (c VODServerConfig) SegmentCacheTTL() time.Duration {
+	return time.Second * time.Duration(c.SegmentCacheTTLInSec)
+}
+
 // CentralVODServerConfig VOD server running on the control node
 type CentralVODServerConfig struct {
 	VODServerConfig `mapstructure:",squash"`
@@ -291,6 +341,11 @@ type CentralVODServerConfig struct {
 	// SegReceiverTrackingWindowInSec Tracking window is the duration in time a video segment is
 	// tracked. Recorded segments are forgotten after this tracking window.
 	SegReceiverTrackingWindowInSec uint32 `mapstructure:"segmentReceiverTrackingWindow" json:"segmentReceiverTrackingWindow" validate:"gte=10,lte=300"`
+}
+
+// SegReceiverTrackingWindow convert SegReceiverTrackingWindowInSec to time.Duration
+func (c CentralVODServerConfig) SegReceiverTrackingWindow() time.Duration {
+	return time.Second * time.Duration(c.SegReceiverTrackingWindowInSec)
 }
 
 // ===============================================================================

@@ -2,7 +2,6 @@ package bin
 
 import (
 	"context"
-	"time"
 
 	"github.com/alwitt/goutils"
 	"github.com/alwitt/livemix/common"
@@ -45,12 +44,10 @@ func buildReqRespClients(
 	// Define PubSub request-response client
 	rrClient, err = goutils.GetNewPubSubRequestResponseClientInstance(
 		ctxt, goutils.PubSubRequestResponseClientParam{
-			TargetID: config.InboudRequestTopic.Topic,
-			Name:     nodeName,
-			PSClient: psClient,
-			MsgRetentionTTL: time.Second * time.Duration(
-				config.InboudRequestTopic.MsgTTLInSec,
-			),
+			TargetID:        config.InboudRequestTopic.Topic,
+			Name:            nodeName,
+			PSClient:        psClient,
+			MsgRetentionTTL: config.InboudRequestTopic.MsgTTL(),
 			LogTags: log.Fields{
 				"module":    "go-utils",
 				"component": "pubsub-req-resp-client",
@@ -59,9 +56,7 @@ func buildReqRespClients(
 			CustomLogModifiers: []goutils.LogMetadataModifier{
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
-			TimeoutEnforceInt: time.Second * time.Duration(
-				config.RequestTimeoutEnforceIntInSec,
-			),
+			TimeoutEnforceInt:  config.RequestTimeoutEnforceInt(),
 			SupportWorkerCount: config.SupportWorkerCount,
 		},
 	)
