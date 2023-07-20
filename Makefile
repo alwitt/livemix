@@ -29,6 +29,8 @@ mock: .prepare ## Generate test mock interfaces
 	@mockery --dir control --name EdgeRequestClient
 	@mockery --dir edge --name VideoSourceOperator
 	@mockery --dir forwarder --name SegmentSender
+	@mockery --dir forwarder --name RecordingSegmentForwarder
+	@mockery --dir forwarder --name LiveStreamSegmentForwarder
 
 .PHONY: test
 test: .prepare ## Run unittests

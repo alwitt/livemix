@@ -228,6 +228,12 @@ func (o *videoSourceOperatorImpl) Stop(ctxt context.Context) error {
 	if err := o.worker.StopEventLoop(); err != nil {
 		return err
 	}
+	if err := o.RecordingSegmentForwarder.Stop(ctxt); err != nil {
+		return err
+	}
+	if err := o.LiveStreamSegmentForwarder.Stop(ctxt); err != nil {
+		return err
+	}
 	return goutils.TimeBoundedWaitGroupWait(ctxt, &o.wg, time.Second*5)
 }
 
@@ -332,7 +338,104 @@ func (o *videoSourceOperatorImpl) handleStartRecording(newRecording common.Recor
 		return err
 	}
 
-	// As the recording session may have started before
+	log.
+		WithFields(logTags).
+		WithField("source-id", newRecording.SourceID).
+		WithField("recording-id", newRecording.ID).
+		Debug("Recorded a known video recording")
+
+	// As the recording session may have started at an earlier point, any cached segments
+	// which are fall under the recording window, is to be forwarded now
+
+	relevantSegments, err := dbClient.ListAllLiveStreamSegmentsAfterTime(
+		o.workerCtxt, newRecording.SourceID, newRecording.StartTime,
+	)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", newRecording.SourceID).
+			WithField("recording-id", newRecording.ID).
+			WithField("recording-start", newRecording.StartTime).
+			Error("Failed to fetch segments associated with known recording")
+		return err
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("source-id", newRecording.SourceID).
+		WithField("recording-id", newRecording.ID).
+		WithField("associated-segments", len(relevantSegments)).
+		Debug("Found segments associated with known recording")
+
+	if len(relevantSegments) == 0 {
+		return nil
+	}
+
+	// Fetch the segments content from cache
+	segmentIDs := []string{}
+	for _, aSegment := range relevantSegments {
+		segmentIDs = append(segmentIDs, aSegment.ID)
+	}
+	segmentContents, err := o.VideoCache.GetSegments(o.workerCtxt, segmentIDs)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", newRecording.SourceID).
+			WithField("recording-id", newRecording.ID).
+			Error("Failed to fetch segment contents associated with known recording")
+		dbClient.MarkExternalError(err)
+		return err
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("source-id", newRecording.SourceID).
+		WithField("recording-id", newRecording.ID).
+		WithField("cached-segments", len(segmentContents)).
+		Debug("Found associated segment contents")
+
+	// Combine the segment metadata with content
+	fullRelevantSegments := []common.VideoSegmentWithData{}
+	for _, aSegment := range relevantSegments {
+		content, ok := segmentContents[aSegment.ID]
+		if ok {
+			fullRelevantSegments = append(fullRelevantSegments, common.VideoSegmentWithData{
+				VideoSegment: aSegment, Content: content,
+			})
+		}
+	}
+
+	if len(fullRelevantSegments) > 0 {
+		log.
+			WithFields(logTags).
+			WithField("source-id", newRecording.SourceID).
+			WithField("recording-id", newRecording.ID).
+			WithField("associated-segments", len(fullRelevantSegments)).
+			Debug("Forwarding associated segments with content")
+
+		// Forward the segments
+		if err := o.RecordingSegmentForwarder.ForwardSegment(
+			o.workerCtxt, []string{newRecording.ID}, fullRelevantSegments,
+		); err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				WithField("source-id", newRecording.SourceID).
+				WithField("recording-id", newRecording.ID).
+				Error("Failed to forward segment associated with known recording")
+			dbClient.MarkExternalError(err)
+			return err
+		}
+
+		log.
+			WithFields(logTags).
+			WithField("source-id", newRecording.SourceID).
+			WithField("recording-id", newRecording.ID).
+			WithField("associated-segments", len(fullRelevantSegments)).
+			Debug("Associated segments with content forwarded")
+	}
 
 	return nil
 }
