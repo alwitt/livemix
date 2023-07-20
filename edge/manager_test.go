@@ -190,3 +190,91 @@ func TestVideoSourceOperatorStartRecording(t *testing.T) {
 	).Return(nil).Once()
 	assert.Nil(uut.Stop(utCtxt))
 }
+
+func TestVideoSourceOperatorStopRecording(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+	utCtxt := context.Background()
+
+	mockSQL := mocks.NewConnectionManager(t)
+	mockDB := mocks.NewPersistenceManager(t)
+	mockSQL.On("NewPersistanceManager").Return(mockDB)
+	mockDB.On("Close").Return()
+	mockCache := mocks.NewVideoSegmentCache(t)
+	mockBroadcast := mocks.NewBroadcaster(t)
+	mockRecordForwarder := mocks.NewRecordingSegmentForwarder(t)
+	mockLiveForwarder := mocks.NewLiveStreamSegmentForwarder(t)
+
+	testSource := common.VideoSource{ID: uuid.NewString()}
+
+	uutConfig := edge.VideoSourceOperatorConfig{
+		Self:                       testSource,
+		SelfReqRespTargetID:        uuid.NewString(),
+		DBConns:                    mockSQL,
+		VideoCache:                 mockCache,
+		BroadcastClient:            mockBroadcast,
+		RecordingSegmentForwarder:  mockRecordForwarder,
+		LiveStreamSegmentForwarder: mockLiveForwarder,
+		StatusReportInterval:       time.Minute * 5,
+	}
+
+	// ====================================================================================
+	// Prepare mock for initialization
+
+	mockBroadcast.On(
+		"Broadcast",
+		mock.AnythingOfType("*context.cancelCtx"),
+		mock.Anything,
+	).Run(func(args mock.Arguments) {
+		report, ok := args.Get(1).(*ipc.VideoSourceStatusReport)
+		assert.True(ok)
+
+		assert.Equal(testSource.ID, report.SourceID)
+		assert.Equal(uutConfig.SelfReqRespTargetID, report.RequestResponseTargetID)
+	}).Return(nil)
+
+	uut, err := edge.NewManager(utCtxt, uutConfig)
+	assert.Nil(err)
+
+	// ====================================================================================
+	// Stop a recording
+
+	{
+		complete := make(chan bool, 1)
+		testRecordingID := uuid.NewString()
+		endTime := time.Now().UTC()
+
+		// Prepare mock
+		mockDB.On(
+			"MarkEndOfRecordingSession",
+			mock.AnythingOfType("*context.cancelCtx"),
+			testRecordingID,
+			endTime,
+		).Run(func(args mock.Arguments) {
+			complete <- true
+		}).Return(nil).Once()
+
+		lclCtxt, lclCtxtCancel := context.WithCancel(utCtxt)
+		defer lclCtxtCancel()
+		// Make request
+		assert.Nil(uut.StopRecording(lclCtxt, testRecordingID, endTime))
+		select {
+		case <-lclCtxt.Done():
+			assert.True(false, "request timed out")
+		case <-complete:
+			break
+		}
+	}
+
+	// ====================================================================================
+	// Cleanup
+	mockRecordForwarder.On(
+		"Stop",
+		mock.AnythingOfType("*context.emptyCtx"),
+	).Return(nil).Once()
+	mockLiveForwarder.On(
+		"Stop",
+		mock.AnythingOfType("*context.emptyCtx"),
+	).Return(nil).Once()
+	assert.Nil(uut.Stop(utCtxt))
+}

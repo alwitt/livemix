@@ -194,6 +194,12 @@ func NewManager(
 		log.WithError(err).WithFields(logTags).Error("Unable to install task definition")
 		return nil, err
 	}
+	if err := worker.AddToTaskExecutionMap(
+		reflect.TypeOf(inboundStopRecordingRequest{}), instance.stopRecording,
+	); err != nil {
+		log.WithError(err).WithFields(logTags).Error("Unable to install task definition")
+		return nil, err
+	}
 
 	// -----------------------------------------------------------------------------
 	// Start the worker
@@ -443,9 +449,71 @@ func (o *videoSourceOperatorImpl) handleStartRecording(newRecording common.Recor
 // -------------------------------------------------------------------------------------
 // Stop recording request
 
+// inboundStopRecordingRequest inbound stop recording session request
+type inboundStopRecordingRequest struct {
+	RecordingID string
+	EndTime     time.Time
+}
+
 func (o *videoSourceOperatorImpl) StopRecording(
 	ctxt context.Context, recordingID string, endTime time.Time,
 ) error {
+	logTags := o.GetLogTagsForContext(ctxt)
+
+	log.
+		WithFields(logTags).
+		WithField("source-id", o.Self.ID).
+		WithField("recording-id", recordingID).
+		Debug("Submit 'stop recording request' for processing")
+
+	request := inboundStopRecordingRequest{RecordingID: recordingID, EndTime: endTime}
+	if err := o.worker.Submit(ctxt, request); err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", o.Self.ID).
+			WithField("recording-id", recordingID).
+			Debug("Failed to submit 'stop recording request' for processing")
+		return err
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("source-id", o.Self.ID).
+		WithField("recording-id", recordingID).
+		Debug("'Stop recording request' submitted")
+
+	return nil
+}
+
+func (o *videoSourceOperatorImpl) stopRecording(params interface{}) error {
+	if request, ok := params.(inboundStopRecordingRequest); ok {
+		return o.handleStopRecording(request)
+	}
+	err := fmt.Errorf("received unexpected call parameters: %s", reflect.TypeOf(params))
+	logTags := o.GetLogTagsForContext(o.workerCtxt)
+	log.WithError(err).WithFields(logTags).Error("'StopRecording' processing failure")
+	return err
+}
+
+func (o *videoSourceOperatorImpl) handleStopRecording(params inboundStopRecordingRequest) error {
+	logTags := o.GetLogTagsForContext(o.workerCtxt)
+
+	dbClient := o.DBConns.NewPersistanceManager()
+	defer dbClient.Close()
+
+	// Stop the recording session
+	err := dbClient.MarkEndOfRecordingSession(o.workerCtxt, params.RecordingID, params.EndTime)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", o.Self.ID).
+			WithField("recording-id", params.RecordingID).
+			Error("Failed to mark video recording ended")
+		return err
+	}
+
 	return nil
 }
 
