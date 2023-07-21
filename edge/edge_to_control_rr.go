@@ -14,15 +14,6 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-/*
-
-TODO FIXME:
-
-* Support inbound request to notify an edge node to start a recording
-* Support inbound request to notify an edge node to stop a recording
-
-*/
-
 // ControlRequestClient request-response client for edge to call control
 type ControlRequestClient interface {
 	/*
@@ -114,6 +105,14 @@ func NewControlRequestClient(
 		reflect.TypeOf(ipc.ChangeSourceStreamingStateRequest{}),
 		instance.processInboundStreamingStateChangeRequest,
 	)
+	instance.InstallHandler(
+		reflect.TypeOf(ipc.StartVideoRecordingRequest{}),
+		instance.processInboundStartNewRecordingRequest,
+	)
+	instance.InstallHandler(
+		reflect.TypeOf(ipc.StopVideoRecordingRequest{}),
+		instance.processInboundStopRecordingRequest,
+	)
 
 	return instance, nil
 }
@@ -124,6 +123,9 @@ func (c *controlRequestClientImpl) InstallReferenceToManager(newManager VideoSou
 
 // ======================================================================================
 // Inbound Request Processing
+
+// --------------------------------------------------------------------------------------
+// Process inbound streaming state change request
 
 func (c *controlRequestClientImpl) processInboundStreamingStateChangeRequest(
 	ctxt context.Context,
@@ -140,7 +142,7 @@ func (c *controlRequestClientImpl) processInboundStreamingStateChangeRequest(
 	}
 
 	if c.core == nil {
-		return nil, fmt.Errorf("no reference to EdgeManager set yet")
+		return nil, fmt.Errorf("no reference to VideoSourceOperator set yet")
 	}
 
 	err := c.core.ChangeVideoSourceStreamState(ctxt, request.SourceID, request.NewState)
@@ -152,6 +154,82 @@ func (c *controlRequestClientImpl) processInboundStreamingStateChangeRequest(
 			WithField("request-sender", origMsg.SenderID).
 			WithField("request-id", origMsg.RequestID).
 			Errorf("Failed to change source '%s' streaming state", request.SourceID)
+		response = ipc.NewGeneralResponse(false, err.Error())
+	} else {
+		response = ipc.NewGeneralResponse(true, "")
+	}
+
+	return response, nil
+}
+
+// --------------------------------------------------------------------------------------
+// Process inbound recording start request
+
+func (c *controlRequestClientImpl) processInboundStartNewRecordingRequest(
+	ctxt context.Context,
+	requestRaw interface{},
+	origMsg goutils.ReqRespMessage,
+) (interface{}, error) {
+	logTag := c.GetLogTagsForContext(ctxt)
+
+	request, ok := requestRaw.(ipc.StartVideoRecordingRequest)
+	if !ok {
+		return nil, fmt.Errorf(
+			"incorrect request type '%s' for 'start recording'", reflect.TypeOf(requestRaw),
+		)
+	}
+
+	if c.core == nil {
+		return nil, fmt.Errorf("no reference to VideoSourceOperator set yet")
+	}
+
+	err := c.core.StartRecording(ctxt, request.Session)
+	var response ipc.GeneralResponse
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTag).
+			WithField("request-sender", origMsg.SenderID).
+			WithField("request-id", origMsg.RequestID).
+			Errorf("Start new recording '%s' locally failed", request.Session.ID)
+		response = ipc.NewGeneralResponse(false, err.Error())
+	} else {
+		response = ipc.NewGeneralResponse(true, "")
+	}
+
+	return response, nil
+}
+
+// --------------------------------------------------------------------------------------
+// Process inbound recording stop request
+
+func (c *controlRequestClientImpl) processInboundStopRecordingRequest(
+	ctxt context.Context,
+	requestRaw interface{},
+	origMsg goutils.ReqRespMessage,
+) (interface{}, error) {
+	logTag := c.GetLogTagsForContext(ctxt)
+
+	request, ok := requestRaw.(ipc.StopVideoRecordingRequest)
+	if !ok {
+		return nil, fmt.Errorf(
+			"incorrect request type '%s' for 'stop recording'", reflect.TypeOf(requestRaw),
+		)
+	}
+
+	if c.core == nil {
+		return nil, fmt.Errorf("no reference to VideoSourceOperator set yet")
+	}
+
+	err := c.core.StopRecording(ctxt, request.RecordingID, request.EndTime)
+	var response ipc.GeneralResponse
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTag).
+			WithField("request-sender", origMsg.SenderID).
+			WithField("request-id", origMsg.RequestID).
+			Errorf("Stop recording '%s' locally failed", request.RecordingID)
 		response = ipc.NewGeneralResponse(false, err.Error())
 	} else {
 		response = ipc.NewGeneralResponse(true, "")

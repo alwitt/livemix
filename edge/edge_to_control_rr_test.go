@@ -327,6 +327,258 @@ func TestEdgeToControlChangeStreamingState(t *testing.T) {
 	assert.Nil(requestInject(utCtxt, request))
 }
 
+func TestEdgeToControlStartRecording(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+	utCtxt := context.Background()
+
+	mockRRClient := mocks.NewRequestResponseClient(t)
+	mockEdge := mocks.NewVideoSourceOperator(t)
+
+	// --------------------------------------------------------------------------
+	// Prepare mocks for object initialization
+
+	var requestInject goutils.ReqRespMessageHandler
+	mockRRClient.On(
+		"SetInboundRequestHandler",
+		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("goutils.ReqRespMessageHandler"),
+	).Run(func(args mock.Arguments) {
+		requestInject = args.Get(1).(goutils.ReqRespMessageHandler)
+	}).Return(nil).Once()
+
+	edgeName := "unit-tester"
+	controlName := "ut-controller"
+	uut, err := edge.NewControlRequestClient(utCtxt, edgeName, controlName, mockRRClient, time.Second)
+	assert.Nil(err)
+
+	// --------------------------------------------------------------------------
+	// Case 0: send request without a manager installed
+	{
+		request := ipc.NewStartVideoRecordingSessionRequest(common.Recording{})
+		requestStr, err := json.Marshal(&request)
+		assert.Nil(err)
+		assert.NotNil(requestInject(utCtxt, goutils.ReqRespMessage{
+			SenderID:  controlName,
+			RequestID: uuid.NewString(),
+			Payload:   requestStr,
+		}))
+	}
+
+	// Install manager
+	uut.InstallReferenceToManager(mockEdge)
+
+	// --------------------------------------------------------------------------
+	// Case 1: send request to start recording
+
+	requestCore := ipc.NewStartVideoRecordingSessionRequest(common.Recording{
+		ID: uuid.NewString(), SourceID: uuid.NewString(),
+	})
+	requestCoreStr, err := json.Marshal(&requestCore)
+	assert.Nil(err)
+	request := goutils.ReqRespMessage{
+		SenderID:  controlName,
+		RequestID: uuid.NewString(),
+		Payload:   requestCoreStr,
+	}
+
+	{
+		// Prepare mocks
+		mockEdge.On(
+			"StartRecording",
+			mock.AnythingOfType("*context.emptyCtx"),
+			requestCore.Session,
+		).Return(nil).Once()
+		mockRRClient.On(
+			"Respond",
+			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("goutils.ReqRespMessage"),
+			mock.AnythingOfType("[]uint8"),
+			mock.AnythingOfType("map[string]string"),
+			false,
+		).Run(func(args mock.Arguments) {
+			origRequest := args.Get(1).(goutils.ReqRespMessage)
+			rawResponse := args.Get(2).([]byte)
+
+			// Verify the original request
+			assert.EqualValues(request, origRequest)
+
+			// Parse the response
+			parsed, err := ipc.ParseRawMessage(rawResponse)
+			assert.Nil(err)
+			assert.IsType(ipc.GeneralResponse{}, parsed)
+
+			asType := parsed.(ipc.GeneralResponse)
+			assert.True(asType.Success)
+		}).Return(nil).Once()
+
+		assert.Nil(requestInject(utCtxt, request))
+	}
+
+	// --------------------------------------------------------------------------
+	// Case 2: send request to start recording, but failed
+
+	{
+		// Prepare mocks
+		mockEdge.On(
+			"StartRecording",
+			mock.AnythingOfType("*context.emptyCtx"),
+			requestCore.Session,
+		).Return(fmt.Errorf("dummy error")).Once()
+		mockRRClient.On(
+			"Respond",
+			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("goutils.ReqRespMessage"),
+			mock.AnythingOfType("[]uint8"),
+			mock.AnythingOfType("map[string]string"),
+			false,
+		).Run(func(args mock.Arguments) {
+			origRequest := args.Get(1).(goutils.ReqRespMessage)
+			rawResponse := args.Get(2).([]byte)
+
+			// Verify the original request
+			assert.EqualValues(request, origRequest)
+
+			// Parse the response
+			parsed, err := ipc.ParseRawMessage(rawResponse)
+			assert.Nil(err)
+			assert.IsType(ipc.GeneralResponse{}, parsed)
+
+			asType := parsed.(ipc.GeneralResponse)
+			assert.False(asType.Success)
+			assert.Equal("dummy error", asType.ErrorMsg)
+		}).Return(nil).Once()
+
+		assert.Nil(requestInject(utCtxt, request))
+	}
+}
+
+func TestEdgeToControlStopRecording(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+	utCtxt := context.Background()
+
+	mockRRClient := mocks.NewRequestResponseClient(t)
+	mockEdge := mocks.NewVideoSourceOperator(t)
+
+	// --------------------------------------------------------------------------
+	// Prepare mocks for object initialization
+
+	var requestInject goutils.ReqRespMessageHandler
+	mockRRClient.On(
+		"SetInboundRequestHandler",
+		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("goutils.ReqRespMessageHandler"),
+	).Run(func(args mock.Arguments) {
+		requestInject = args.Get(1).(goutils.ReqRespMessageHandler)
+	}).Return(nil).Once()
+
+	edgeName := "unit-tester"
+	controlName := "ut-controller"
+	uut, err := edge.NewControlRequestClient(utCtxt, edgeName, controlName, mockRRClient, time.Second)
+	assert.Nil(err)
+
+	// --------------------------------------------------------------------------
+	// Case 0: send request without a manager installed
+	{
+		request := ipc.NewStopVideoRecordingSessionRequest(uuid.NewString(), time.Now())
+		requestStr, err := json.Marshal(&request)
+		assert.Nil(err)
+		assert.NotNil(requestInject(utCtxt, goutils.ReqRespMessage{
+			SenderID:  controlName,
+			RequestID: uuid.NewString(),
+			Payload:   requestStr,
+		}))
+	}
+
+	// Install manager
+	uut.InstallReferenceToManager(mockEdge)
+
+	// --------------------------------------------------------------------------
+	// Case 1: send request to stop recording
+
+	requestCore := ipc.NewStopVideoRecordingSessionRequest(uuid.NewString(), time.Now().UTC())
+	requestCoreStr, err := json.Marshal(&requestCore)
+	assert.Nil(err)
+	request := goutils.ReqRespMessage{
+		SenderID:  controlName,
+		RequestID: uuid.NewString(),
+		Payload:   requestCoreStr,
+	}
+
+	{
+		// Prepare mocks
+		mockEdge.On(
+			"StopRecording",
+			mock.AnythingOfType("*context.emptyCtx"),
+			requestCore.RecordingID,
+			requestCore.EndTime,
+		).Return(nil).Once()
+		mockRRClient.On(
+			"Respond",
+			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("goutils.ReqRespMessage"),
+			mock.AnythingOfType("[]uint8"),
+			mock.AnythingOfType("map[string]string"),
+			false,
+		).Run(func(args mock.Arguments) {
+			origRequest := args.Get(1).(goutils.ReqRespMessage)
+			rawResponse := args.Get(2).([]byte)
+
+			// Verify the original request
+			assert.EqualValues(request, origRequest)
+
+			// Parse the response
+			parsed, err := ipc.ParseRawMessage(rawResponse)
+			assert.Nil(err)
+			assert.IsType(ipc.GeneralResponse{}, parsed)
+
+			asType := parsed.(ipc.GeneralResponse)
+			assert.True(asType.Success)
+		}).Return(nil).Once()
+
+		assert.Nil(requestInject(utCtxt, request))
+	}
+
+	// --------------------------------------------------------------------------
+	// Case 2: send request to stop recording, but failed
+
+	{
+		// Prepare mocks
+		mockEdge.On(
+			"StopRecording",
+			mock.AnythingOfType("*context.emptyCtx"),
+			requestCore.RecordingID,
+			requestCore.EndTime,
+		).Return(fmt.Errorf("dummy error")).Once()
+		mockRRClient.On(
+			"Respond",
+			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("goutils.ReqRespMessage"),
+			mock.AnythingOfType("[]uint8"),
+			mock.AnythingOfType("map[string]string"),
+			false,
+		).Run(func(args mock.Arguments) {
+			origRequest := args.Get(1).(goutils.ReqRespMessage)
+			rawResponse := args.Get(2).([]byte)
+
+			// Verify the original request
+			assert.EqualValues(request, origRequest)
+
+			// Parse the response
+			parsed, err := ipc.ParseRawMessage(rawResponse)
+			assert.Nil(err)
+			assert.IsType(ipc.GeneralResponse{}, parsed)
+
+			asType := parsed.(ipc.GeneralResponse)
+			assert.False(asType.Success)
+			assert.Equal("dummy error", asType.ErrorMsg)
+		}).Return(nil).Once()
+
+		assert.Nil(requestInject(utCtxt, request))
+	}
+}
+
 func TestEdgeToControlStopAllRecordings(t *testing.T) {
 	assert := assert.New(t)
 	log.SetLevel(log.DebugLevel)
