@@ -1408,6 +1408,8 @@ func (m *persistenceManagerImpl) ListAllSegmentsOfRecording(
 	return result, nil
 }
 
+// TODO FIXME: this will need to be triggered by system control node, and also linked with
+// S3 object deletions
 func (m *persistenceManagerImpl) PurgeUnassociatedRecordingSegments(
 	ctxt context.Context,
 ) ([]common.VideoSegment, error) {

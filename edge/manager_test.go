@@ -8,6 +8,7 @@ import (
 	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/common/ipc"
 	"github.com/alwitt/livemix/edge"
+	"github.com/alwitt/livemix/hls"
 	"github.com/alwitt/livemix/mocks"
 	"github.com/apex/log"
 	"github.com/google/uuid"
@@ -258,6 +259,157 @@ func TestVideoSourceOperatorStopRecording(t *testing.T) {
 		defer lclCtxtCancel()
 		// Make request
 		assert.Nil(uut.StopRecording(lclCtxt, testRecordingID, endTime))
+		select {
+		case <-lclCtxt.Done():
+			assert.True(false, "request timed out")
+		case <-complete:
+			break
+		}
+	}
+
+	// ====================================================================================
+	// Cleanup
+	mockRecordForwarder.On(
+		"Stop",
+		mock.AnythingOfType("*context.emptyCtx"),
+	).Return(nil).Once()
+	mockLiveForwarder.On(
+		"Stop",
+		mock.AnythingOfType("*context.emptyCtx"),
+	).Return(nil).Once()
+	assert.Nil(uut.Stop(utCtxt))
+}
+
+func TestVideoSourceOperatorNewSegmentFromSource(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+	utCtxt := context.Background()
+
+	mockSQL := mocks.NewConnectionManager(t)
+	mockDB := mocks.NewPersistenceManager(t)
+	mockSQL.On("NewPersistanceManager").Return(mockDB)
+	mockDB.On("Close").Return()
+	mockCache := mocks.NewVideoSegmentCache(t)
+	mockBroadcast := mocks.NewBroadcaster(t)
+	mockRecordForwarder := mocks.NewRecordingSegmentForwarder(t)
+	mockLiveForwarder := mocks.NewLiveStreamSegmentForwarder(t)
+
+	testSource := common.VideoSource{ID: uuid.NewString()}
+
+	uutConfig := edge.VideoSourceOperatorConfig{
+		Self:                       testSource,
+		SelfReqRespTargetID:        uuid.NewString(),
+		DBConns:                    mockSQL,
+		VideoCache:                 mockCache,
+		BroadcastClient:            mockBroadcast,
+		RecordingSegmentForwarder:  mockRecordForwarder,
+		LiveStreamSegmentForwarder: mockLiveForwarder,
+		StatusReportInterval:       time.Minute * 5,
+	}
+
+	// ====================================================================================
+	// Prepare mock for initialization
+
+	mockBroadcast.On(
+		"Broadcast",
+		mock.AnythingOfType("*context.cancelCtx"),
+		mock.Anything,
+	).Run(func(args mock.Arguments) {
+		report, ok := args.Get(1).(*ipc.VideoSourceStatusReport)
+		assert.True(ok)
+
+		assert.Equal(testSource.ID, report.SourceID)
+		assert.Equal(uutConfig.SelfReqRespTargetID, report.RequestResponseTargetID)
+	}).Return(nil)
+
+	uut, err := edge.NewManager(utCtxt, uutConfig)
+	assert.Nil(err)
+
+	// ====================================================================================
+	// Case 0: forwarded to live recording, but there no recordings
+
+	{
+		complete := make(chan bool, 1)
+		testSegment := common.VideoSegmentWithData{
+			VideoSegment: common.VideoSegment{
+				ID:       uuid.NewString(),
+				SourceID: testSource.ID,
+				Segment:  hls.Segment{Name: uuid.NewString()},
+			},
+			Content: []byte(uuid.NewString()),
+		}
+
+		// Prepare mock
+		mockLiveForwarder.On(
+			"ForwardSegment",
+			mock.AnythingOfType("*context.cancelCtx"),
+			testSegment,
+		).Return(nil).Once()
+		mockDB.On(
+			"ListRecordingSessionsOfSource",
+			mock.AnythingOfType("*context.cancelCtx"),
+			testSource.ID,
+			true,
+		).Run(func(args mock.Arguments) {
+			complete <- true
+		}).Return([]common.Recording{}, nil).Once()
+
+		lclCtxt, lclCtxtCancel := context.WithCancel(utCtxt)
+		defer lclCtxtCancel()
+		// Make request
+		assert.Nil(uut.NewSegmentFromSource(lclCtxt, testSegment))
+		select {
+		case <-lclCtxt.Done():
+			assert.True(false, "request timed out")
+		case <-complete:
+			break
+		}
+	}
+
+	// ====================================================================================
+	// Case 1: forwarded to live recording, have ongoing recordings
+
+	{
+		complete := make(chan bool, 1)
+		testSegment := common.VideoSegmentWithData{
+			VideoSegment: common.VideoSegment{
+				ID:       uuid.NewString(),
+				SourceID: testSource.ID,
+				Segment:  hls.Segment{Name: uuid.NewString()},
+			},
+			Content: []byte(uuid.NewString()),
+		}
+		testRecording := []common.Recording{{ID: uuid.NewString()}}
+		testRecordIDs := []string{}
+		for _, recording := range testRecording {
+			testRecordIDs = append(testRecordIDs, recording.ID)
+		}
+
+		// Prepare mock
+		mockLiveForwarder.On(
+			"ForwardSegment",
+			mock.AnythingOfType("*context.cancelCtx"),
+			testSegment,
+		).Return(nil).Once()
+		mockDB.On(
+			"ListRecordingSessionsOfSource",
+			mock.AnythingOfType("*context.cancelCtx"),
+			testSource.ID,
+			true,
+		).Return(testRecording, nil).Once()
+		mockRecordForwarder.On(
+			"ForwardSegment",
+			mock.AnythingOfType("*context.cancelCtx"),
+			testRecordIDs,
+			[]common.VideoSegmentWithData{testSegment},
+		).Run(func(args mock.Arguments) {
+			complete <- true
+		}).Return(nil).Once()
+
+		lclCtxt, lclCtxtCancel := context.WithCancel(utCtxt)
+		defer lclCtxtCancel()
+		// Make request
+		assert.Nil(uut.NewSegmentFromSource(lclCtxt, testSegment))
 		select {
 		case <-lclCtxt.Done():
 			assert.True(false, "request timed out")

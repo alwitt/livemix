@@ -137,7 +137,7 @@ func NewManager(
 	parentCtxt context.Context, params VideoSourceOperatorConfig,
 ) (VideoSourceOperator, error) {
 	logTags := log.Fields{
-		"module": "edge", "component": "video-source-operator", "instance": params.Self.Name,
+		"module": "edge", "component": "video-source-operator", "source-id": params.Self.ID,
 	}
 
 	instance := &videoSourceOperatorImpl{
@@ -196,6 +196,12 @@ func NewManager(
 	}
 	if err := worker.AddToTaskExecutionMap(
 		reflect.TypeOf(inboundStopRecordingRequest{}), instance.stopRecording,
+	); err != nil {
+		log.WithError(err).WithFields(logTags).Error("Unable to install task definition")
+		return nil, err
+	}
+	if err := worker.AddToTaskExecutionMap(
+		reflect.TypeOf(common.VideoSegmentWithData{}), instance.newSegmentFromSource,
 	); err != nil {
 		log.WithError(err).WithFields(logTags).Error("Unable to install task definition")
 		return nil, err
@@ -294,7 +300,7 @@ func (o *videoSourceOperatorImpl) StartRecording(
 
 	log.
 		WithFields(logTags).
-		WithField("source-id", newRecording.SourceID).
+		WithField("req-source-id", newRecording.SourceID).
 		WithField("recording-id", newRecording.ID).
 		Debug("Submit 'start new recording request' for processing")
 
@@ -302,7 +308,7 @@ func (o *videoSourceOperatorImpl) StartRecording(
 		log.
 			WithError(err).
 			WithFields(logTags).
-			WithField("source-id", newRecording.SourceID).
+			WithField("req-source-id", newRecording.SourceID).
 			WithField("recording-id", newRecording.ID).
 			Error("Failed to submit 'start new recording request' for processing")
 		return err
@@ -310,7 +316,7 @@ func (o *videoSourceOperatorImpl) StartRecording(
 
 	log.
 		WithFields(logTags).
-		WithField("source-id", newRecording.SourceID).
+		WithField("req-source-id", newRecording.SourceID).
 		WithField("recording-id", newRecording.ID).
 		Debug("'Start new recording request' submitted")
 
@@ -338,7 +344,7 @@ func (o *videoSourceOperatorImpl) handleStartRecording(newRecording common.Recor
 		log.
 			WithError(err).
 			WithFields(logTags).
-			WithField("source-id", newRecording.SourceID).
+			WithField("req-source-id", newRecording.SourceID).
 			WithField("recording-id", newRecording.ID).
 			Error("Failed to record a known video recording")
 		return err
@@ -346,7 +352,7 @@ func (o *videoSourceOperatorImpl) handleStartRecording(newRecording common.Recor
 
 	log.
 		WithFields(logTags).
-		WithField("source-id", newRecording.SourceID).
+		WithField("req-source-id", newRecording.SourceID).
 		WithField("recording-id", newRecording.ID).
 		Debug("Recorded a known video recording")
 
@@ -360,7 +366,7 @@ func (o *videoSourceOperatorImpl) handleStartRecording(newRecording common.Recor
 		log.
 			WithError(err).
 			WithFields(logTags).
-			WithField("source-id", newRecording.SourceID).
+			WithField("req-source-id", newRecording.SourceID).
 			WithField("recording-id", newRecording.ID).
 			WithField("recording-start", newRecording.StartTime).
 			Error("Failed to fetch segments associated with known recording")
@@ -369,7 +375,7 @@ func (o *videoSourceOperatorImpl) handleStartRecording(newRecording common.Recor
 
 	log.
 		WithFields(logTags).
-		WithField("source-id", newRecording.SourceID).
+		WithField("req-source-id", newRecording.SourceID).
 		WithField("recording-id", newRecording.ID).
 		WithField("associated-segments", len(relevantSegments)).
 		Debug("Found segments associated with known recording")
@@ -388,7 +394,7 @@ func (o *videoSourceOperatorImpl) handleStartRecording(newRecording common.Recor
 		log.
 			WithError(err).
 			WithFields(logTags).
-			WithField("source-id", newRecording.SourceID).
+			WithField("req-source-id", newRecording.SourceID).
 			WithField("recording-id", newRecording.ID).
 			Error("Failed to fetch segment contents associated with known recording")
 		dbClient.MarkExternalError(err)
@@ -397,7 +403,7 @@ func (o *videoSourceOperatorImpl) handleStartRecording(newRecording common.Recor
 
 	log.
 		WithFields(logTags).
-		WithField("source-id", newRecording.SourceID).
+		WithField("req-source-id", newRecording.SourceID).
 		WithField("recording-id", newRecording.ID).
 		WithField("cached-segments", len(segmentContents)).
 		Debug("Found associated segment contents")
@@ -416,7 +422,7 @@ func (o *videoSourceOperatorImpl) handleStartRecording(newRecording common.Recor
 	if len(fullRelevantSegments) > 0 {
 		log.
 			WithFields(logTags).
-			WithField("source-id", newRecording.SourceID).
+			WithField("req-source-id", newRecording.SourceID).
 			WithField("recording-id", newRecording.ID).
 			WithField("associated-segments", len(fullRelevantSegments)).
 			Debug("Forwarding associated segments with content")
@@ -428,7 +434,7 @@ func (o *videoSourceOperatorImpl) handleStartRecording(newRecording common.Recor
 			log.
 				WithError(err).
 				WithFields(logTags).
-				WithField("source-id", newRecording.SourceID).
+				WithField("req-source-id", newRecording.SourceID).
 				WithField("recording-id", newRecording.ID).
 				Error("Failed to forward segment associated with known recording")
 			dbClient.MarkExternalError(err)
@@ -437,7 +443,7 @@ func (o *videoSourceOperatorImpl) handleStartRecording(newRecording common.Recor
 
 		log.
 			WithFields(logTags).
-			WithField("source-id", newRecording.SourceID).
+			WithField("req-source-id", newRecording.SourceID).
 			WithField("recording-id", newRecording.ID).
 			WithField("associated-segments", len(fullRelevantSegments)).
 			Debug("Associated segments with content forwarded")
@@ -462,7 +468,6 @@ func (o *videoSourceOperatorImpl) StopRecording(
 
 	log.
 		WithFields(logTags).
-		WithField("source-id", o.Self.ID).
 		WithField("recording-id", recordingID).
 		Debug("Submit 'stop recording request' for processing")
 
@@ -471,7 +476,6 @@ func (o *videoSourceOperatorImpl) StopRecording(
 		log.
 			WithError(err).
 			WithFields(logTags).
-			WithField("source-id", o.Self.ID).
 			WithField("recording-id", recordingID).
 			Debug("Failed to submit 'stop recording request' for processing")
 		return err
@@ -479,7 +483,6 @@ func (o *videoSourceOperatorImpl) StopRecording(
 
 	log.
 		WithFields(logTags).
-		WithField("source-id", o.Self.ID).
 		WithField("recording-id", recordingID).
 		Debug("'Stop recording request' submitted")
 
@@ -508,7 +511,6 @@ func (o *videoSourceOperatorImpl) handleStopRecording(params inboundStopRecordin
 		log.
 			WithError(err).
 			WithFields(logTags).
-			WithField("source-id", o.Self.ID).
 			WithField("recording-id", params.RecordingID).
 			Error("Failed to mark video recording ended")
 		return err
@@ -523,5 +525,111 @@ func (o *videoSourceOperatorImpl) handleStopRecording(params inboundStopRecordin
 func (o *videoSourceOperatorImpl) NewSegmentFromSource(
 	ctxt context.Context, segment common.VideoSegmentWithData,
 ) error {
+	logTags := o.GetLogTagsForContext(ctxt)
+
+	log.
+		WithFields(logTags).
+		WithField("segment", segment.Name).
+		Debug("Submit new segment from source for processing")
+
+	if err := o.worker.Submit(ctxt, segment); err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("segment", segment.Name).
+			Error("Failed to submit new segment from source for processing")
+		return err
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("segment", segment.Name).
+		Debug("New segment from source submitted")
+
+	return nil
+}
+
+func (o *videoSourceOperatorImpl) newSegmentFromSource(params interface{}) error {
+	if request, ok := params.(common.VideoSegmentWithData); ok {
+		return o.handleNewSegmentFromSource(request)
+	}
+	err := fmt.Errorf("received unexpected call parameters: %s", reflect.TypeOf(params))
+	logTags := o.GetLogTagsForContext(o.workerCtxt)
+	log.WithError(err).WithFields(logTags).Error("'NewSegmentFromSource' processing failure")
+	return err
+}
+
+func (o *videoSourceOperatorImpl) handleNewSegmentFromSource(
+	segment common.VideoSegmentWithData,
+) error {
+	logTags := o.GetLogTagsForContext(o.workerCtxt)
+
+	dbClient := o.DBConns.NewPersistanceManager()
+	defer dbClient.Close()
+
+	log.
+		WithFields(logTags).
+		WithField("segment", segment.Name).
+		Debug("Submitting segment to live stream forwarder")
+
+	// Forward to live stream segment forwarder
+	if err := o.LiveStreamSegmentForwarder.ForwardSegment(o.workerCtxt, segment); err != nil {
+		// even with errors proceed anyway
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("segment", segment.Name).
+			Error("Unable to submit segment to live stream forwarder")
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("segment", segment.Name).
+		Debug("Segment submitted to live stream forwarder")
+
+	// Find all active recordings at this time
+	activeRecordings, err := dbClient.ListRecordingSessionsOfSource(o.workerCtxt, o.Self.ID, true)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("segment", segment.Name).
+			Error("Failed to list active recordings")
+		return err
+	}
+
+	if len(activeRecordings) == 0 {
+		return nil
+	}
+
+	recordingIDs := []string{}
+	for _, recording := range activeRecordings {
+		recordingIDs = append(recordingIDs, recording.ID)
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("recordings", len(recordingIDs)).
+		WithField("segment", segment.Name).
+		Debug("Submitting segment to recording forwarder")
+
+	if err := o.RecordingSegmentForwarder.ForwardSegment(
+		o.workerCtxt, recordingIDs, []common.VideoSegmentWithData{segment},
+	); err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("segment", segment.Name).
+			Error("Unable to submit segment to recording forwarder")
+		dbClient.MarkExternalError(err)
+		return err
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("recordings", len(recordingIDs)).
+		WithField("segment", segment.Name).
+		Debug("Segment submitted to recording forwarder")
+
 	return nil
 }
