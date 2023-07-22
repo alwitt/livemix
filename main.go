@@ -34,6 +34,8 @@ type cliArgs struct {
 	GCPCredsFile string `validate:"required,file"`
 }
 
+var s3CredsArgs common.S3Credentials
+
 var ctrlNodeArgs ctrlNodeCliArgs
 
 var edgeNodeArgs edgeNodeCliArgs
@@ -86,6 +88,21 @@ func main() {
 				Usage:       "Not directly used by the application, this option provides GCP cred to SDK.",
 				EnvVars:     []string{"GOOGLE_APPLICATION_CREDENTIALS"},
 				Destination: &cmdArgs.GCPCredsFile,
+				Required:    true,
+			},
+			// S3 Creds
+			&cli.StringFlag{
+				Name:        "s3-access-key",
+				Usage:       "S3 user access key",
+				EnvVars:     []string{"AWS_ACCESS_KEY_ID"},
+				Destination: &s3CredsArgs.AccessKey,
+				Required:    true,
+			},
+			&cli.StringFlag{
+				Name:        "s3-secret-access-key",
+				Usage:       "S3 user secret access key",
+				EnvVars:     []string{"AWS_SECRET_ACCESS_KEY"},
+				Destination: &s3CredsArgs.SecretAccessKey,
 				Required:    true,
 			},
 		},
@@ -211,6 +228,8 @@ func startControlNode(c *cli.Context) error {
 
 	runtimeCtxt, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	configs.VODConfig.RecordingStorage.S3.Creds = &s3CredsArgs
 
 	ctrlNode, err := bin.DefineControlNode(
 		runtimeCtxt, cmdArgs.Hostname, configs, ctrlNodeArgs.DBPassword,

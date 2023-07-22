@@ -74,6 +74,8 @@ monitor:
 #  * Live stream proxy
 #  * Video recording
 forwarder:
+  # TODO FIXME: Add recording segment forwarding config
+
   # Support live stream video proxy through the system control node
   live:
     # Max number of segments to forward in parallel

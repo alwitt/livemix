@@ -27,6 +27,7 @@ type ControlNode struct {
 	psSubCtxt       context.Context
 	psSubCtxtCancel context.CancelFunc
 	segmentMgmt     control.CentralSegmentManager
+	coreManager     control.SystemManager
 	MgmtAPIServer   *http.Server
 	VODAPIServer    *http.Server
 }
@@ -42,6 +43,9 @@ func (n *ControlNode) Cleanup(ctxt context.Context) error {
 		return nil
 	}
 	if err := n.rrClient.Stop(ctxt); err != nil {
+		return err
+	}
+	if err := n.coreManager.Stop(ctxt); err != nil {
 		return err
 	}
 	if err := goutils.TimeBoundedWaitGroupWait(ctxt, &n.wg, time.Second*5); err != nil {
@@ -170,11 +174,24 @@ func DefineControlNode(
 		return nil, err
 	}
 
+	// Define S3 client
+	s3Client, err := utils.NewS3Client(config.VODConfig.RecordingStorage.S3)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Failed to create S3 client")
+		return nil, err
+	}
+
 	// Define the system manager
-	systemManager, err := control.NewManager(
+	theNode.coreManager, err = control.NewManager(
+		parentCtxt,
 		dbConns,
 		ctrlToEdgeRRClient,
-		config.Management.SourceManagment.StatusReportMaxDelay(),
+		s3Client,
+		config.Management.SourceManagement.StatusReportMaxDelay(),
+		config.Management.RecordingManagement.SegmentCleanupInt(),
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to define system manager")
@@ -182,7 +199,7 @@ func DefineControlNode(
 	}
 
 	// Link manager with request-response client
-	ctrlToEdgeRRClient.InstallReferenceToManager(systemManager)
+	ctrlToEdgeRRClient.InstallReferenceToManager(theNode.coreManager)
 
 	// Build memcached segment cache
 	cache, err := utils.NewMemcachedVideoSegmentCache(config.VODConfig.Cache.Servers)
@@ -204,7 +221,9 @@ func DefineControlNode(
 	}
 
 	// Define manager API HTTP server
-	theNode.MgmtAPIServer, err = api.BuildSystemManagementServer(config.Management.APIServer, systemManager)
+	theNode.MgmtAPIServer, err = api.BuildSystemManagementServer(
+		config.Management.APIServer, theNode.coreManager,
+	)
 	if err != nil {
 		log.
 			WithError(err).
@@ -213,9 +232,17 @@ func DefineControlNode(
 		return nil, err
 	}
 
+	// Define segment reader
+	segmentReader, err := utils.NewSegmentReader(
+		parentCtxt, config.VODConfig.SegmentReaderWorkerCount, s3Client,
+	)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to create segment reader")
+		return nil, err
+	}
+
 	// Define segment manager
-	// TODO FIXME: add S3 segment reader once implemented
-	segmentMgnt, err := vod.NewSegmentManager(cache, nil, config.VODConfig.SegmentCacheTTL())
+	segmentMgnt, err := vod.NewSegmentManager(cache, segmentReader, config.VODConfig.SegmentCacheTTL())
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create video segment manager")
 		return nil, err
@@ -250,7 +277,7 @@ func DefineControlNode(
 	go func() {
 		defer theNode.wg.Done()
 		if err := theNode.psClient.Subscribe(
-			theNode.psSubCtxt, broadcastSubName, systemManager.ProcessBroadcastMsgs,
+			theNode.psSubCtxt, broadcastSubName, theNode.coreManager.ProcessBroadcastMsgs,
 		); err != nil {
 			log.
 				WithError(err).

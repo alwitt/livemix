@@ -80,6 +80,12 @@ management:
     # source as no longer connected
     statusReportMaxDelayInSec: 60
 
+  # Recording session management settings
+  recordingManagement:
+    # The number of seconds between recording segment cleanup runs. During each run,
+    # recording segments not associated with any recordings are purged.
+    segmentCleanupIntInSec: 300
+
 #########################################################################################
 # Central VOD server configurations
 vod:
@@ -140,6 +146,22 @@ vod:
   # Tracking window is the duration in time a video segment is tracked. Recorded segments
   # are forgotten after this tracking window.
   segmentReceiverTrackingWindow: 60
+
+  # Video recording storage config
+  recordingStorage:
+    # Storage bucket to place all the recording video segments in
+    bucket: livemix
+    # Prefix used when defining the object key to store a segment with
+    objectPrefix: recording-sessions
+    # S3 object store config
+    s3:
+      # S3 server endpoint
+      endpoint: http://localhost:9000
+      # Whether to TLS when connecting
+      useTLS: false
+
+  # Number of worker threads in the video segment reader
+  segmentReaderWorkerCount: 4
 
 #########################################################################################
 # System broadcast channel configuration

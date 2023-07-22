@@ -13,13 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type s3ClientConfig struct {
-	common.S3Config
-	accessKey string
-	secretKey string
-}
-
-func getS3ClientConfig(assert *assert.Assertions) s3ClientConfig {
+func getS3ClientConfig(assert *assert.Assertions) common.S3Config {
 	endpoint := os.Getenv("UNITTEST_S3_ENDPOINT")
 	if endpoint == "" {
 		endpoint = "127.0.0.1:9000"
@@ -28,10 +22,10 @@ func getS3ClientConfig(assert *assert.Assertions) s3ClientConfig {
 	assert.NotEmpty(accessKey)
 	secretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
 	assert.NotEmpty(secretKey)
-	return s3ClientConfig{
-		S3Config:  common.S3Config{ServerEndpoint: endpoint, UseTLS: false},
-		accessKey: accessKey,
-		secretKey: secretKey,
+	return common.S3Config{
+		ServerEndpoint: endpoint, UseTLS: false, Creds: &common.S3Credentials{
+			AccessKey: accessKey, SecretAccessKey: secretKey,
+		},
 	}
 }
 
@@ -44,7 +38,7 @@ func TestS3ClientBasicOperations(t *testing.T) {
 	// Get S3 config
 	config := getS3ClientConfig(assert)
 
-	uut, err := utils.NewS3Client(config.ServerEndpoint, config.accessKey, config.secretKey, false)
+	uut, err := utils.NewS3Client(config)
 	assert.Nil(err)
 
 	testBucket := fmt.Sprintf("ut-s3-client-basic-%s", uuid.NewString())
@@ -83,4 +77,74 @@ func TestS3ClientBasicOperations(t *testing.T) {
 		_, err := uut.GetObject(utCtxt, testBucket, testObject)
 		assert.NotNil(err)
 	}
+
+	// Case 4: delete the test bucket
+	assert.Nil(uut.DeleteBucket(utCtxt, testBucket))
+}
+
+func TestS3ClientBulkDelete(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	utCtxt := context.Background()
+
+	// Get S3 config
+	config := getS3ClientConfig(assert)
+
+	uut, err := utils.NewS3Client(config)
+	assert.Nil(err)
+
+	testBucket := fmt.Sprintf("ut-s3-client-basic-%s", uuid.NewString())
+
+	// Create a bucket for testing
+	assert.Nil(uut.CreateBucket(utCtxt, testBucket))
+	{
+		buckets, err := uut.ListBuckets(utCtxt)
+		assert.Nil(err)
+		bucketByName := map[string]string{}
+		for _, name := range buckets {
+			bucketByName[name] = ""
+		}
+		assert.Contains(bucketByName, testBucket)
+	}
+
+	type testObject struct {
+		Key     string
+		Content []byte
+	}
+
+	testObjects := []testObject{
+		{Key: uuid.NewString(), Content: []byte(uuid.NewString())},
+		{Key: uuid.NewString(), Content: []byte(uuid.NewString())},
+		{Key: uuid.NewString(), Content: []byte(uuid.NewString())},
+	}
+
+	// Create test objects
+	for _, object := range testObjects {
+		assert.Nil(uut.PutObject(utCtxt, testBucket, object.Key, object.Content))
+	}
+	for _, object := range testObjects {
+		content, err := uut.GetObject(utCtxt, testBucket, object.Key)
+		assert.Nil(err)
+		assert.EqualValues(object.Content, content)
+	}
+
+	deleteObjectKeys := []string{}
+	for _, object := range testObjects {
+		deleteObjectKeys = append(deleteObjectKeys, object.Key)
+	}
+	// Add one unknown key
+	deleteObjectKeys = append(deleteObjectKeys, uuid.NewString())
+
+	// Delete objects
+	_ = uut.DeleteObjects(utCtxt, testBucket, deleteObjectKeys)
+
+	// Verify the objects are gone
+	for _, object := range testObjects {
+		_, err := uut.GetObject(utCtxt, testBucket, object.Key)
+		assert.NotNil(err)
+	}
+
+	// Delete the test bucket
+	assert.Nil(uut.DeleteBucket(utCtxt, testBucket))
 }

@@ -210,6 +210,20 @@ func (r *segmentReader) readSegmentFromFile(
 	return nil
 }
 
+// CleanupObjectKey cleanup object key string
+//
+// Remove any leading `/` from object key
+func CleanupObjectKey(orig string) string {
+	parts := strings.Split(orig, "/")
+	keep := []string{}
+	for _, onePart := range parts {
+		if onePart != "" {
+			keep = append(keep, onePart)
+		}
+	}
+	return strings.Join(keep, "/")
+}
+
 func (r *segmentReader) readSegmentFromS3(
 	segmentID string, segment *url.URL, returnCB SegmentReturnCallback,
 ) error {
@@ -227,18 +241,7 @@ func (r *segmentReader) readSegmentFromS3(
 	}
 
 	sourceBucket := segment.Host
-	segmentObjectKey := segment.Path
-	// Remove any leading `/` from object key
-	{
-		parts := strings.Split(segmentObjectKey, "/")
-		keep := []string{}
-		for _, onePart := range parts {
-			if onePart != "" {
-				keep = append(keep, onePart)
-			}
-		}
-		segmentObjectKey = strings.Join(keep, "/")
-	}
+	segmentObjectKey := CleanupObjectKey(segment.Path)
 
 	log.
 		WithFields(logTags).

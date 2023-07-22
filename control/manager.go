@@ -3,13 +3,16 @@ package control
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/alwitt/goutils"
 	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/common/ipc"
 	"github.com/alwitt/livemix/db"
+	"github.com/alwitt/livemix/utils"
 	"github.com/apex/log"
 )
 
@@ -21,6 +24,13 @@ type SystemManager interface {
 			@param ctxt context.Context - execution context
 	*/
 	Ready(ctxt context.Context) error
+
+	/*
+		Stop stop any support background tasks which were started
+
+			@param ctxt context.Context - execution context
+	*/
+	Stop(ctxt context.Context) error
 
 	// =====================================================================================
 	// Video sources
@@ -202,6 +212,12 @@ type SystemManager interface {
 	ProcessBroadcastMsgs(
 		ctxt context.Context, pubTimestamp time.Time, msg []byte, metadata map[string]string,
 	) error
+
+	/*
+		PurgeUnassociatedRecordingSegments trigger to purge recording segments unassociated
+		with any recordings from storage
+	*/
+	PurgeUnassociatedRecordingSegments() error
 }
 
 // systemManagerImpl implements SystemManager
@@ -209,27 +225,39 @@ type systemManagerImpl struct {
 	goutils.Component
 	dbConns                     db.ConnectionManager
 	rrClient                    EdgeRequestClient
+	s3                          utils.S3Client
 	maxAgeForSourceStatusReport time.Duration
+	segmentCleanupTimer         goutils.IntervalTimer
+	wg                          sync.WaitGroup
+	workerCtxt                  context.Context
+	workerCtxtCancel            context.CancelFunc
 }
 
 /*
 NewManager define a new system manager
 
+	@param parentCtxt context.Context - parent execution context
 	@param dbConns db.ConnectionManager - DB connection manager
 	@param rrClient EdgeRequestClient - request-response client
+	@param s3 utils.S3Client - S3 operation client
 	@param maxAgeForSourceStatusReport time.Duration - for the system to send a requests to a
 	    particular video source, this source must have sent out a video source status report
 	    within this time window before a request is made. If not, the video source is treated as
 	    connected.
+	@param segmentCleanupInt time.Duration - time interval between segment cleanup runs
 	@returns new manager
 */
 func NewManager(
+	parentCtxt context.Context,
 	dbConns db.ConnectionManager,
 	rrClient EdgeRequestClient,
+	s3 utils.S3Client,
 	maxAgeForSourceStatusReport time.Duration,
+	segmentCleanupInt time.Duration,
 ) (SystemManager, error) {
 	logTags := log.Fields{"module": "control", "component": "system-manager"}
-	return &systemManagerImpl{
+
+	instance := &systemManagerImpl{
 		Component: goutils.Component{
 			LogTags: logTags,
 			LogTagModifiers: []goutils.LogMetadataModifier{
@@ -238,8 +266,35 @@ func NewManager(
 		},
 		dbConns:                     dbConns,
 		rrClient:                    rrClient,
+		s3:                          s3,
 		maxAgeForSourceStatusReport: maxAgeForSourceStatusReport,
-	}, nil
+	}
+	instance.workerCtxt, instance.workerCtxtCancel = context.WithCancel(parentCtxt)
+
+	// Define periodic timer for clearing out recording segments not associated with any
+	// recordings
+	timerLogTags := log.Fields{"sub-module": "recording-segment-cleanup-timer"}
+	for lKey, lVal := range logTags {
+		timerLogTags[lKey] = lVal
+	}
+	cleanupTimer, err := goutils.GetIntervalTimerInstance(
+		instance.workerCtxt, &instance.wg, timerLogTags,
+	)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to define segment cleanup timer")
+		return nil, err
+	}
+	instance.segmentCleanupTimer = cleanupTimer
+
+	// -----------------------------------------------------------------------------
+	// Start timer to periodically cleanup recording segments not related to any recordings
+	err = cleanupTimer.Start(segmentCleanupInt, instance.PurgeUnassociatedRecordingSegments, false)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to start segment cleanup timer")
+		return nil, err
+	}
+
+	return instance, nil
 }
 
 func (m *systemManagerImpl) canRequestVideoSource(source common.VideoSource) error {
@@ -258,6 +313,14 @@ func (m *systemManagerImpl) canRequestVideoSource(source common.VideoSource) err
 	}
 
 	return nil
+}
+
+func (m *systemManagerImpl) Stop(ctxt context.Context) error {
+	m.workerCtxtCancel()
+	if err := m.segmentCleanupTimer.Stop(); err != nil {
+		return err
+	}
+	return goutils.TimeBoundedWaitGroupWait(ctxt, &m.wg, time.Second*5)
 }
 
 // =====================================================================================
@@ -653,6 +716,82 @@ func (m *systemManagerImpl) StopAllActiveRecordingOfSource(
 		WithFields(logTags).
 		WithField("source-id", id).
 		Info("Stopped all associated recording sessions")
+
+	return nil
+}
+
+func (m *systemManagerImpl) PurgeUnassociatedRecordingSegments() error {
+	logTags := m.GetLogTagsForContext(m.workerCtxt)
+
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+
+	// Purge the un-associated segments
+	segmentsToDelete, err := dbClient.PurgeUnassociatedRecordingSegments(m.workerCtxt)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Failed to purge recording segments not related to any recordings")
+		return err
+	}
+
+	if len(segmentsToDelete) == 0 {
+		return nil
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("segments", len(segmentsToDelete)).
+		Info("Found recording segments un-associated with any recording")
+
+	// Remove the segments from object storage
+	segmentByBucket := map[string][]string{}
+	for _, oneSegment := range segmentsToDelete {
+		url, err := url.Parse(oneSegment.URI)
+		if err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				WithField("segment-uri", oneSegment.URI).
+				Error("Unable to parse segment URI")
+		}
+		segmentBucket := url.Host
+		segmentObjectKey := utils.CleanupObjectKey(url.Path)
+
+		// Record the segment for deletion
+		if _, ok := segmentByBucket[segmentBucket]; !ok {
+			segmentByBucket[segmentBucket] = []string{}
+		}
+		segmentByBucket[segmentBucket] = append(segmentByBucket[segmentBucket], segmentObjectKey)
+	}
+
+	for bucketName, segments := range segmentByBucket {
+		log.
+			WithFields(logTags).
+			WithField("recording-bucket", bucketName).
+			WithField("segments", len(segments)).
+			Info("Deleting unassociated recording segments in bucket")
+
+		// Purge from S3
+		errs := m.s3.DeleteObjects(m.workerCtxt, bucketName, segments)
+		if len(errs) > 0 {
+			// Errors have occurred during deletion
+			logHandle := log.WithFields(logTags)
+			for _, oneErr := range errs {
+				logHandle = logHandle.WithError(oneErr)
+				dbClient.MarkExternalError(oneErr)
+			}
+			logHandle.Error("Failed to purge unassociated recording segments")
+			return errs[0]
+		}
+
+		log.
+			WithFields(logTags).
+			WithField("recording-bucket", bucketName).
+			WithField("segments", len(segments)).
+			Info("Deleted unassociated recording segments in bucket")
+	}
 
 	return nil
 }

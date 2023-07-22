@@ -23,12 +23,13 @@ func TestSystemManagerProcessSourceStatusBroadcast(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	utCtxt := context.Background()
 
+	mockS3 := mocks.NewS3Client(t)
 	mockSQL := mocks.NewConnectionManager(t)
 	mockDB := mocks.NewPersistenceManager(t)
 	mockSQL.On("NewPersistanceManager").Return(mockDB)
 	mockDB.On("Close").Return()
 
-	uut, err := control.NewManager(mockSQL, nil, time.Minute)
+	uut, err := control.NewManager(utCtxt, mockSQL, nil, mockS3, time.Minute, time.Hour)
 	assert.Nil(err)
 
 	currentTime := time.Now().UTC()
@@ -51,6 +52,8 @@ func TestSystemManagerProcessSourceStatusBroadcast(t *testing.T) {
 
 	// Process the broadcast message
 	assert.Nil(uut.ProcessBroadcastMsgs(utCtxt, currentTime, broadcastMsg, nil))
+
+	assert.Nil(uut)
 }
 
 func TestSystemManagerProcessNewRecordingSegmentsBroadcast(t *testing.T) {
@@ -58,12 +61,13 @@ func TestSystemManagerProcessNewRecordingSegmentsBroadcast(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	utCtxt := context.Background()
 
+	mockS3 := mocks.NewS3Client(t)
 	mockSQL := mocks.NewConnectionManager(t)
 	mockDB := mocks.NewPersistenceManager(t)
 	mockSQL.On("NewPersistanceManager").Return(mockDB)
 	mockDB.On("Close").Return()
 
-	uut, err := control.NewManager(mockSQL, nil, time.Minute)
+	uut, err := control.NewManager(utCtxt, mockSQL, nil, mockS3, time.Minute, time.Hour)
 	assert.Nil(err)
 
 	currentTime := time.Now().UTC()
@@ -99,6 +103,7 @@ func TestSystemManagerRequestStreamingStateChange(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	utCtxt := context.Background()
 
+	mockS3 := mocks.NewS3Client(t)
 	mockSQL := mocks.NewConnectionManager(t)
 	mockDB := mocks.NewPersistenceManager(t)
 	mockSQL.On("NewPersistanceManager").Return(mockDB)
@@ -107,7 +112,7 @@ func TestSystemManagerRequestStreamingStateChange(t *testing.T) {
 
 	currentTime := time.Now().UTC()
 
-	uut, err := control.NewManager(mockSQL, mockRR, time.Minute)
+	uut, err := control.NewManager(utCtxt, mockSQL, nil, mockS3, time.Minute, time.Hour)
 	assert.Nil(err)
 
 	// Case 0: video has not specified target RR ID
@@ -205,6 +210,7 @@ func TestSystemManagerDefineRecordingSession(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	utCtxt := context.Background()
 
+	mockS3 := mocks.NewS3Client(t)
 	mockSQL := mocks.NewConnectionManager(t)
 	mockDB := mocks.NewPersistenceManager(t)
 	mockSQL.On("NewPersistanceManager").Return(mockDB)
@@ -213,7 +219,7 @@ func TestSystemManagerDefineRecordingSession(t *testing.T) {
 
 	currentTime := time.Now().UTC()
 
-	uut, err := control.NewManager(mockSQL, mockRR, time.Minute)
+	uut, err := control.NewManager(utCtxt, mockSQL, nil, mockS3, time.Minute, time.Hour)
 	assert.Nil(err)
 
 	// Case 0: unknown video source
@@ -346,6 +352,7 @@ func TestSystemManagerMarkEndOfRecordingSession(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	utCtxt := context.Background()
 
+	mockS3 := mocks.NewS3Client(t)
 	mockSQL := mocks.NewConnectionManager(t)
 	mockDB := mocks.NewPersistenceManager(t)
 	mockSQL.On("NewPersistanceManager").Return(mockDB)
@@ -354,7 +361,7 @@ func TestSystemManagerMarkEndOfRecordingSession(t *testing.T) {
 
 	currentTime := time.Now().UTC()
 
-	uut, err := control.NewManager(mockSQL, mockRR, time.Minute)
+	uut, err := control.NewManager(utCtxt, mockSQL, nil, mockS3, time.Minute, time.Hour)
 	assert.Nil(err)
 
 	// Case 0: unknown recording
@@ -511,6 +518,7 @@ func TestSystemManagerStopAllActiveRecordingsOfSource(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	utCtxt := context.Background()
 
+	mockS3 := mocks.NewS3Client(t)
 	mockSQL := mocks.NewConnectionManager(t)
 	mockDB := mocks.NewPersistenceManager(t)
 	mockSQL.On("NewPersistanceManager").Return(mockDB)
@@ -519,7 +527,7 @@ func TestSystemManagerStopAllActiveRecordingsOfSource(t *testing.T) {
 
 	currentTime := time.Now().UTC()
 
-	uut, err := control.NewManager(mockSQL, mockRR, time.Minute)
+	uut, err := control.NewManager(utCtxt, mockSQL, nil, mockS3, time.Minute, time.Hour)
 	assert.Nil(err)
 
 	// Case 0: unknown video source
@@ -636,5 +644,89 @@ func TestSystemManagerStopAllActiveRecordingsOfSource(t *testing.T) {
 
 		err := uut.StopAllActiveRecordingOfSource(utCtxt, testSource.ID, currentTime)
 		assert.Nil(err)
+	}
+}
+
+func TestSystemManagerPurgeUnassociatedRecordingSegments(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+	utCtxt := context.Background()
+
+	mockS3 := mocks.NewS3Client(t)
+	mockSQL := mocks.NewConnectionManager(t)
+	mockDB := mocks.NewPersistenceManager(t)
+	mockSQL.On("NewPersistanceManager").Return(mockDB)
+	mockDB.On("Close").Return()
+
+	uut, err := control.NewManager(utCtxt, mockSQL, nil, mockS3, time.Minute, time.Hour)
+	assert.Nil(err)
+
+	// ------------------------------------------------------------------------------------
+	// Case 0: there were no segments to purge
+
+	{
+		// Prepare mock
+		mockDB.On(
+			"PurgeUnassociatedRecordingSegments",
+			mock.AnythingOfType("*context.cancelCtx"),
+		).Return([]common.VideoSegment{}, nil).Once()
+
+		assert.Nil(uut.PurgeUnassociatedRecordingSegments())
+	}
+
+	// ------------------------------------------------------------------------------------
+	// Case 1: return segments
+
+	{
+		testSegments := []common.VideoSegment{}
+		// Test segments from two different buckets
+		testBucket0 := uuid.NewString()
+		testBucket1 := uuid.NewString()
+		objectsByBucket := map[string][]string{
+			testBucket0: {},
+			testBucket1: {},
+		}
+		for itr := 0; itr < 3; itr++ {
+			segmentName := fmt.Sprintf("%s.ts", uuid.NewString())
+			testSegments = append(testSegments, common.VideoSegment{
+				ID: uuid.NewString(),
+				Segment: hls.Segment{
+					Name: segmentName,
+					URI:  fmt.Sprintf("s3://%s/%s", testBucket0, segmentName),
+				},
+			})
+			objectsByBucket[testBucket0] = append(objectsByBucket[testBucket0], segmentName)
+		}
+		for itr := 0; itr < 3; itr++ {
+			segmentName := fmt.Sprintf("%s.ts", uuid.NewString())
+			testSegments = append(testSegments, common.VideoSegment{
+				ID: uuid.NewString(),
+				Segment: hls.Segment{
+					Name: segmentName,
+					URI:  fmt.Sprintf("s3://%s/%s", testBucket1, segmentName),
+				},
+			})
+			objectsByBucket[testBucket1] = append(objectsByBucket[testBucket1], segmentName)
+		}
+
+		// Prepare mock
+		mockDB.On(
+			"PurgeUnassociatedRecordingSegments",
+			mock.AnythingOfType("*context.cancelCtx"),
+		).Return(testSegments, nil).Once()
+		mockS3.On(
+			"DeleteObjects",
+			mock.AnythingOfType("*context.cancelCtx"),
+			testBucket0,
+			objectsByBucket[testBucket0],
+		).Return(nil).Once()
+		mockS3.On(
+			"DeleteObjects",
+			mock.AnythingOfType("*context.cancelCtx"),
+			testBucket1,
+			objectsByBucket[testBucket1],
+		).Return(nil).Once()
+
+		assert.Nil(uut.PurgeUnassociatedRecordingSegments())
 	}
 }

@@ -158,12 +158,22 @@ type SqliteConfig struct {
 	DBFile string `mapstructure:"db" json:"db" validate:"required"`
 }
 
+// S3Credentials S3 credentials
+type S3Credentials struct {
+	// AccessKey user access key
+	AccessKey string
+	// SecretAccessKey user secret access key
+	SecretAccessKey string
+}
+
 // S3Config S3 object store config
 type S3Config struct {
 	// ServerEndpoint S3 server endpoint
 	ServerEndpoint string `mapstructure:"endpoint" json:"endpoint" validate:"required"`
 	// UseTLS whether to TLS when connecting
 	UseTLS bool `mapstructure:"useTLS" json:"useTLS"`
+	// Creds S3 credentials
+	Creds *S3Credentials `mapstructure:"creds" json:"creds,omitempty" validate:"omitempty,dive"`
 }
 
 // RecordingStorageConfig video recording storage config
@@ -289,14 +299,28 @@ func (c VideoSourceManagementConfig) StatusReportMaxDelay() time.Duration {
 	return time.Second * time.Duration(c.StatusReportMaxDelayInSec)
 }
 
+// RecordingManagementConfig recording session management settings
+type RecordingManagementConfig struct {
+	// SegmentCleanupIntInSec The number of seconds between recording segment cleanup runs.
+	// During each run, recording segments not associated with any recordings are purged.
+	SegmentCleanupIntInSec uint32 `mapstructure:"segmentCleanupIntInSec" json:"segmentCleanupIntInSec" validate:"required,gte=60"`
+}
+
+// SegmentCleanupInt convert SegmentCleanupIntInSec ti time.Duration
+func (c RecordingManagementConfig) SegmentCleanupInt() time.Duration {
+	return time.Second * time.Duration(c.SegmentCleanupIntInSec)
+}
+
 // SystemManagementConfig define control node management sub-module config
 type SystemManagementConfig struct {
 	// APIServer management REST API server config
 	APIServer APIServerConfig `mapstructure:"api" json:"api" validate:"required,dive"`
 	// RRClient PubSub request-response client config
 	RRClient ReqRespClientConfig `mapstructure:"requestResponse" json:"requestResponse" validate:"required,dive"`
-	// SourceManagment video source management settings
-	SourceManagment VideoSourceManagementConfig `mapstructure:"videoSourceManagement" json:"videoSourceManagement" validate:"required,dive"`
+	// SourceManagement video source management settings
+	SourceManagement VideoSourceManagementConfig `mapstructure:"videoSourceManagement" json:"videoSourceManagement" validate:"required,dive"`
+	// RecordingManagement recording session management settings
+	RecordingManagement RecordingManagementConfig `mapstructure:"recordingManagement" json:"recordingManagement" validate:"required,dive"`
 }
 
 // HLSMonitorConfig HLS video source monitoring config
@@ -341,6 +365,10 @@ type CentralVODServerConfig struct {
 	// SegReceiverTrackingWindowInSec Tracking window is the duration in time a video segment is
 	// tracked. Recorded segments are forgotten after this tracking window.
 	SegReceiverTrackingWindowInSec uint32 `mapstructure:"segmentReceiverTrackingWindow" json:"segmentReceiverTrackingWindow" validate:"gte=10,lte=300"`
+	// RecordingStorage video recording storage config
+	RecordingStorage RecordingStorageConfig `mapstructure:"recordingStorage" json:"recordingStorage" validate:"required,dive"`
+	// SegmentReaderWorkerCount number of worker threads in the video segment reader
+	SegmentReaderWorkerCount int `mapstructure:"segmentReaderWorkerCount" json:"segmentReaderWorkerCount" validate:"gte=2,lte=64"`
 }
 
 // SegReceiverTrackingWindow convert SegReceiverTrackingWindowInSec to time.Duration
@@ -414,6 +442,8 @@ func InstallDefaultControlNodeConfigValues() {
 	viper.SetDefault("management.requestResponse.requestTimeoutEnforceIntInSec", 30)
 	// Default video source management config
 	viper.SetDefault("management.videoSourceManagement.statusReportMaxDelayInSec", 60)
+	// Default recording management config
+	viper.SetDefault("management.recordingManagement.segmentCleanupIntInSec", 60)
 
 	// Default VOD server config
 	// Default REST API server config
@@ -435,6 +465,8 @@ func InstallDefaultControlNodeConfigValues() {
 	viper.SetDefault("vod.segmentCacheTTLInSec", 300)
 	// Default segment receiver tracking window
 	viper.SetDefault("vod.segmentReceiverTrackingWindow", 60)
+	// Default segment reader worker threads
+	viper.SetDefault("vod.segmentReaderWorkerCount", 4)
 
 	// Default broadcast channel config
 	viper.SetDefault("broadcast.pubsub.msgTTL", 600)

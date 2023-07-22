@@ -188,6 +188,7 @@ func DefineEdgeNode(
 	}
 
 	// TODO FIXME: add live stream and recording segment forwarder
+	// TODO FIXME: the operator will be responsible for stopping the two forwarders
 	edgeOperatorConfig := edge.VideoSourceOperatorConfig{
 		Self:                       sourceInfo,
 		SelfReqRespTargetID:        config.RRClient.InboudRequestTopic.Topic,

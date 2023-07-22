@@ -3,9 +3,11 @@ package utils
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/alwitt/goutils"
+	"github.com/alwitt/livemix/common"
 	"github.com/apex/log"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -28,6 +30,14 @@ type S3Client interface {
 			@param bucketName string - new bucket name
 	*/
 	CreateBucket(ctxt context.Context, bucketName string) error
+
+	/*
+		DeleteBucket delete a bucket
+
+			@param ctxt context.Context - execution context
+			@param bucketName string - new bucket name
+	*/
+	DeleteBucket(ctxt context.Context, bucketName string) error
 
 	/*
 		PutObject put a new object into a bucket
@@ -57,6 +67,17 @@ type S3Client interface {
 			@param objectKey string - target object name within the bucket
 	*/
 	DeleteObject(ctxt context.Context, bucketName, objectKey string) error
+
+	/*
+		DeleteObjects delete a group of objects from a bucket
+
+			@param ctxt context.Context - execution context
+			@param bucketName string - target bucket name
+			@param objectKeys []string - target object names within the bucket
+	*/
+	DeleteObjects(
+		ctxt context.Context, bucketName string, objectKeys []string,
+	) []S3BulkDeleteError
 }
 
 // s3ClientImpl implements S3Client
@@ -68,23 +89,20 @@ type s3ClientImpl struct {
 /*
 NewS3Client define new S3 operation client
 
-	@param serverEndpoint string - S3 server endpoint
-	@param accessKey string - S3 access key
-	@param secretKey string - S3 secret key
-	@param withTLS bool - whether to use TLS
+	@param config common.S3Config - S3 client config
 	@returns new client
 */
-func NewS3Client(serverEndpoint, accessKey, secretKey string, withTLS bool) (S3Client, error) {
+func NewS3Client(config common.S3Config) (S3Client, error) {
 	logTags := log.Fields{
 		"module":    "utils",
 		"component": "s3-client",
-		"instance":  serverEndpoint,
+		"instance":  config.ServerEndpoint,
 	}
 
 	// Define the core minio client
-	client, err := minio.New(serverEndpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
-		Secure: withTLS,
+	client, err := minio.New(config.ServerEndpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(config.Creds.AccessKey, config.Creds.SecretAccessKey, ""),
+		Secure: config.UseTLS,
 	})
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Unable to define minio S3 client")
@@ -131,6 +149,10 @@ func (s *s3ClientImpl) PutObject(
 	return err
 }
 
+func (s *s3ClientImpl) DeleteBucket(ctxt context.Context, bucketName string) error {
+	return s.s3.RemoveBucket(ctxt, bucketName)
+}
+
 func (s *s3ClientImpl) GetObject(
 	ctxt context.Context, bucketName, objectName string,
 ) ([]byte, error) {
@@ -148,4 +170,47 @@ func (s *s3ClientImpl) GetObject(
 
 func (s *s3ClientImpl) DeleteObject(ctxt context.Context, bucketName, objectKey string) error {
 	return s.s3.RemoveObject(ctxt, bucketName, objectKey, minio.RemoveObjectOptions{})
+}
+
+// S3BulkDeleteError a wrapper object returned if bulk object delete failed for any
+// particular objects
+type S3BulkDeleteError struct {
+	Err    error
+	Object string
+}
+
+// Error implement the error interface
+func (e S3BulkDeleteError) Error() string {
+	return fmt.Sprintf("failed to delete object '%s' due to ['%s']", e.Object, e.Err.Error())
+}
+
+func (s *s3ClientImpl) DeleteObjects(
+	ctxt context.Context, bucketName string, objectKeys []string,
+) []S3BulkDeleteError {
+	objectFeed := make(chan minio.ObjectInfo, len(objectKeys))
+	for _, objectKey := range objectKeys {
+		objectFeed <- minio.ObjectInfo{Key: objectKey}
+	}
+	close(objectFeed)
+
+	resultFeed := s.s3.RemoveObjects(ctxt, bucketName, objectFeed, minio.RemoveObjectsOptions{})
+
+	var delete []S3BulkDeleteError
+
+	// Wait for request complete
+	complete := false
+	for !complete {
+		select {
+		case <-ctxt.Done():
+			return []S3BulkDeleteError{{Err: fmt.Errorf("bulk delete context expired"), Object: "ALL"}}
+		case err, ok := <-resultFeed:
+			if !ok {
+				complete = true
+				break
+			}
+			delete = append(delete, S3BulkDeleteError{Err: err.Err, Object: err.ObjectName})
+		}
+	}
+
+	return delete
 }

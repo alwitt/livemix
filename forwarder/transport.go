@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"strings"
 
 	"github.com/alwitt/goutils"
 	"github.com/alwitt/livemix/common"
@@ -208,18 +207,7 @@ func (s *s3SegmentSender) ForwardSegment(
 	}
 
 	targetBucket := parsedURL.Host
-	targetObjectKey := parsedURL.Path
-	// Remove any leading `/` from object key
-	{
-		parts := strings.Split(targetObjectKey, "/")
-		keep := []string{}
-		for _, onePart := range parts {
-			if onePart != "" {
-				keep = append(keep, onePart)
-			}
-		}
-		targetObjectKey = strings.Join(keep, "/")
-	}
+	targetObjectKey := utils.CleanupObjectKey(parsedURL.Path)
 
 	log.
 		WithFields(logTags).
