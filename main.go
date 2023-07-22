@@ -357,6 +357,8 @@ func startEdgeNode(c *cli.Context) error {
 		log.WithFields(logTags).Debugf("Running with config:\n%s", string(t))
 	}
 
+	configs.Forwarder.Recording.RecordingStorage.S3.Creds = &s3CredsArgs
+
 	// ================================================================================
 	// Define edge node
 

@@ -278,10 +278,20 @@ type LiveStreamVideoForwarderConfig struct {
 	Remote HTTPForwarderTargetConfig `mapstructure:"remote" json:"remote" validate:"required,dive"`
 }
 
+// RecordingVideoForwarderConfig S3 video forward supporting recording video segments
+type RecordingVideoForwarderConfig struct {
+	// MaxInFlight max number of segments to forward in parallel
+	MaxInFlight int `mapstructure:"maxInFlightSegments" json:"maxInFlightSegments" validate:"required,gte=1"`
+	// RecordingStorage video recording storage config
+	RecordingStorage RecordingStorageConfig `mapstructure:"storage" json:"storage" validate:"required,dive"`
+}
+
 // VideoForwarderConfig video segment forwarding config
 type VideoForwarderConfig struct {
 	// Live HTTP video forward supporting live stream through control node
 	Live LiveStreamVideoForwarderConfig `mapstructure:"live" json:"live" validate:"required,dive"`
+	// Recording support video recording video segment forwarding to object store
+	Recording RecordingVideoForwarderConfig `mapstructure:"recording" json:"recording" validate:"required,dive"`
 }
 
 // ===============================================================================
@@ -502,6 +512,8 @@ func InstallDefaultEdgeNodeConfigValues() {
 	// Default forwarder config
 	// Default live video segment forwarder config
 	viper.SetDefault("forwarder.live.maxInFlightSegments", 4)
+	// Default recording video segment forwarder config
+	viper.SetDefault("forwarder.recording.maxInFlightSegments", 4)
 	// Default live segment forwarder HTTP config
 	viper.SetDefault("forwarder.live.remote.client.retry.maxAttempts", 5)
 	viper.SetDefault("forwarder.live.remote.client.retry.initialWaitTimeInSec", 2)

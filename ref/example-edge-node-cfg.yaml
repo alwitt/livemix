@@ -74,7 +74,23 @@ monitor:
 #  * Live stream proxy
 #  * Video recording
 forwarder:
-  # TODO FIXME: Add recording segment forwarding config
+  # Support video recording video segment forwarding to object store
+  recording:
+    # Max number of segments to forward in parallel
+    maxInFlightSegments: 4
+
+    # Recording storage config
+    storage:
+      # Storage bucket to place all the recording video segments in
+      bucket: livemix
+      # Prefix used when defining the object key to store a segment with
+      objectPrefix: recording-sessions
+      # S3 object store config
+      s3:
+        # S3 server endpoint
+        endpoint: localhost:9000
+        # Whether to TLS when connecting
+        useTLS: false
 
   # Support live stream video proxy through the system control node
   live:

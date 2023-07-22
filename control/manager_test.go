@@ -52,8 +52,6 @@ func TestSystemManagerProcessSourceStatusBroadcast(t *testing.T) {
 
 	// Process the broadcast message
 	assert.Nil(uut.ProcessBroadcastMsgs(utCtxt, currentTime, broadcastMsg, nil))
-
-	assert.Nil(uut)
 }
 
 func TestSystemManagerProcessNewRecordingSegmentsBroadcast(t *testing.T) {
@@ -112,7 +110,7 @@ func TestSystemManagerRequestStreamingStateChange(t *testing.T) {
 
 	currentTime := time.Now().UTC()
 
-	uut, err := control.NewManager(utCtxt, mockSQL, nil, mockS3, time.Minute, time.Hour)
+	uut, err := control.NewManager(utCtxt, mockSQL, mockRR, mockS3, time.Minute, time.Hour)
 	assert.Nil(err)
 
 	// Case 0: video has not specified target RR ID
@@ -219,7 +217,7 @@ func TestSystemManagerDefineRecordingSession(t *testing.T) {
 
 	currentTime := time.Now().UTC()
 
-	uut, err := control.NewManager(utCtxt, mockSQL, nil, mockS3, time.Minute, time.Hour)
+	uut, err := control.NewManager(utCtxt, mockSQL, mockRR, mockS3, time.Minute, time.Hour)
 	assert.Nil(err)
 
 	// Case 0: unknown video source
@@ -361,7 +359,7 @@ func TestSystemManagerMarkEndOfRecordingSession(t *testing.T) {
 
 	currentTime := time.Now().UTC()
 
-	uut, err := control.NewManager(utCtxt, mockSQL, nil, mockS3, time.Minute, time.Hour)
+	uut, err := control.NewManager(utCtxt, mockSQL, mockRR, mockS3, time.Minute, time.Hour)
 	assert.Nil(err)
 
 	// Case 0: unknown recording
@@ -527,7 +525,7 @@ func TestSystemManagerStopAllActiveRecordingsOfSource(t *testing.T) {
 
 	currentTime := time.Now().UTC()
 
-	uut, err := control.NewManager(utCtxt, mockSQL, nil, mockS3, time.Minute, time.Hour)
+	uut, err := control.NewManager(utCtxt, mockSQL, mockRR, mockS3, time.Minute, time.Hour)
 	assert.Nil(err)
 
 	// Case 0: unknown video source

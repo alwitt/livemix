@@ -156,7 +156,7 @@ vod:
     # S3 object store config
     s3:
       # S3 server endpoint
-      endpoint: http://localhost:9000
+      endpoint: localhost:9000
       # Whether to TLS when connecting
       useTLS: false
 
