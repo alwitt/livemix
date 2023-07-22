@@ -332,5 +332,24 @@ func DefineEdgeNode(
 		return theNode, err
 	}
 
+	// Query system control for active recordings
+	recordings, err := edgeToCtrlRRClient.ListActiveRecordingsOfSource(parentCtxt, sourceInfo.ID)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Failed to fetch list of active recordings from system control node")
+		return theNode, err
+	}
+	for _, recording := range recordings {
+		if err := edgeOperator.StartRecording(parentCtxt, recording); err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				WithField("recording-id", recording.ID).
+				Error("Failed to install ongoing recording")
+		}
+	}
+
 	return theNode, nil
 }

@@ -19,6 +19,8 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+// TODO FIXME: refactor and clean up the node initialization codes
+
 // ControlNode system control node
 type ControlNode struct {
 	psClient        goutils.PubSubClient
