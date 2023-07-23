@@ -70,6 +70,28 @@ func BuildSystemManagementServer(
 		"put": httpHandler.ChangeSourceStreamingStateHandler(),
 	})
 
+	_ = registerPathPrefix(perSourceRouter, "/recording", map[string]http.HandlerFunc{
+		"post": httpHandler.StartNewRecordingHandler(),
+		"get":  httpHandler.ListRecordingsOfSourceHandler(),
+	})
+
+	// --------------------------------------------------------------------------------
+	// Video recording
+	recordingRouter := registerPathPrefix(v1Router, "/recording", map[string]http.HandlerFunc{
+		"get": httpHandler.ListRecordingsHandler(),
+	})
+
+	perRecordingRouter := registerPathPrefix(
+		recordingRouter, "/{recordingID}", map[string]http.HandlerFunc{
+			"get":    httpHandler.GetRecordingHandler(),
+			"delete": httpHandler.DeleteRecordingHandler(),
+		},
+	)
+
+	_ = registerPathPrefix(perRecordingRouter, "/stop", map[string]http.HandlerFunc{
+		"post": httpHandler.StopRecordingHandler(),
+	})
+
 	// --------------------------------------------------------------------------------
 	// Middleware
 

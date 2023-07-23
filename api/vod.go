@@ -15,6 +15,8 @@ import (
 	"github.com/gorilla/mux"
 )
 
+// TODO FIXME: refactor to support both live stream and recording replay
+
 // LiveStreamHandler HLS live stream hosting handler
 type LiveStreamHandler struct {
 	goutils.RestAPIHandler

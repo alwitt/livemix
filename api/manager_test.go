@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/alwitt/livemix/api"
 	"github.com/alwitt/livemix/common"
@@ -343,6 +344,354 @@ func TestManagerChangeVideoStreamingState(t *testing.T) {
 	router.HandleFunc(
 		"/v1/source/{sourceID}/streaming",
 		uut.LoggingMiddleware(uut.ChangeSourceStreamingStateHandler()),
+	)
+
+	// Request
+	router.ServeHTTP(respRecorder, req)
+
+	assert.Equal(http.StatusOK, respRecorder.Code)
+}
+
+func TestManagerStartRecordingSession(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	mockManager := mocks.NewSystemManager(t)
+
+	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
+		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
+	})
+	assert.Nil(err)
+
+	testSourceID := uuid.NewString()
+
+	// Case 0: no parameters given
+	{
+		req, err := http.NewRequest("POST", fmt.Sprintf("/v1/source/%s/recording", testSourceID), nil)
+		assert.Nil(err)
+
+		// Setup HTTP handling
+		router := mux.NewRouter()
+		respRecorder := httptest.NewRecorder()
+		router.HandleFunc(
+			"/v1/source/{sourceID}/recording", uut.LoggingMiddleware(uut.StartNewRecordingHandler()),
+		)
+
+		// Request
+		router.ServeHTTP(respRecorder, req)
+
+		assert.Equal(http.StatusBadRequest, respRecorder.Code)
+	}
+
+	// Case 1: correct parameters
+	{
+		timestamp := time.Now().UTC()
+		alias := uuid.NewString()
+		description := uuid.NewString()
+		payload := api.StartNewRecordingRequest{
+			Alias: &alias, Description: &description, StartTime: timestamp.Unix(),
+		}
+		payloadByte, err := json.Marshal(&payload)
+		assert.Nil(err)
+		req, err := http.NewRequest(
+			"POST", fmt.Sprintf("/v1/source/%s/recording", testSourceID), bytes.NewBuffer(payloadByte),
+		)
+		assert.Nil(err)
+
+		// Setup HTTP handling
+		router := mux.NewRouter()
+		respRecorder := httptest.NewRecorder()
+		router.HandleFunc(
+			"/v1/source/{sourceID}/recording", uut.LoggingMiddleware(uut.StartNewRecordingHandler()),
+		)
+
+		// Prepare mock
+		testRecording := common.Recording{ID: uuid.NewString(), SourceID: testSourceID}
+		mockManager.On(
+			"DefineRecordingSession",
+			mock.AnythingOfType("*context.valueCtx"),
+			testSourceID,
+			mock.AnythingOfType("*string"),
+			mock.AnythingOfType("*string"),
+			mock.AnythingOfType("time.Time"),
+		).Run(func(args mock.Arguments) {
+			reqAlias, ok := args.Get(2).(*string)
+			assert.True(ok)
+			reqDesp, ok := args.Get(3).(*string)
+			assert.True(ok)
+			reqTime, ok := args.Get(4).(time.Time)
+			assert.True(ok)
+
+			assert.Equal(alias, *reqAlias)
+			assert.Equal(description, *reqDesp)
+			assert.Equal(timestamp.Unix(), reqTime.Unix())
+		}).Return(testRecording.ID, nil).Once()
+		mockManager.On(
+			"GetRecordingSession",
+			mock.AnythingOfType("*context.valueCtx"),
+			testRecording.ID,
+		).Return(testRecording, nil).Once()
+
+		// Request
+		router.ServeHTTP(respRecorder, req)
+
+		assert.Equal(http.StatusOK, respRecorder.Code)
+		// Verify response
+		var resp api.RecordingSessionResponse
+		assert.Nil(json.Unmarshal(respRecorder.Body.Bytes(), &resp))
+		assert.Equal(testRecording.ID, resp.Recording.ID)
+		assert.Equal(testRecording.SourceID, resp.Recording.SourceID)
+	}
+}
+
+func TestManagerListRecordingSession(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	mockManager := mocks.NewSystemManager(t)
+
+	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
+		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
+	})
+	assert.Nil(err)
+
+	// Prepare mock
+	testRecordings := []common.Recording{
+		{ID: uuid.NewString(), SourceID: uuid.NewString()},
+		{ID: uuid.NewString(), SourceID: uuid.NewString()},
+		{ID: uuid.NewString(), SourceID: uuid.NewString()},
+	}
+	mockManager.On(
+		"ListRecordingSessions",
+		mock.AnythingOfType("*context.valueCtx"),
+	).Return(testRecordings, nil).Once()
+
+	req, err := http.NewRequest("GET", "/v1/recording", nil)
+	assert.Nil(err)
+
+	// Setup HTTP handling
+	router := mux.NewRouter()
+	respRecorder := httptest.NewRecorder()
+	router.HandleFunc(
+		"/v1/recording", uut.LoggingMiddleware(uut.ListRecordingsHandler()),
+	)
+
+	// Request
+	router.ServeHTTP(respRecorder, req)
+
+	assert.Equal(http.StatusOK, respRecorder.Code)
+	// Verify response
+	var resp api.RecordingSessionListResponse
+	assert.Nil(json.Unmarshal(respRecorder.Body.Bytes(), &resp))
+	assert.Len(resp.Recordings, len(testRecordings))
+	for idx, recording := range resp.Recordings {
+		testRecording := testRecordings[idx]
+		assert.Equal(testRecording.ID, recording.ID)
+		assert.Equal(testRecording.SourceID, recording.SourceID)
+	}
+}
+
+func TestManagerListRecordingOfSource(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	mockManager := mocks.NewSystemManager(t)
+
+	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
+		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
+	})
+	assert.Nil(err)
+
+	testSourceID := uuid.NewString()
+
+	testRecordings := []common.Recording{
+		{ID: uuid.NewString(), SourceID: uuid.NewString()},
+		{ID: uuid.NewString(), SourceID: uuid.NewString()},
+		{ID: uuid.NewString(), SourceID: uuid.NewString()},
+	}
+
+	// Case 0: active only recording
+	{
+		req, err := http.NewRequest("POST", fmt.Sprintf("/v1/source/%s/recording", testSourceID), nil)
+		assert.Nil(err)
+		{
+			q := req.URL.Query()
+			q.Add("only_active", "true")
+			req.URL.RawQuery = q.Encode()
+		}
+
+		// Prepare mock
+		mockManager.On(
+			"ListRecordingSessionsOfSource",
+			mock.AnythingOfType("*context.valueCtx"),
+			testSourceID,
+			true,
+		).Return(testRecordings, nil).Once()
+
+		// Setup HTTP handling
+		router := mux.NewRouter()
+		respRecorder := httptest.NewRecorder()
+		router.HandleFunc(
+			"/v1/source/{sourceID}/recording", uut.LoggingMiddleware(uut.ListRecordingsOfSourceHandler()),
+		)
+
+		// Request
+		router.ServeHTTP(respRecorder, req)
+
+		assert.Equal(http.StatusOK, respRecorder.Code)
+		// Verify response
+		var resp api.RecordingSessionListResponse
+		assert.Nil(json.Unmarshal(respRecorder.Body.Bytes(), &resp))
+		assert.Len(resp.Recordings, len(testRecordings))
+		for idx, recording := range resp.Recordings {
+			testRecording := testRecordings[idx]
+			assert.Equal(testRecording.ID, recording.ID)
+			assert.Equal(testRecording.SourceID, recording.SourceID)
+		}
+	}
+
+	// Case 1: all recording
+	{
+		req, err := http.NewRequest("POST", fmt.Sprintf("/v1/source/%s/recording", testSourceID), nil)
+		assert.Nil(err)
+
+		// Prepare mock
+		mockManager.On(
+			"ListRecordingSessionsOfSource",
+			mock.AnythingOfType("*context.valueCtx"),
+			testSourceID,
+			false,
+		).Return(testRecordings, nil).Once()
+
+		// Setup HTTP handling
+		router := mux.NewRouter()
+		respRecorder := httptest.NewRecorder()
+		router.HandleFunc(
+			"/v1/source/{sourceID}/recording", uut.LoggingMiddleware(uut.ListRecordingsOfSourceHandler()),
+		)
+
+		// Request
+		router.ServeHTTP(respRecorder, req)
+
+		assert.Equal(http.StatusOK, respRecorder.Code)
+		// Verify response
+		var resp api.RecordingSessionListResponse
+		assert.Nil(json.Unmarshal(respRecorder.Body.Bytes(), &resp))
+		assert.Len(resp.Recordings, len(testRecordings))
+		for idx, recording := range resp.Recordings {
+			testRecording := testRecordings[idx]
+			assert.Equal(testRecording.ID, recording.ID)
+			assert.Equal(testRecording.SourceID, recording.SourceID)
+		}
+	}
+}
+
+func TestManagerGetRecording(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	mockManager := mocks.NewSystemManager(t)
+
+	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
+		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
+	})
+	assert.Nil(err)
+
+	testRecording := common.Recording{ID: uuid.NewString(), SourceID: uuid.NewString()}
+
+	// Prepare mock
+	mockManager.On(
+		"GetRecordingSession",
+		mock.AnythingOfType("*context.valueCtx"),
+		testRecording.ID,
+	).Return(testRecording, nil).Once()
+
+	req, err := http.NewRequest("GET", fmt.Sprintf("/v1/recording/%s", testRecording.ID), nil)
+	assert.Nil(err)
+
+	// Setup HTTP handling
+	router := mux.NewRouter()
+	respRecorder := httptest.NewRecorder()
+	router.HandleFunc(
+		"/v1/recording/{recordingID}", uut.LoggingMiddleware(uut.GetRecordingHandler()),
+	)
+
+	// Request
+	router.ServeHTTP(respRecorder, req)
+
+	assert.Equal(http.StatusOK, respRecorder.Code)
+	// Verify response
+	var resp api.RecordingSessionResponse
+	assert.Nil(json.Unmarshal(respRecorder.Body.Bytes(), &resp))
+	assert.Equal(testRecording.ID, resp.Recording.ID)
+	assert.Equal(testRecording.SourceID, resp.Recording.SourceID)
+}
+
+func TestManagerStopRecording(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	mockManager := mocks.NewSystemManager(t)
+
+	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
+		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
+	})
+	assert.Nil(err)
+
+	testRecording := common.Recording{ID: uuid.NewString(), SourceID: uuid.NewString()}
+
+	// Prepare mock
+	mockManager.On(
+		"MarkEndOfRecordingSession",
+		mock.AnythingOfType("*context.valueCtx"),
+		testRecording.ID,
+		mock.AnythingOfType("time.Time"),
+	).Return(nil).Once()
+
+	req, err := http.NewRequest("POST", fmt.Sprintf("/v1/recording/%s/stop", testRecording.ID), nil)
+	assert.Nil(err)
+
+	// Setup HTTP handling
+	router := mux.NewRouter()
+	respRecorder := httptest.NewRecorder()
+	router.HandleFunc(
+		"/v1/recording/{recordingID}/stop", uut.LoggingMiddleware(uut.StopRecordingHandler()),
+	)
+
+	// Request
+	router.ServeHTTP(respRecorder, req)
+
+	assert.Equal(http.StatusOK, respRecorder.Code)
+}
+
+func TestManagerDeleteRecording(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	mockManager := mocks.NewSystemManager(t)
+
+	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
+		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
+	})
+	assert.Nil(err)
+
+	testRecordingID := uuid.NewString()
+
+	// Prepare mock
+	mockManager.On(
+		"DeleteRecordingSession",
+		mock.AnythingOfType("*context.valueCtx"),
+		testRecordingID,
+	).Return(nil).Once()
+
+	req, err := http.NewRequest("POST", fmt.Sprintf("/v1/recording/%s", testRecordingID), nil)
+	assert.Nil(err)
+
+	// Setup HTTP handling
+	router := mux.NewRouter()
+	respRecorder := httptest.NewRecorder()
+	router.HandleFunc(
+		"/v1/recording/{recordingID}", uut.LoggingMiddleware(uut.DeleteRecordingHandler()),
 	)
 
 	// Request

@@ -30,6 +30,8 @@ type PlaylistBuilder interface {
 	GetLiveStreamPlaylist(
 		ctxt context.Context, target common.VideoSource, timestamp time.Time, addMediaSequence bool,
 	) (hls.Playlist, error)
+
+	// TODO FIXME: add recording playlist builder
 }
 
 // playlistBuilderImpl implements PlaylistBuilder

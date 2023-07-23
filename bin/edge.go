@@ -20,9 +20,6 @@ import (
 
 // TODO FIXME: refactor and clean up the node initialization codes
 
-// TODO FIXME: after initializing video source operator, get a list of active recordings from
-// system control node, and feed them to the operator.
-
 // EdgeNode edge node monitoring one video source
 type EdgeNode struct {
 	nodeRuntimeCtxt       context.Context

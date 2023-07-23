@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/alwitt/goutils"
 	"github.com/alwitt/livemix/common"
@@ -493,6 +494,419 @@ func (h SystemManagerHandler) ChangeSourceStreamingState(w http.ResponseWriter, 
 func (h SystemManagerHandler) ChangeSourceStreamingStateHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		h.ChangeSourceStreamingState(w, r)
+	}
+}
+
+// ------------------------------------------------------------------------------------
+
+// StartNewRecordingRequest parameters to start a new video recording
+type StartNewRecordingRequest struct {
+	Alias       *string `json:"alias,omitempty"`
+	Description *string `json:"description,omitempty"`
+	StartTime   int64   `json:"start_time_epoch,omitempty"`
+}
+
+// RecordingSessionResponse response containing information for one recording session
+type RecordingSessionResponse struct {
+	goutils.RestAPIBaseResponse
+	// Recording video recording session info
+	Recording common.Recording `json:"recording" validate:"required,dive"`
+}
+
+// StartNewRecording godoc
+// @Summary Start video recording
+// @Description Starting a new video recording session on a particular video source
+// @tags management,cloud
+// @Accept json
+// @Produce json
+// @Param X-Request-ID header string false "Request ID"
+// @Param sourceID path string true "Video source ID"
+// @Param body StartNewRecordingRequest true "Recording session parameters"
+// @Success 200 {object} RecordingSessionResponse "success"
+// @Failure 400 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 403 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 404 {string} string "error"
+// @Failure 500 {object} goutils.RestAPIBaseResponse "error"
+// @Router /v1/source/{sourceID}/recording [post]
+func (h SystemManagerHandler) StartNewRecording(w http.ResponseWriter, r *http.Request) {
+	var respCode int
+	var response interface{}
+	logTags := h.GetLogTagsForContext(r.Context())
+	defer func() {
+		if err := h.WriteRESTResponse(w, respCode, response, nil); err != nil {
+			log.WithError(err).WithFields(logTags).Error("Failed to form response")
+		}
+	}()
+
+	// Get video source ID
+	vars := mux.Vars(r)
+	videoSourceID, ok := vars["sourceID"]
+	if !ok {
+		msg := "video source ID missing from request URL"
+		log.WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
+		return
+	}
+
+	if r.Body == nil {
+		msg := "no payload provided to start new recording session"
+		log.WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
+		return
+	}
+
+	// Parse the start parameters
+	var params StartNewRecordingRequest
+	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+		msg := "unable to parse new recording session parameters from request"
+		log.WithError(err).WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, err.Error())
+		return
+	}
+	defer func() {
+		if err := r.Body.Close(); err != nil {
+			log.WithError(err).WithFields(logTags).Error("Request body close error")
+		}
+	}()
+
+	{
+		t, _ := json.Marshal(&params)
+		log.
+			WithFields(logTags).
+			WithField("source-id", videoSourceID).
+			WithField("new-recording-session", string(t)).
+			Debug("Starting new video recording session")
+	}
+
+	// Convert epoch time to time.Time
+	startTime := time.Unix(params.StartTime, 0)
+	recordingID, err := h.manager.DefineRecordingSession(
+		r.Context(), videoSourceID, params.Alias, params.Description, startTime,
+	)
+	if err != nil {
+		msg := "failed to start new video recording session"
+		log.WithError(err).WithFields(logTags).Error(msg)
+		respCode = http.StatusInternalServerError
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusInternalServerError, msg, err.Error())
+		return
+	}
+
+	// Read back the recording session
+	entry, err := h.manager.GetRecordingSession(r.Context(), recordingID)
+	if err != nil {
+		msg := "failed to read back the recording session"
+		log.WithError(err).WithFields(logTags).Error(msg)
+		respCode = http.StatusInternalServerError
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusInternalServerError, msg, err.Error())
+		return
+	}
+
+	// Return the recording session
+	respCode = http.StatusOK
+	response = RecordingSessionResponse{
+		RestAPIBaseResponse: h.GetStdRESTSuccessMsg(r.Context()), Recording: entry,
+	}
+}
+
+// StartNewRecordingHandler Wrapper around StartNewRecording
+func (h SystemManagerHandler) StartNewRecordingHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.StartNewRecording(w, r)
+	}
+}
+
+// ------------------------------------------------------------------------------------
+
+// RecordingSessionListResponse response containing information for set of recording session
+type RecordingSessionListResponse struct {
+	goutils.RestAPIBaseResponse
+	// Recordings video recording session info list
+	Recordings []common.Recording `json:"recordings" validate:"required,dive"`
+}
+
+// ListRecordings godoc
+// @Summary Fetch recordings
+// @Description Fetch video recording sessions
+// @tags management,cloud
+// @Produce json
+// @Param X-Request-ID header string false "Request ID"
+// @Success 200 {object} RecordingSessionListResponse "success"
+// @Failure 400 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 403 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 404 {string} string "error"
+// @Failure 500 {object} goutils.RestAPIBaseResponse "error"
+// @Router /v1/recording [get]
+func (h SystemManagerHandler) ListRecordings(w http.ResponseWriter, r *http.Request) {
+	var respCode int
+	var response interface{}
+	logTags := h.GetLogTagsForContext(r.Context())
+	defer func() {
+		if err := h.WriteRESTResponse(w, respCode, response, nil); err != nil {
+			log.WithError(err).WithFields(logTags).Error("Failed to form response")
+		}
+	}()
+
+	recordings, err := h.manager.ListRecordingSessions(r.Context())
+	if err != nil {
+		msg := "failed to list all recording sessions"
+		log.WithError(err).WithFields(logTags).Error(msg)
+		respCode = http.StatusInternalServerError
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusInternalServerError, msg, err.Error())
+		return
+	}
+
+	// Return the recording session
+	respCode = http.StatusOK
+	response = RecordingSessionListResponse{
+		RestAPIBaseResponse: h.GetStdRESTSuccessMsg(r.Context()), Recordings: recordings,
+	}
+}
+
+// ListRecordingsHandler Wrapper around ListRecordings
+func (h SystemManagerHandler) ListRecordingsHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.ListRecordings(w, r)
+	}
+}
+
+// ------------------------------------------------------------------------------------
+
+// ListRecordingsOfSource godoc
+// @Summary Fetch recordings of source
+// @Description Fetch video recording sessions associated with a video source
+// @tags management,cloud
+// @Produce json
+// @Param X-Request-ID header string false "Request ID"
+// @Param sourceID path string true "Video source ID"
+// @Param only_active query string false "If exist, only list active recording sessions"
+// @Success 200 {object} RecordingSessionListResponse "success"
+// @Failure 400 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 403 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 404 {string} string "error"
+// @Failure 500 {object} goutils.RestAPIBaseResponse "error"
+// @Router /v1/source/{sourceID}/recording [get]
+func (h SystemManagerHandler) ListRecordingsOfSource(w http.ResponseWriter, r *http.Request) {
+	var respCode int
+	var response interface{}
+	logTags := h.GetLogTagsForContext(r.Context())
+	defer func() {
+		if err := h.WriteRESTResponse(w, respCode, response, nil); err != nil {
+			log.WithError(err).WithFields(logTags).Error("Failed to form response")
+		}
+	}()
+
+	// Get video source ID
+	vars := mux.Vars(r)
+	videoSourceID, ok := vars["sourceID"]
+	if !ok {
+		msg := "video source ID missing from request URL"
+		log.WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
+		return
+	}
+
+	// Get new video streaming state
+	queryParams := r.URL.Query()
+	onlyActive := false
+	if queryParams.Get("only_active") != "" {
+		onlyActive = true
+	}
+
+	recordings, err := h.manager.ListRecordingSessionsOfSource(r.Context(), videoSourceID, onlyActive)
+	if err != nil {
+		msg := "failed to list recording sessions of source"
+		log.WithError(err).WithFields(logTags).Error(msg)
+		respCode = http.StatusInternalServerError
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusInternalServerError, msg, err.Error())
+		return
+	}
+
+	// Return the recording session
+	respCode = http.StatusOK
+	response = RecordingSessionListResponse{
+		RestAPIBaseResponse: h.GetStdRESTSuccessMsg(r.Context()), Recordings: recordings,
+	}
+}
+
+// ListRecordingsOfSourceHandler Wrapper around ListRecordingsOfSource
+func (h SystemManagerHandler) ListRecordingsOfSourceHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.ListRecordingsOfSource(w, r)
+	}
+}
+
+// ------------------------------------------------------------------------------------
+
+// GetRecording godoc
+// @Summary Get recording session
+// @Description Get the video recording sessions
+// @tags management,cloud
+// @Produce json
+// @Param X-Request-ID header string false "Request ID"
+// @Param recordingID path string true "Video recording session ID"
+// @Success 200 {object} RecordingSessionResponse "success"
+// @Failure 400 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 403 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 404 {string} string "error"
+// @Failure 500 {object} goutils.RestAPIBaseResponse "error"
+// @Router /v1/recording/{recordingID} [get]
+func (h SystemManagerHandler) GetRecording(w http.ResponseWriter, r *http.Request) {
+	var respCode int
+	var response interface{}
+	logTags := h.GetLogTagsForContext(r.Context())
+	defer func() {
+		if err := h.WriteRESTResponse(w, respCode, response, nil); err != nil {
+			log.WithError(err).WithFields(logTags).Error("Failed to form response")
+		}
+	}()
+
+	// Get recording ID
+	vars := mux.Vars(r)
+	recordingID, ok := vars["recordingID"]
+	if !ok {
+		msg := "recording session ID missing from request URL"
+		log.WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
+		return
+	}
+
+	entry, err := h.manager.GetRecordingSession(r.Context(), recordingID)
+	if err != nil {
+		msg := "failed to read back the recording session"
+		log.WithError(err).WithFields(logTags).Error(msg)
+		respCode = http.StatusInternalServerError
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusInternalServerError, msg, err.Error())
+		return
+	}
+
+	// Return the recording session
+	respCode = http.StatusOK
+	response = RecordingSessionResponse{
+		RestAPIBaseResponse: h.GetStdRESTSuccessMsg(r.Context()), Recording: entry,
+	}
+}
+
+// GetRecordingHandler Wrapper around GetRecording
+func (h SystemManagerHandler) GetRecordingHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.GetRecording(w, r)
+	}
+}
+
+// ------------------------------------------------------------------------------------
+
+// StopRecording godoc
+// @Summary Stop recording session
+// @Description Stop the video recording sessions
+// @tags management,cloud
+// @Produce json
+// @Param X-Request-ID header string false "Request ID"
+// @Param recordingID path string true "Video recording session ID"
+// @Success 200 {object} goutils.RestAPIBaseResponse "success"
+// @Failure 400 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 403 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 404 {string} string "error"
+// @Failure 500 {object} goutils.RestAPIBaseResponse "error"
+// @Router /v1/recording/{recordingID}/stop [post]
+func (h SystemManagerHandler) StopRecording(w http.ResponseWriter, r *http.Request) {
+	var respCode int
+	var response interface{}
+	logTags := h.GetLogTagsForContext(r.Context())
+	defer func() {
+		if err := h.WriteRESTResponse(w, respCode, response, nil); err != nil {
+			log.WithError(err).WithFields(logTags).Error("Failed to form response")
+		}
+	}()
+
+	// Get recording ID
+	vars := mux.Vars(r)
+	recordingID, ok := vars["recordingID"]
+	if !ok {
+		msg := "recording session ID missing from request URL"
+		log.WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
+		return
+	}
+
+	currentTime := time.Now().UTC()
+
+	if err := h.manager.MarkEndOfRecordingSession(r.Context(), recordingID, currentTime); err != nil {
+		msg := "failed to stop recording session"
+		log.WithError(err).WithFields(logTags).Error(msg)
+		respCode = http.StatusInternalServerError
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusInternalServerError, msg, err.Error())
+		return
+	}
+
+	respCode = http.StatusOK
+	response = h.GetStdRESTSuccessMsg(r.Context())
+}
+
+// StopRecordingHandler Wrapper around StopRecording
+func (h SystemManagerHandler) StopRecordingHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.StopRecording(w, r)
+	}
+}
+
+// ------------------------------------------------------------------------------------
+
+// DeleteRecording godoc
+// @Summary Delete recording session
+// @Description Delete the video recording sessions
+// @tags management,cloud
+// @Produce json
+// @Param X-Request-ID header string false "Request ID"
+// @Param recordingID path string true "Video recording session ID"
+// @Success 200 {object} goutils.RestAPIBaseResponse "success"
+// @Failure 400 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 403 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 404 {string} string "error"
+// @Failure 500 {object} goutils.RestAPIBaseResponse "error"
+// @Router /v1/recording/{recordingID} [delete]
+func (h SystemManagerHandler) DeleteRecording(w http.ResponseWriter, r *http.Request) {
+	var respCode int
+	var response interface{}
+	logTags := h.GetLogTagsForContext(r.Context())
+	defer func() {
+		if err := h.WriteRESTResponse(w, respCode, response, nil); err != nil {
+			log.WithError(err).WithFields(logTags).Error("Failed to form response")
+		}
+	}()
+
+	// Get recording ID
+	vars := mux.Vars(r)
+	recordingID, ok := vars["recordingID"]
+	if !ok {
+		msg := "recording session ID missing from request URL"
+		log.WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
+		return
+	}
+
+	if err := h.manager.DeleteRecordingSession(r.Context(), recordingID); err != nil {
+		msg := "failed to delete recording session"
+		log.WithError(err).WithFields(logTags).Error(msg)
+		respCode = http.StatusInternalServerError
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusInternalServerError, msg, err.Error())
+		return
+	}
+
+	respCode = http.StatusOK
+	response = h.GetStdRESTSuccessMsg(r.Context())
+}
+
+// DeleteRecordingHandler Wrapper around DeleteRecording
+func (h SystemManagerHandler) DeleteRecordingHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.DeleteRecording(w, r)
 	}
 }
 
