@@ -365,7 +365,7 @@ func TestVodRecordingHandler(t *testing.T) {
 		router.ServeHTTP(respRecorder, req)
 
 		assert.Equal(http.StatusOK, respRecorder.Code)
-		t, err := testPlaylist.String(true)
+		t, err := testPlaylist.String(false)
 		assert.Nil(err)
 		resp := respRecorder.Body.String()
 		assert.Equal(t, resp)

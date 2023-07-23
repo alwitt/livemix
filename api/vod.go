@@ -157,14 +157,17 @@ func (h VODHandler) getVideoFiles(w http.ResponseWriter, r *http.Request, opMode
 		// Get the current playlist
 		var newPlaylist hls.Playlist
 		var err error
+		var continuous bool
 		if liveStream {
 			// live stream mode
 			newPlaylist, err = h.playlists.GetLiveStreamPlaylist(
 				r.Context(), videoSource, currentTime, true,
 			)
+			continuous = true
 		} else {
 			// recording mode
 			newPlaylist, err = h.playlists.GetRecordingStreamPlaylist(r.Context(), recording)
+			continuous = false
 		}
 		if err != nil {
 			msg := "Failed to construct the playlist"
@@ -174,7 +177,7 @@ func (h VODHandler) getVideoFiles(w http.ResponseWriter, r *http.Request, opMode
 			return
 		}
 		// Serialize the newPlaylistStr for return
-		newPlaylistStr, err := newPlaylist.String(true)
+		newPlaylistStr, err := newPlaylist.String(continuous)
 		if err != nil {
 			msg := "Playlist serialization failed"
 			log.WithError(err).WithFields(logTags).Error(msg)
