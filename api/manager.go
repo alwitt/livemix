@@ -714,7 +714,7 @@ func (h SystemManagerHandler) ListRecordingsOfSource(w http.ResponseWriter, r *h
 		return
 	}
 
-	// Get new video streaming state
+	// Whether to list only active recordings
 	queryParams := r.URL.Query()
 	onlyActive := false
 	if queryParams.Get("only_active") != "" {
@@ -878,6 +878,7 @@ func (h SystemManagerHandler) ListSegmentsOfRecordingHandler() http.HandlerFunc 
 // @Produce json
 // @Param X-Request-ID header string false "Request ID"
 // @Param recordingID path string true "Video recording session ID"
+// @Param force query string false "If exist, will complete operation regardless of whether the video source is accepting inbound requests."
 // @Success 200 {object} goutils.RestAPIBaseResponse "success"
 // @Failure 400 {object} goutils.RestAPIBaseResponse "error"
 // @Failure 403 {object} goutils.RestAPIBaseResponse "error"
@@ -905,9 +906,17 @@ func (h SystemManagerHandler) StopRecording(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Whether to force request through
+	queryParams := r.URL.Query()
+	willForce := false
+	if queryParams.Get("force") != "" {
+		willForce = true
+	}
+
 	currentTime := time.Now().UTC()
 
-	if err := h.manager.MarkEndOfRecordingSession(r.Context(), recordingID, currentTime); err != nil {
+	err := h.manager.MarkEndOfRecordingSession(r.Context(), recordingID, currentTime, willForce)
+	if err != nil {
 		msg := "failed to stop recording session"
 		log.WithError(err).WithFields(logTags).Error(msg)
 		respCode = http.StatusInternalServerError
@@ -935,6 +944,7 @@ func (h SystemManagerHandler) StopRecordingHandler() http.HandlerFunc {
 // @Produce json
 // @Param X-Request-ID header string false "Request ID"
 // @Param recordingID path string true "Video recording session ID"
+// @Param force query string false "If exist, will complete operation regardless of whether the video source is accepting inbound requests."
 // @Success 200 {object} goutils.RestAPIBaseResponse "success"
 // @Failure 400 {object} goutils.RestAPIBaseResponse "error"
 // @Failure 403 {object} goutils.RestAPIBaseResponse "error"
@@ -962,7 +972,14 @@ func (h SystemManagerHandler) DeleteRecording(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if err := h.manager.DeleteRecordingSession(r.Context(), recordingID); err != nil {
+	// Whether to force request through
+	queryParams := r.URL.Query()
+	willForce := false
+	if queryParams.Get("force") != "" {
+		willForce = true
+	}
+
+	if err := h.manager.DeleteRecordingSession(r.Context(), recordingID, willForce); err != nil {
 		msg := "failed to delete recording session"
 		log.WithError(err).WithFields(logTags).Error(msg)
 		respCode = http.StatusInternalServerError

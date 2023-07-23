@@ -166,8 +166,10 @@ type SystemManager interface {
 			@param ctxt context.Context - execution context
 			@param id string - session entry ID
 			@param endTime time.Time - when the recording session ended
+			@param force bool - force through the change regardless whether the video source
+			    is accepting inbound requests.
 	*/
-	MarkEndOfRecordingSession(ctxt context.Context, id string, endTime time.Time) error
+	MarkEndOfRecordingSession(ctxt context.Context, id string, endTime time.Time, force bool) error
 
 	/*
 		UpdateRecordingSession update properties of a video recording session.
@@ -186,8 +188,10 @@ type SystemManager interface {
 
 			@param ctxt context.Context - execution context
 			@param id string - session entry ID
+			@param force bool - force through the change regardless whether the video source
+			    is accepting inbound requests.
 	*/
-	DeleteRecordingSession(ctxt context.Context, id string) error
+	DeleteRecordingSession(ctxt context.Context, id string, force bool) error
 
 	/*
 		StopAllActiveRecordingOfSource stop any active recording sessions associated with a source
@@ -549,7 +553,7 @@ func (m *systemManagerImpl) ListRecordingSessionsOfSource(
 }
 
 func (m *systemManagerImpl) MarkEndOfRecordingSession(
-	ctxt context.Context, id string, endTime time.Time,
+	ctxt context.Context, id string, endTime time.Time, force bool,
 ) error {
 	logTags := m.GetLogTagsForContext(ctxt)
 
@@ -579,16 +583,6 @@ func (m *systemManagerImpl) MarkEndOfRecordingSession(
 		return err
 	}
 
-	// Verify that it is possible to make the request
-	if err := m.canRequestVideoSource(source); err != nil {
-		log.
-			WithError(err).
-			WithFields(logTags).
-			WithField("source-id", source.ID).
-			Error("Can't make request to source")
-		return err
-	}
-
 	// Stop the recording entry
 	if err := dbClient.MarkEndOfRecordingSession(ctxt, id, endTime); err != nil {
 		log.
@@ -597,6 +591,21 @@ func (m *systemManagerImpl) MarkEndOfRecordingSession(
 			WithField("source-id", source.ID).
 			WithField("recording", id).
 			Error("Failed to mark recording as ended")
+		return err
+	}
+
+	// Verify that it is possible to make the request
+	if err := m.canRequestVideoSource(source); err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", source.ID).
+			Error("Can't make request to source")
+		if force {
+			// Ignore this error
+			return nil
+		}
+		dbClient.MarkExternalError(err)
 		return err
 	}
 
@@ -614,6 +623,10 @@ func (m *systemManagerImpl) MarkEndOfRecordingSession(
 			WithField("source-id", source.ID).
 			WithField("recording", id).
 			Error("Unable to command source to stop recording")
+		if force {
+			// Ignore this error
+			return nil
+		}
 		dbClient.MarkExternalError(err)
 		return err
 	}
@@ -635,11 +648,13 @@ func (m *systemManagerImpl) UpdateRecordingSession(
 	return dbClient.UpdateRecordingSession(ctxt, newSetting)
 }
 
-func (m *systemManagerImpl) DeleteRecordingSession(ctxt context.Context, id string) error {
+func (m *systemManagerImpl) DeleteRecordingSession(
+	ctxt context.Context, id string, force bool,
+) error {
 	logTags := m.GetLogTagsForContext(ctxt)
 
 	currentTime := time.Now().UTC()
-	if err := m.MarkEndOfRecordingSession(ctxt, id, currentTime); err != nil {
+	if err := m.MarkEndOfRecordingSession(ctxt, id, currentTime, force); err != nil {
 		log.
 			WithError(err).
 			WithFields(logTags).

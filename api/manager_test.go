@@ -725,10 +725,16 @@ func TestManagerStopRecording(t *testing.T) {
 		mock.AnythingOfType("*context.valueCtx"),
 		testRecording.ID,
 		mock.AnythingOfType("time.Time"),
+		true,
 	).Return(nil).Once()
 
 	req, err := http.NewRequest("POST", fmt.Sprintf("/v1/recording/%s/stop", testRecording.ID), nil)
 	assert.Nil(err)
+	{
+		q := req.URL.Query()
+		q.Add("force", "true")
+		req.URL.RawQuery = q.Encode()
+	}
 
 	// Setup HTTP handling
 	router := mux.NewRouter()
@@ -761,10 +767,16 @@ func TestManagerDeleteRecording(t *testing.T) {
 		"DeleteRecordingSession",
 		mock.AnythingOfType("*context.valueCtx"),
 		testRecordingID,
+		true,
 	).Return(nil).Once()
 
 	req, err := http.NewRequest("POST", fmt.Sprintf("/v1/recording/%s", testRecordingID), nil)
 	assert.Nil(err)
+	{
+		q := req.URL.Query()
+		q.Add("force", "true")
+		req.URL.RawQuery = q.Encode()
+	}
 
 	// Setup HTTP handling
 	router := mux.NewRouter()

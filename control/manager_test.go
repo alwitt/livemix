@@ -373,7 +373,7 @@ func TestSystemManagerMarkEndOfRecordingSession(t *testing.T) {
 			testRecordingID,
 		).Return(common.Recording{}, fmt.Errorf("dummy error")).Once()
 
-		err := uut.MarkEndOfRecordingSession(utCtxt, testRecordingID, currentTime)
+		err := uut.MarkEndOfRecordingSession(utCtxt, testRecordingID, currentTime, false)
 		assert.NotNil(err)
 		assert.Equal("dummy error", err.Error())
 	}
@@ -395,7 +395,7 @@ func TestSystemManagerMarkEndOfRecordingSession(t *testing.T) {
 			testSourceID,
 		).Return(common.VideoSource{}, fmt.Errorf("dummy error")).Once()
 
-		err := uut.MarkEndOfRecordingSession(utCtxt, testRecording.ID, currentTime)
+		err := uut.MarkEndOfRecordingSession(utCtxt, testRecording.ID, currentTime, false)
 		assert.NotNil(err)
 		assert.Equal("dummy error", err.Error())
 	}
@@ -426,7 +426,7 @@ func TestSystemManagerMarkEndOfRecordingSession(t *testing.T) {
 			currentTime,
 		).Return(fmt.Errorf("dummy error")).Once()
 
-		err := uut.MarkEndOfRecordingSession(utCtxt, testRecording.ID, currentTime)
+		err := uut.MarkEndOfRecordingSession(utCtxt, testRecording.ID, currentTime, false)
 		assert.NotNil(err)
 		assert.Equal("dummy error", err.Error())
 	}
@@ -468,7 +468,7 @@ func TestSystemManagerMarkEndOfRecordingSession(t *testing.T) {
 			fmt.Errorf("dummy error"),
 		).Return().Once()
 
-		err := uut.MarkEndOfRecordingSession(utCtxt, testRecording.ID, currentTime)
+		err := uut.MarkEndOfRecordingSession(utCtxt, testRecording.ID, currentTime, false)
 		assert.NotNil(err)
 		assert.Equal("dummy error", err.Error())
 	}
@@ -506,7 +506,44 @@ func TestSystemManagerMarkEndOfRecordingSession(t *testing.T) {
 			currentTime,
 		).Return(nil).Once()
 
-		err := uut.MarkEndOfRecordingSession(utCtxt, testRecording.ID, currentTime)
+		err := uut.MarkEndOfRecordingSession(utCtxt, testRecording.ID, currentTime, false)
+		assert.Nil(err)
+	}
+
+	// Case 5: DB operation passed, RR failed, but the request forced through
+	{
+		testRRTargetID := uuid.NewString()
+		testSource := common.VideoSource{
+			ID: uuid.NewString(), ReqRespTargetID: &testRRTargetID, SourceLocalTime: currentTime,
+		}
+		testRecording := common.Recording{ID: uuid.NewString(), SourceID: testSource.ID}
+
+		// Prepare mock
+		mockDB.On(
+			"GetRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testRecording.ID,
+		).Return(testRecording, nil).Once()
+		mockDB.On(
+			"GetVideoSource",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource.ID,
+		).Return(testSource, nil).Once()
+		mockDB.On(
+			"MarkEndOfRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testRecording.ID,
+			currentTime,
+		).Return(nil).Once()
+		mockRR.On(
+			"StopRecordingSession",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource,
+			testRecording.ID,
+			currentTime,
+		).Return(fmt.Errorf("dummy error")).Once()
+
+		err := uut.MarkEndOfRecordingSession(utCtxt, testRecording.ID, currentTime, true)
 		assert.Nil(err)
 	}
 }
