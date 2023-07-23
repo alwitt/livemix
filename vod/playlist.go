@@ -31,7 +31,14 @@ type PlaylistBuilder interface {
 		ctxt context.Context, target common.VideoSource, timestamp time.Time, addMediaSequence bool,
 	) (hls.Playlist, error)
 
-	// TODO FIXME: add recording playlist builder
+	/*
+		GetRecordingStreamPlaylist generate a playlist for a video recording
+
+			@param ctxt context.Context - execution context
+			@param recording common.Recording - video recording session
+			@returns playlist for the recording session
+	*/
+	GetRecordingStreamPlaylist(ctxt context.Context, recording common.Recording) (hls.Playlist, error)
 }
 
 // playlistBuilderImpl implements PlaylistBuilder
@@ -105,6 +112,54 @@ func (b *playlistBuilderImpl) GetLiveStreamPlaylist(
 	if addMediaSequence {
 		result.AddMediaSequenceVal(b.referenceTime)
 	}
+
+	return result, nil
+}
+
+func (b *playlistBuilderImpl) GetRecordingStreamPlaylist(
+	ctxt context.Context, recording common.Recording,
+) (hls.Playlist, error) {
+	logTags := b.GetLogTagsForContext(ctxt)
+
+	dbClient := b.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+
+	// Get the video segments for the recording
+	segments, err := dbClient.ListAllSegmentsOfRecording(ctxt, recording.ID)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("recording-id", recording.ID).
+			Error("Failed to fetch associated segments")
+		return hls.Playlist{}, err
+	}
+
+	// Get the video source as well
+	source, err := dbClient.GetVideoSource(ctxt, recording.SourceID)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", recording.SourceID).
+			WithField("recording-id", recording.ID).
+			Error("Unable to find source associated with recording")
+		return hls.Playlist{}, err
+	}
+
+	result := hls.Playlist{
+		Name:              source.Name,
+		CreatedAt:         time.Now().UTC(),
+		Version:           3,
+		TargetSegDuration: float64(source.TargetSegmentLength),
+		Segments:          make([]hls.Segment, len(segments)),
+	}
+	for idx, oneSegment := range segments {
+		result.Segments[idx] = oneSegment.Segment
+	}
+
+	defaultMediaSequenceVal := 1
+	result.MediaSequenceVal = &defaultMediaSequenceVal
 
 	return result, nil
 }

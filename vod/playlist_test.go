@@ -114,3 +114,65 @@ func TestBuildLiveStreamPlaylist(t *testing.T) {
 		assert.Equal(mediaSequenceVal, *playlist.MediaSequenceVal)
 	}
 }
+
+func TestBuildRecordingPlaylist(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	utCtxt := context.Background()
+
+	mockSQL := mocks.NewConnectionManager(t)
+	mockDB := mocks.NewPersistenceManager(t)
+	mockSQL.On("NewPersistanceManager").Return(mockDB)
+	mockDB.On("Close").Return()
+
+	testSource := common.VideoSource{
+		ID:                  uuid.NewString(),
+		TargetSegmentLength: 5,
+	}
+	testRecording := common.Recording{
+		ID:       uuid.NewString(),
+		SourceID: testSource.ID,
+	}
+	testSegments := []common.VideoSegment{
+		{ID: uuid.NewString(), SourceID: testSource.ID},
+		{ID: uuid.NewString(), SourceID: testSource.ID},
+		{ID: uuid.NewString(), SourceID: testSource.ID},
+	}
+
+	uut, err := vod.NewPlaylistBuilder(mockSQL, 1)
+	assert.Nil(err)
+
+	// Case 0: failed to find recording segments
+	{
+		// Prepare mock
+		mockDB.On(
+			"ListAllSegmentsOfRecording",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testRecording.ID,
+		).Return([]common.VideoSegment{}, fmt.Errorf("dummy error")).Once()
+
+		_, err = uut.GetRecordingStreamPlaylist(utCtxt, testRecording)
+		assert.NotNil(err)
+		assert.Equal("dummy error", err.Error())
+	}
+
+	// Case 1: failed to find the associated source
+	{
+		// Prepare mock
+		mockDB.On(
+			"ListAllSegmentsOfRecording",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testRecording.ID,
+		).Return(testSegments, nil).Once()
+		mockDB.On(
+			"GetVideoSource",
+			mock.AnythingOfType("*context.emptyCtx"),
+			testSource.ID,
+		).Return(common.VideoSource{}, fmt.Errorf("dummy error")).Once()
+
+		_, err = uut.GetRecordingStreamPlaylist(utCtxt, testRecording)
+		assert.NotNil(err)
+		assert.Equal("dummy error", err.Error())
+	}
+}

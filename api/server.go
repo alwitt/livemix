@@ -205,7 +205,7 @@ func BuildCentralVODServer(
 	if err != nil {
 		return nil, err
 	}
-	vodHandler, err := NewLiveStreamHandler(
+	vodHandler, err := NewVODHandler(
 		dbConns, playlistBuilder, segments, httpCfg.APIs.RequestLogging,
 	)
 	if err != nil {
@@ -226,7 +226,13 @@ func BuildCentralVODServer(
 	// VOD endpoint
 	_ = registerPathPrefix(
 		v1Router, "/vod/live/{videoSourceID}/{fileName}", map[string]http.HandlerFunc{
-			"get": vodHandler.GetVideoFilesHandler(),
+			"get": vodHandler.GetLiveStreamVideoFilesHandler(),
+		},
+	)
+
+	_ = registerPathPrefix(
+		v1Router, "/vod/recording/{recordingID}/{fileName}", map[string]http.HandlerFunc{
+			"get": vodHandler.GetRecordingVideoFilesHandler(),
 		},
 	)
 
@@ -272,7 +278,7 @@ func BuildVODServer(
 	playlistBuilder vod.PlaylistBuilder,
 	segments vod.SegmentManager,
 ) (*http.Server, error) {
-	httpHandler, err := NewLiveStreamHandler(
+	httpHandler, err := NewVODHandler(
 		dbConns, playlistBuilder, segments, httpCfg.APIs.RequestLogging,
 	)
 	if err != nil {
@@ -287,7 +293,7 @@ func BuildVODServer(
 	// VOD endpoint
 	_ = registerPathPrefix(
 		v1Router, "/vod/live/{videoSourceID}/{fileName}", map[string]http.HandlerFunc{
-			"get": httpHandler.GetVideoFilesHandler(),
+			"get": httpHandler.GetLiveStreamVideoFilesHandler(),
 		},
 	)
 
