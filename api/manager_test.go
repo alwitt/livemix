@@ -370,6 +370,22 @@ func TestManagerStartRecordingSession(t *testing.T) {
 		req, err := http.NewRequest("POST", fmt.Sprintf("/v1/source/%s/recording", testSourceID), nil)
 		assert.Nil(err)
 
+		// Prepare mock
+		testRecording := common.Recording{ID: uuid.NewString(), SourceID: testSourceID}
+		mockManager.On(
+			"DefineRecordingSession",
+			mock.AnythingOfType("*context.valueCtx"),
+			testSourceID,
+			mock.AnythingOfType("*string"),
+			mock.AnythingOfType("*string"),
+			mock.AnythingOfType("time.Time"),
+		).Return(testRecording.ID, nil).Once()
+		mockManager.On(
+			"GetRecordingSession",
+			mock.AnythingOfType("*context.valueCtx"),
+			testRecording.ID,
+		).Return(testRecording, nil).Once()
+
 		// Setup HTTP handling
 		router := mux.NewRouter()
 		respRecorder := httptest.NewRecorder()
@@ -380,7 +396,12 @@ func TestManagerStartRecordingSession(t *testing.T) {
 		// Request
 		router.ServeHTTP(respRecorder, req)
 
-		assert.Equal(http.StatusBadRequest, respRecorder.Code)
+		assert.Equal(http.StatusOK, respRecorder.Code)
+		// Verify response
+		var resp api.RecordingSessionResponse
+		assert.Nil(json.Unmarshal(respRecorder.Body.Bytes(), &resp))
+		assert.Equal(testRecording.ID, resp.Recording.ID)
+		assert.Equal(testRecording.SourceID, resp.Recording.SourceID)
 	}
 
 	// Case 1: correct parameters

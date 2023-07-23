@@ -521,7 +521,7 @@ type RecordingSessionResponse struct {
 // @Produce json
 // @Param X-Request-ID header string false "Request ID"
 // @Param sourceID path string true "Video source ID"
-// @Param body StartNewRecordingRequest true "Recording session parameters"
+// @Param body StartNewRecordingRequest false "Recording session parameters"
 // @Success 200 {object} RecordingSessionResponse "success"
 // @Failure 400 {object} goutils.RestAPIBaseResponse "error"
 // @Failure 403 {object} goutils.RestAPIBaseResponse "error"
@@ -549,42 +549,39 @@ func (h SystemManagerHandler) StartNewRecording(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if r.Body == nil {
-		msg := "no payload provided to start new recording session"
-		log.WithFields(logTags).Error(msg)
-		respCode = http.StatusBadRequest
-		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
-		return
-	}
+	startTime := time.Now().UTC()
+	var alias, description *string
 
-	// Parse the start parameters
-	var params StartNewRecordingRequest
-	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
-		msg := "unable to parse new recording session parameters from request"
-		log.WithError(err).WithFields(logTags).Error(msg)
-		respCode = http.StatusBadRequest
-		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, err.Error())
-		return
-	}
-	defer func() {
-		if err := r.Body.Close(); err != nil {
-			log.WithError(err).WithFields(logTags).Error("Request body close error")
+	if r.Body != nil {
+		// Parse the start parameters
+		var params StartNewRecordingRequest
+		if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+			msg := "unable to parse new recording session parameters from request"
+			log.WithError(err).WithFields(logTags).Error(msg)
+			respCode = http.StatusBadRequest
+			response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, err.Error())
+			return
 		}
-	}()
+		defer func() {
+			if err := r.Body.Close(); err != nil {
+				log.WithError(err).WithFields(logTags).Error("Request body close error")
+			}
+		}()
 
-	{
-		t, _ := json.Marshal(&params)
-		log.
-			WithFields(logTags).
-			WithField("source-id", videoSourceID).
-			WithField("new-recording-session", string(t)).
-			Debug("Starting new video recording session")
+		// Convert epoch time to time.Time
+		startTime = time.Unix(params.StartTime, 0)
+
+		alias = params.Alias
+		description = params.Description
 	}
 
-	// Convert epoch time to time.Time
-	startTime := time.Unix(params.StartTime, 0)
+	log.
+		WithFields(logTags).
+		WithField("source-id", videoSourceID).
+		Debug("Starting new video recording session")
+
 	recordingID, err := h.manager.DefineRecordingSession(
-		r.Context(), videoSourceID, params.Alias, params.Description, startTime,
+		r.Context(), videoSourceID, alias, description, startTime,
 	)
 	if err != nil {
 		msg := "failed to start new video recording session"
