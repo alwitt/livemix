@@ -199,6 +199,20 @@ type SystemManager interface {
 	StopAllActiveRecordingOfSource(ctxt context.Context, id string, currentTime time.Time) error
 
 	// =====================================================================================
+	// Video Recording Segments
+
+	/*
+		ListAllSegmentsOfRecording fetch all video segments belonging to one recording session
+
+			@param ctxt context.Context - execution context
+			@param recordingID string - video recording session ID
+			@returns set of video segments
+	*/
+	ListAllSegmentsOfRecording(
+		ctxt context.Context, recordingID string,
+	) ([]common.VideoSegment, error)
+
+	// =====================================================================================
 	// Utilities
 
 	/*
@@ -720,6 +734,77 @@ func (m *systemManagerImpl) StopAllActiveRecordingOfSource(
 	return nil
 }
 
+func (m *systemManagerImpl) ListAllSegmentsOfRecording(
+	ctxt context.Context, recordingID string,
+) ([]common.VideoSegment, error) {
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+	return dbClient.ListAllSegmentsOfRecording(ctxt, recordingID)
+}
+
+// =====================================================================================
+// Utilities
+
+func (m *systemManagerImpl) ProcessBroadcastMsgs(
+	ctxt context.Context, pubTimestamp time.Time, msg []byte, metadata map[string]string,
+) error {
+	logTags := m.GetLogTagsForContext(ctxt)
+
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+
+	// Parse the message
+	parsed, err := ipc.ParseRawMessage(msg)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Unable to parse the broadcast message")
+		dbClient.MarkExternalError(err)
+		return err
+	}
+
+	// Process the message based on type
+	msgType := reflect.TypeOf(parsed)
+	switch reflect.TypeOf(parsed) {
+	case reflect.TypeOf(ipc.VideoSourceStatusReport{}):
+		statusReport := parsed.(ipc.VideoSourceStatusReport)
+		// Record
+		if err := dbClient.RefreshVideoSourceStats(
+			ctxt,
+			statusReport.SourceID,
+			statusReport.RequestResponseTargetID,
+			statusReport.LocalTimestamp,
+		); err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				WithField("source-id", statusReport.SourceID).
+				Error("Unable to record new video source status report")
+			return err
+		}
+
+	case reflect.TypeOf(ipc.RecordingSegmentReport{}):
+		newSegmentReport := parsed.(ipc.RecordingSegmentReport)
+		// Record the new segments
+		if err := dbClient.RegisterRecordingSegments(
+			ctxt, newSegmentReport.RecordingIDs, newSegmentReport.Segments,
+		); err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				WithField("recordings", newSegmentReport.RecordingIDs).
+				Error("Unable to record new recording video segments report")
+			return err
+		}
+
+	default:
+		log.
+			WithFields(logTags).
+			WithField("msg-type", msgType).
+			Debug("Ignoring unsupported broadcast message type")
+	}
+
+	return nil
+}
+
 func (m *systemManagerImpl) PurgeUnassociatedRecordingSegments() error {
 	logTags := m.GetLogTagsForContext(m.workerCtxt)
 
@@ -791,69 +876,6 @@ func (m *systemManagerImpl) PurgeUnassociatedRecordingSegments() error {
 			WithField("recording-bucket", bucketName).
 			WithField("segments", len(segments)).
 			Info("Deleted unassociated recording segments in bucket")
-	}
-
-	return nil
-}
-
-// =====================================================================================
-// Utilities
-
-func (m *systemManagerImpl) ProcessBroadcastMsgs(
-	ctxt context.Context, pubTimestamp time.Time, msg []byte, metadata map[string]string,
-) error {
-	logTags := m.GetLogTagsForContext(ctxt)
-
-	dbClient := m.dbConns.NewPersistanceManager()
-	defer dbClient.Close()
-
-	// Parse the message
-	parsed, err := ipc.ParseRawMessage(msg)
-	if err != nil {
-		log.WithError(err).WithFields(logTags).Error("Unable to parse the broadcast message")
-		dbClient.MarkExternalError(err)
-		return err
-	}
-
-	// Process the message based on type
-	msgType := reflect.TypeOf(parsed)
-	switch reflect.TypeOf(parsed) {
-	case reflect.TypeOf(ipc.VideoSourceStatusReport{}):
-		statusReport := parsed.(ipc.VideoSourceStatusReport)
-		// Record
-		if err := dbClient.RefreshVideoSourceStats(
-			ctxt,
-			statusReport.SourceID,
-			statusReport.RequestResponseTargetID,
-			statusReport.LocalTimestamp,
-		); err != nil {
-			log.
-				WithError(err).
-				WithFields(logTags).
-				WithField("source-id", statusReport.SourceID).
-				Error("Unable to record new video source status report")
-			return err
-		}
-
-	case reflect.TypeOf(ipc.RecordingSegmentReport{}):
-		newSegmentReport := parsed.(ipc.RecordingSegmentReport)
-		// Record the new segments
-		if err := dbClient.RegisterRecordingSegments(
-			ctxt, newSegmentReport.RecordingIDs, newSegmentReport.Segments,
-		); err != nil {
-			log.
-				WithError(err).
-				WithFields(logTags).
-				WithField("recordings", newSegmentReport.RecordingIDs).
-				Error("Unable to record new recording video segments report")
-			return err
-		}
-
-	default:
-		log.
-			WithFields(logTags).
-			WithField("msg-type", msgType).
-			Debug("Ignoring unsupported broadcast message type")
 	}
 
 	return nil

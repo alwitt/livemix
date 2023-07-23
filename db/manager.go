@@ -1106,7 +1106,7 @@ func (m *persistenceManagerImpl) ListRecordingSessions(
 	var results []common.Recording
 	var entries []recordingSession
 
-	if tmp := m.db.Find(&entries); tmp.Error != nil {
+	if tmp := m.db.Order("start_ts").Find(&entries); tmp.Error != nil {
 		m.err = tmp.Error
 		return nil, tmp.Error
 	}
@@ -1132,7 +1132,7 @@ func (m *persistenceManagerImpl) ListRecordingSessionsOfSource(
 	if active {
 		query = query.Where(&recordingSession{Recording: common.Recording{Active: 1}})
 	}
-	if tmp := query.Find(&entries); tmp.Error != nil {
+	if tmp := query.Order("start_ts").Find(&entries); tmp.Error != nil {
 		m.err = tmp.Error
 		return nil, tmp.Error
 	}
@@ -1355,7 +1355,7 @@ func (m *persistenceManagerImpl) ListAllRecordingSegments(
 
 	var result []common.VideoSegment
 	var entries []recordingVideoSegment
-	if tmp := m.db.Find(&entries); tmp.Error != nil {
+	if tmp := m.db.Order("end_ts").Find(&entries); tmp.Error != nil {
 		m.err = tmp.Error
 		return nil, tmp.Error
 	}
@@ -1397,7 +1397,7 @@ func (m *persistenceManagerImpl) ListAllSegmentsOfRecording(
 
 		// Get the associated segments
 		var entries []recordingVideoSegment
-		if tmp := m.db.Where("id in ?", segIDs).Find(&entries); tmp.Error != nil {
+		if tmp := m.db.Where("id in ?", segIDs).Order("end_ts").Find(&entries); tmp.Error != nil {
 			m.err = tmp.Error
 			return nil, tmp.Error
 		}

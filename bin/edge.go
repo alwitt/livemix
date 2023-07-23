@@ -288,7 +288,7 @@ func DefineEdgeNode(
 		config.MonitorConfig.TrackingWindow(),
 		cache,
 		theNode.segmentReader,
-		liveForwarder.ForwardSegment,
+		edgeOperator.NewSegmentFromSource,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create HLS monitor")

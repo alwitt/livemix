@@ -92,6 +92,10 @@ func BuildSystemManagementServer(
 		"post": httpHandler.StopRecordingHandler(),
 	})
 
+	_ = registerPathPrefix(perRecordingRouter, "/segment", map[string]http.HandlerFunc{
+		"get": httpHandler.ListSegmentsOfRecordingHandler(),
+	})
+
 	// --------------------------------------------------------------------------------
 	// Middleware
 

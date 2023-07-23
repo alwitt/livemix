@@ -11,6 +11,7 @@ import (
 
 	"github.com/alwitt/livemix/api"
 	"github.com/alwitt/livemix/common"
+	"github.com/alwitt/livemix/hls"
 	"github.com/alwitt/livemix/mocks"
 	"github.com/apex/log"
 	"github.com/google/uuid"
@@ -367,7 +368,9 @@ func TestManagerStartRecordingSession(t *testing.T) {
 
 	// Case 0: no parameters given
 	{
-		req, err := http.NewRequest("POST", fmt.Sprintf("/v1/source/%s/recording", testSourceID), nil)
+		req, err := http.NewRequest(
+			"POST", fmt.Sprintf("/v1/source/%s/recording", testSourceID), bytes.NewBuffer([]byte{}),
+		)
 		assert.Nil(err)
 
 		// Prepare mock
@@ -646,6 +649,61 @@ func TestManagerGetRecording(t *testing.T) {
 	assert.Nil(json.Unmarshal(respRecorder.Body.Bytes(), &resp))
 	assert.Equal(testRecording.ID, resp.Recording.ID)
 	assert.Equal(testRecording.SourceID, resp.Recording.SourceID)
+}
+
+func TestManagerListSegmentsOfRecording(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	mockManager := mocks.NewSystemManager(t)
+
+	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
+		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
+	})
+	assert.Nil(err)
+
+	testRecordingID := uuid.NewString()
+
+	testSegments := []common.VideoSegment{
+		{
+			ID:       uuid.NewString(),
+			SourceID: uuid.NewString(),
+			Segment:  hls.Segment{Name: uuid.NewString()},
+		},
+	}
+
+	// Prepare mock
+	mockManager.On(
+		"ListAllSegmentsOfRecording",
+		mock.AnythingOfType("*context.valueCtx"),
+		testRecordingID,
+	).Return(testSegments, nil).Once()
+
+	req, err := http.NewRequest("GET", fmt.Sprintf("/v1/recording/%s/segment", testRecordingID), nil)
+	assert.Nil(err)
+
+	// Setup HTTP handling
+	router := mux.NewRouter()
+	respRecorder := httptest.NewRecorder()
+	router.HandleFunc(
+		"/v1/recording/{recordingID}/segment",
+		uut.LoggingMiddleware(uut.ListSegmentsOfRecordingHandler()),
+	)
+
+	// Request
+	router.ServeHTTP(respRecorder, req)
+
+	assert.Equal(http.StatusOK, respRecorder.Code)
+	// Verify response
+	var resp api.RecordingSegmentListResponse
+	assert.Nil(json.Unmarshal(respRecorder.Body.Bytes(), &resp))
+	assert.Len(resp.Segments, len(testSegments))
+	for idx, gotSegment := range resp.Segments {
+		testSegment := testSegments[idx]
+		assert.Equal(testSegment.ID, gotSegment.ID)
+		assert.Equal(testSegment.SourceID, gotSegment.SourceID)
+		assert.Equal(testSegment.Name, gotSegment.Name)
+	}
 }
 
 func TestManagerStopRecording(t *testing.T) {

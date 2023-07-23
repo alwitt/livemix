@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -339,6 +340,9 @@ func (o *videoSourceOperatorImpl) handleStartRecording(newRecording common.Recor
 	dbClient := o.DBConns.NewPersistanceManager()
 	defer dbClient.Close()
 
+	// Force start time to UTC
+	newRecording.StartTime = newRecording.StartTime.UTC()
+
 	// Store the new recording session
 	if err := dbClient.RecordKnownRecordingSession(o.workerCtxt, newRecording); err != nil {
 		log.
@@ -373,12 +377,30 @@ func (o *videoSourceOperatorImpl) handleStartRecording(newRecording common.Recor
 		return err
 	}
 
+	{
+		builder := strings.Builder{}
+		builder.WriteString("[ ")
+		for _, segment := range relevantSegments {
+			builder.WriteString(
+				fmt.Sprintf("(%s @ %s) ", segment.Name, segment.EndTime.Format(time.RFC3339)),
+			)
+		}
+		builder.WriteString("]")
+		log.
+			WithFields(logTags).
+			WithField("req-source-id", newRecording.SourceID).
+			WithField("recording-id", newRecording.ID).
+			WithField("recording-start", newRecording.StartTime.Format(time.RFC3339)).
+			WithField("associated-segments", builder.String()).
+			Debug("Found segments associated with known recording")
+	}
+
 	log.
 		WithFields(logTags).
 		WithField("req-source-id", newRecording.SourceID).
 		WithField("recording-id", newRecording.ID).
 		WithField("associated-segments", len(relevantSegments)).
-		Debug("Found segments associated with known recording")
+		Info("Found segments associated with known recording")
 
 	if len(relevantSegments) == 0 {
 		return nil

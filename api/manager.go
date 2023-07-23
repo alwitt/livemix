@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"time"
 
@@ -552,21 +553,28 @@ func (h SystemManagerHandler) StartNewRecording(w http.ResponseWriter, r *http.R
 	startTime := time.Now().UTC()
 	var alias, description *string
 
+	var paramRaw []byte
 	if r.Body != nil {
+		defer func() {
+			if err := r.Body.Close(); err != nil {
+				log.WithError(err).WithFields(logTags).Error("Request body close error")
+			}
+		}()
+		if t, err := io.ReadAll(r.Body); err == nil {
+			paramRaw = t
+		}
+	}
+
+	if len(paramRaw) > 0 {
 		// Parse the start parameters
 		var params StartNewRecordingRequest
-		if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+		if err := json.Unmarshal(paramRaw, &params); err != nil {
 			msg := "unable to parse new recording session parameters from request"
 			log.WithError(err).WithFields(logTags).Error(msg)
 			respCode = http.StatusBadRequest
 			response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, err.Error())
 			return
 		}
-		defer func() {
-			if err := r.Body.Close(); err != nil {
-				log.WithError(err).WithFields(logTags).Error("Request body close error")
-			}
-		}()
 
 		// Convert epoch time to time.Time
 		startTime = time.Unix(params.StartTime, 0)
@@ -792,6 +800,72 @@ func (h SystemManagerHandler) GetRecording(w http.ResponseWriter, r *http.Reques
 func (h SystemManagerHandler) GetRecordingHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		h.GetRecording(w, r)
+	}
+}
+
+// ------------------------------------------------------------------------------------
+
+// RecordingSegmentListResponse response containing set of segment associated with a recording
+type RecordingSegmentListResponse struct {
+	goutils.RestAPIBaseResponse
+	// Segments video segments associated with a recording session
+	Segments []common.VideoSegment `json:"segments" validate:"required,dive"`
+}
+
+// ListSegmentsOfRecording godoc
+// @Summary Get segments associated with recording
+// @Description Get the video segments associated with a recording session
+// @tags management,cloud
+// @Produce json
+// @Param X-Request-ID header string false "Request ID"
+// @Param recordingID path string true "Video recording session ID"
+// @Success 200 {object} RecordingSegmentListResponse "success"
+// @Failure 400 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 403 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 404 {string} string "error"
+// @Failure 500 {object} goutils.RestAPIBaseResponse "error"
+// @Router /v1/recording/{recordingID}/segment [get]
+func (h SystemManagerHandler) ListSegmentsOfRecording(w http.ResponseWriter, r *http.Request) {
+	var respCode int
+	var response interface{}
+	logTags := h.GetLogTagsForContext(r.Context())
+	defer func() {
+		if err := h.WriteRESTResponse(w, respCode, response, nil); err != nil {
+			log.WithError(err).WithFields(logTags).Error("Failed to form response")
+		}
+	}()
+
+	// Get recording ID
+	vars := mux.Vars(r)
+	recordingID, ok := vars["recordingID"]
+	if !ok {
+		msg := "recording session ID missing from request URL"
+		log.WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
+		return
+	}
+
+	segments, err := h.manager.ListAllSegmentsOfRecording(r.Context(), recordingID)
+	if err != nil {
+		msg := "failed to read recording session segments"
+		log.WithError(err).WithFields(logTags).Error(msg)
+		respCode = http.StatusInternalServerError
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusInternalServerError, msg, err.Error())
+		return
+	}
+
+	// Return the recording session
+	respCode = http.StatusOK
+	response = RecordingSegmentListResponse{
+		RestAPIBaseResponse: h.GetStdRESTSuccessMsg(r.Context()), Segments: segments,
+	}
+}
+
+// ListSegmentsOfRecordingHandler Wrapper around ListSegmentsOfRecording
+func (h SystemManagerHandler) ListSegmentsOfRecordingHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.ListSegmentsOfRecording(w, r)
 	}
 }
 
