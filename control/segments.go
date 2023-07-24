@@ -12,9 +12,9 @@ import (
 	"github.com/apex/log"
 )
 
-// CentralSegmentManager central video segment manager which operates within the
+// LiveStreamSegmentManager central video segment manager which operates within the
 // system control node
-type CentralSegmentManager interface {
+type LiveStreamSegmentManager interface {
 	/*
 		Ready check whether the manager is ready
 
@@ -47,8 +47,8 @@ type CentralSegmentManager interface {
 	Stop(ctxt context.Context) error
 }
 
-// centrlSegmentManager implements CentralSegmentManager
-type centralSegmentManagerImpl struct {
+// centrlSegmentManager implements LiveStreamSegmentManager
+type liveStreamSegmentManagerImpl struct {
 	goutils.Component
 	dbConns          db.ConnectionManager
 	cache            utils.VideoSegmentCache
@@ -60,7 +60,7 @@ type centralSegmentManagerImpl struct {
 }
 
 /*
-NewSegmentManager define a new central segment manager
+NewLiveStreamSegmentManager define a new live stream segment manager
 
 	@param parentCtxt context.Context - parent context
 	@param dbConns db.ConnectionManager - DB connection manager
@@ -69,15 +69,15 @@ NewSegmentManager define a new central segment manager
 	    segment is tracked. Recorded segments are forgotten after this tracking window.
 	@returns new manager
 */
-func NewSegmentManager(
+func NewLiveStreamSegmentManager(
 	parentCtxt context.Context,
 	dbConns db.ConnectionManager,
 	cache utils.VideoSegmentCache,
 	trackingWindow time.Duration,
-) (CentralSegmentManager, error) {
+) (LiveStreamSegmentManager, error) {
 	logTags := log.Fields{"module": "control", "component": "segment-manager"}
 
-	instance := &centralSegmentManagerImpl{
+	instance := &liveStreamSegmentManagerImpl{
 		Component: goutils.Component{
 			LogTags: logTags,
 			LogTagModifiers: []goutils.LogMetadataModifier{
@@ -108,13 +108,13 @@ func NewSegmentManager(
 	return instance, nil
 }
 
-func (m *centralSegmentManagerImpl) Ready(ctxt context.Context) error {
+func (m *liveStreamSegmentManagerImpl) Ready(ctxt context.Context) error {
 	dbClient := m.dbConns.NewPersistanceManager()
 	defer dbClient.Close()
 	return dbClient.Ready(ctxt)
 }
 
-func (m *centralSegmentManagerImpl) RegisterLiveStreamSegment(
+func (m *liveStreamSegmentManagerImpl) RegisterLiveStreamSegment(
 	ctxt context.Context, sourceID string, segment hls.Segment, content []byte,
 ) error {
 	logTags := m.GetLogTagsForContext(ctxt)
@@ -156,14 +156,14 @@ func (m *centralSegmentManagerImpl) RegisterLiveStreamSegment(
 	return nil
 }
 
-func (m *centralSegmentManagerImpl) purgeOldSegments() error {
+func (m *liveStreamSegmentManagerImpl) purgeOldSegments() error {
 	timeLimit := time.Now().UTC().Add(-m.trackingWindow)
 	dbClient := m.dbConns.NewPersistanceManager()
 	defer dbClient.Close()
 	return dbClient.PurgeOldLiveStreamSegments(m.workerCtxt, timeLimit)
 }
 
-func (m *centralSegmentManagerImpl) Stop(ctxt context.Context) error {
+func (m *liveStreamSegmentManagerImpl) Stop(ctxt context.Context) error {
 	m.workerCtxtCancel()
 	if err := m.supportTimer.Stop(); err != nil {
 		return err

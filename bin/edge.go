@@ -18,8 +18,6 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-// TODO FIXME: refactor and clean up the node initialization codes
-
 // EdgeNode edge node monitoring one video source
 type EdgeNode struct {
 	nodeRuntimeCtxt       context.Context
@@ -66,29 +64,6 @@ DefineEdgeNode setup new edge node
 func DefineEdgeNode(
 	parentCtxt context.Context, nodeName string, config common.EdgeNodeConfig,
 ) (EdgeNode, error) {
-	/*
-		Steps for preparing the edge are
-
-		* Prepare persistence sqlite DB
-		* Prepare local video segment cache
-		* Prepare request-response client for edge node
-		* Query control for video source info
-			* Load video source info into persistence
-		* Prepare video segment reader
-		* Prepare forwarder
-			* Prepare live segment HTTP forwarder
-				* Prepare HTTP client
-				* Prepare the forwarder
-			* Prepare recording segment forwarder
-				* Prepare S3 client
-				* Prepare the forwarder
-		* Prepare HLS video source monitor
-		* Prepare video playlist receive server
-		* Prepare segment manager
-		* Prepare VOD playlist builder
-		* Prepare local VOD server
-	*/
-
 	logTags := log.Fields{
 		"module": "global", "component": "edge-node", "instance": nodeName,
 	}
@@ -96,13 +71,25 @@ func DefineEdgeNode(
 	theNode := EdgeNode{}
 	theNode.nodeRuntimeCtxt, theNode.ctxtCancel = context.WithCancel(parentCtxt)
 
-	sqlDSN := db.GetSqliteDialector(config.Sqlite.DBFile)
+	initStep := 0
 
+	// ====================================================================================
+	// Prepare base layer - Persistence
+
+	log.WithFields(logTags).WithField("initialize", initStep).Info("Initializing persistence layer")
+
+	// Setup database connection manager
+	sqlDSN := db.GetSqliteDialector(config.Sqlite.DBFile)
 	dbConns, err := db.NewSQLConnection(sqlDSN, logger.Error)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to define SQL connection manager")
 		return theNode, err
 	}
+
+	log.WithFields(logTags).WithField("initialize", initStep).Info("Initialized persistence layer")
+	initStep++
+
+	log.WithFields(logTags).WithField("initialize", initStep).Info("Initializing local video cache")
 
 	// Define video segment cache
 	cache, err := utils.NewLocalVideoSegmentCache(
@@ -113,7 +100,15 @@ func DefineEdgeNode(
 		return theNode, err
 	}
 
-	// Prepare core request-response client
+	log.WithFields(logTags).WithField("initialize", initStep).Info("Initialized local video cache")
+	initStep++
+
+	// ====================================================================================
+	// Prepare base layer - RPC clients
+
+	log.WithFields(logTags).WithField("initialize", initStep).Info("Initializing RPC clients")
+
+	// Define PubSub and request-response clients
 	theNode.psClient, theNode.rrClient, err = buildReqRespClients(
 		parentCtxt, nodeName, config.RRClient.ReqRespClientConfig,
 	)
@@ -124,6 +119,11 @@ func DefineEdgeNode(
 			Error("PubSub request-response client initialization failed")
 		return theNode, err
 	}
+
+	log.WithFields(logTags).WithField("initialize", initStep).Info("Initialized RPC clients")
+	initStep++
+
+	log.WithFields(logTags).WithField("initialize", initStep).Info("Initializing RPC driver")
 
 	// Define edge-to-controller request-response client
 	edgeToCtrlRRClient, err := edge.NewControlRequestClient(
@@ -140,6 +140,40 @@ func DefineEdgeNode(
 			Error("Failed to create edge-to-controller request-response client")
 		return theNode, err
 	}
+
+	log.WithFields(logTags).WithField("initialize", initStep).Info("Initialized RPC driver")
+	initStep++
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing message broadcast client")
+
+	// Define PubSub message broadcaster client
+	psBroadcast, err := utils.NewPubSubBroadcaster(
+		theNode.psClient, config.BroadcastSystem.PubSub.Topic,
+	)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Failed to create PubSub message broadcast client")
+		return theNode, err
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized message broadcast client")
+	initStep++
+
+	// ====================================================================================
+	// Fetch video source info from system control node
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Querying system control node regarding video source under management")
 
 	// Query control for target video source info
 	sourceInfo, err := edgeToCtrlRRClient.GetVideoSourceInfo(parentCtxt, config.VideoSource.Name)
@@ -171,17 +205,19 @@ func DefineEdgeNode(
 		dbClient.Close()
 	}
 
-	// Define PubSub message broadcaster client
-	psBroadcast, err := utils.NewPubSubBroadcaster(
-		theNode.psClient, config.BroadcastSystem.PubSub.Topic,
-	)
-	if err != nil {
-		log.
-			WithError(err).
-			WithFields(logTags).
-			Error("Failed to create PubSub message broadcast client")
-		return theNode, err
-	}
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Received parameters regarding video source under management")
+	initStep++
+
+	// ====================================================================================
+	// Prepare output - HTTP live stream forwarder
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing HTTP client for segment forwarding")
 
 	// Define resty HTTP client for forwarder
 	httpClient, err := utils.DefineHTTPClient(
@@ -192,11 +228,23 @@ func DefineEdgeNode(
 		return theNode, err
 	}
 
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized HTTP client for segment forwarding")
+	initStep++
+
+	// Parse the forwarder target URL
 	httpForwardTarget, err := url.Parse(config.Forwarder.Live.Remote.TargetURL)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to parse HTTP forward target URL")
 		return theNode, err
 	}
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing live stream segment forwarder")
 
 	// Define live segment HTTP forwarder
 	httpSegmentSender, err := forwarder.NewHTTPSegmentSender(httpForwardTarget, httpClient)
@@ -212,6 +260,20 @@ func DefineEdgeNode(
 		return theNode, err
 	}
 
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized live stream segment forwarder")
+	initStep++
+
+	// ====================================================================================
+	// Prepare output - S3 recording forwarder
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing S3 client for segment forwarding")
+
 	// Define S3 client
 	s3Client, err := utils.NewS3Client(config.Forwarder.Recording.RecordingStorage.S3)
 	if err != nil {
@@ -221,6 +283,17 @@ func DefineEdgeNode(
 			Error("Failed to create S3 client")
 		return theNode, err
 	}
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized S3 client for segment forwarding")
+	initStep++
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing recording session segment forwarder")
 
 	// Define recordings segment forwarder
 	s3SegmentSender, err := forwarder.NewS3SegmentSender(s3Client, dbConns)
@@ -246,6 +319,15 @@ func DefineEdgeNode(
 		return theNode, err
 	}
 
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized recording session segment forwarder")
+	initStep++
+
+	// ====================================================================================
+	// Prepare control unit
+
 	edgeOperatorConfig := edge.VideoSourceOperatorConfig{
 		Self:                       sourceInfo,
 		SelfReqRespTargetID:        config.RRClient.InboudRequestTopic.Topic,
@@ -257,8 +339,10 @@ func DefineEdgeNode(
 		StatusReportInterval:       config.VideoSource.StatusReportInt(),
 	}
 
+	log.WithFields(logTags).WithField("initialize", initStep).Info("Initializing node operator")
+
 	// Define video source operator
-	edgeOperator, err := edge.NewManager(parentCtxt, edgeOperatorConfig)
+	theNode.operator, err = edge.NewManager(parentCtxt, edgeOperatorConfig)
 	if err != nil {
 		log.
 			WithError(err).
@@ -266,10 +350,20 @@ func DefineEdgeNode(
 			Error("Failed to create video source operator")
 		return theNode, err
 	}
-	theNode.operator = edgeOperator
 
 	// Install reference to VideoSourceOperator
-	edgeToCtrlRRClient.InstallReferenceToManager(edgeOperator)
+	edgeToCtrlRRClient.InstallReferenceToManager(theNode.operator)
+
+	log.WithFields(logTags).WithField("initialize", initStep).Info("Initialized node operator")
+	initStep++
+
+	// ====================================================================================
+	// Prepare input - HLS source playlist monitor
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing local file system segment reader")
 
 	// Define video segment reader
 	theNode.segmentReader, err = utils.NewSegmentReader(
@@ -280,6 +374,17 @@ func DefineEdgeNode(
 		return theNode, err
 	}
 
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized local file system segment reader")
+	initStep++
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing video source monitor")
+
 	// Define video monitor
 	theNode.monitor, err = tracker.NewSourceHLSMonitor(
 		parentCtxt,
@@ -288,19 +393,50 @@ func DefineEdgeNode(
 		config.MonitorConfig.TrackingWindow(),
 		cache,
 		theNode.segmentReader,
-		edgeOperator.NewSegmentFromSource,
+		theNode.operator.NewSegmentFromSource,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create HLS monitor")
 		return theNode, err
 	}
 
-	// Define playlist receiver HTTP server
+	log.WithFields(logTags).WithField("initialize", initStep).Info("Initialized video source monitor")
+	initStep++
+
+	// ====================================================================================
+	// Prepare input - HTTP HLS playlist receiver
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing HLS playlist HTTP receiver")
+
 	theNode.PlaylistReceiveServer, err = api.BuildPlaylistReceiverServer(
 		theNode.nodeRuntimeCtxt, config.MonitorConfig.APIServer, theNode.monitor.Update,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create playlist receiver HTTP server")
+		return theNode, err
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized HLS playlist HTTP receiver")
+	initStep++
+
+	// ====================================================================================
+	// Prepare output - Local HTTP VOD server
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing HTTP VOD server support components")
+
+	// Define live VOD playlist builder
+	plBuilder, err := vod.NewPlaylistBuilder(dbConns, config.VODConfig.LiveVODSegmentCount)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to create VOD playlist builder")
 		return theNode, err
 	}
 
@@ -313,12 +449,16 @@ func DefineEdgeNode(
 		return theNode, err
 	}
 
-	// Define live VOD playlist builder
-	plBuilder, err := vod.NewPlaylistBuilder(dbConns, config.VODConfig.LiveVODSegmentCount)
-	if err != nil {
-		log.WithError(err).WithFields(logTags).Error("Failed to create VOD playlist builder")
-		return theNode, err
-	}
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized HTTP VOD server support components")
+	initStep++
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing HTTP VOD server")
 
 	// Define live VOD HTTP server
 	theNode.VODServer, err = api.BuildVODServer(
@@ -328,6 +468,20 @@ func DefineEdgeNode(
 		log.WithError(err).WithFields(logTags).Error("Failed to create live VOD HTTP server")
 		return theNode, err
 	}
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized HTTP VOD server")
+	initStep++
+
+	// ====================================================================================
+	// Perform support tasks
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Populating local persistence of active recordings associated with this source")
 
 	// Query system control for active recordings
 	recordings, err := edgeToCtrlRRClient.ListActiveRecordingsOfSource(parentCtxt, sourceInfo.ID)
@@ -339,7 +493,7 @@ func DefineEdgeNode(
 		return theNode, err
 	}
 	for _, recording := range recordings {
-		if err := edgeOperator.StartRecording(parentCtxt, recording); err != nil {
+		if err := theNode.operator.StartRecording(parentCtxt, recording); err != nil {
 			log.
 				WithError(err).
 				WithFields(logTags).
@@ -347,6 +501,10 @@ func DefineEdgeNode(
 				Error("Failed to install ongoing recording")
 		}
 	}
+
+	log.
+		WithField("initialize", initStep).
+		Info("Updated local persistence of active recordings associated with this source")
 
 	return theNode, nil
 }

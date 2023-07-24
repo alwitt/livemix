@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-func TestCentralSegmentManagerRecordSegment(t *testing.T) {
+func TestLiveSteamSegmentManagerRecordSegment(t *testing.T) {
 	assert := assert.New(t)
 	log.SetLevel(log.DebugLevel)
 	utCtxt := context.Background()
@@ -25,7 +25,7 @@ func TestCentralSegmentManagerRecordSegment(t *testing.T) {
 	mockDB.On("Close").Return()
 	mockCache := mocks.NewVideoSegmentCache(t)
 
-	uut, err := control.NewSegmentManager(utCtxt, mockSQL, mockCache, time.Minute)
+	uut, err := control.NewLiveStreamSegmentManager(utCtxt, mockSQL, mockCache, time.Minute)
 	assert.Nil(err)
 
 	testSourceID := uuid.NewString()

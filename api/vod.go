@@ -16,8 +16,6 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// TODO FIXME: refactor to support both live stream and recording replay
-
 // VODHandler HLS VOD handler
 type VODHandler struct {
 	goutils.RestAPIHandler

@@ -19,19 +19,17 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-// TODO FIXME: refactor and clean up the node initialization codes
-
 // ControlNode system control node
 type ControlNode struct {
-	psClient        goutils.PubSubClient
-	rrClient        goutils.RequestResponseClient
-	wg              sync.WaitGroup
-	psSubCtxt       context.Context
-	psSubCtxtCancel context.CancelFunc
-	segmentMgmt     control.CentralSegmentManager
-	coreManager     control.SystemManager
-	MgmtAPIServer   *http.Server
-	VODAPIServer    *http.Server
+	psClient              goutils.PubSubClient
+	rrClient              goutils.RequestResponseClient
+	wg                    sync.WaitGroup
+	workerCtxt            context.Context
+	workerCtxtCancel      context.CancelFunc
+	liveStreamSegmentMgmt control.LiveStreamSegmentManager
+	coreManager           control.SystemManager
+	MgmtAPIServer         *http.Server
+	VODAPIServer          *http.Server
 }
 
 /*
@@ -40,20 +38,20 @@ Cleanup stop and clean up the system control node
 	@param ctxt context.Context - execution context
 */
 func (n *ControlNode) Cleanup(ctxt context.Context) error {
-	n.psSubCtxtCancel()
-	if err := n.segmentMgmt.Stop(ctxt); err != nil {
-		return nil
-	}
+	n.workerCtxtCancel()
 	if err := n.rrClient.Stop(ctxt); err != nil {
 		return err
+	}
+	if err := n.psClient.Close(ctxt); err != nil {
+		return err
+	}
+	if err := n.liveStreamSegmentMgmt.Stop(ctxt); err != nil {
+		return nil
 	}
 	if err := n.coreManager.Stop(ctxt); err != nil {
 		return err
 	}
-	if err := goutils.TimeBoundedWaitGroupWait(ctxt, &n.wg, time.Second*5); err != nil {
-		return err
-	}
-	return n.psClient.Close(ctxt)
+	return goutils.TimeBoundedWaitGroupWait(ctxt, &n.wg, time.Second*5)
 }
 
 /*
@@ -89,6 +87,14 @@ func DefineControlNode(
 	}
 
 	theNode := ControlNode{wg: sync.WaitGroup{}}
+	theNode.workerCtxt, theNode.workerCtxtCancel = context.WithCancel(parentCtxt)
+
+	initStep := 0
+
+	// ====================================================================================
+	// Prepare base layer - Persistence
+
+	log.WithFields(logTags).WithField("initialize", initStep).Info("Initializing persistence layer")
 
 	sqlDSN, err := db.GetPostgresDialector(config.Postgres, psqlPassword)
 	if err != nil {
@@ -102,6 +108,115 @@ func DefineControlNode(
 		return nil, err
 	}
 
+	log.WithFields(logTags).WithField("initialize", initStep).Info("Initialized persistence layer")
+	initStep++
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing memcached video cache")
+
+	// Build memcached segment cache
+	cache, err := utils.NewMemcachedVideoSegmentCache(config.VODConfig.Cache.Servers)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to define memcached segment cache")
+		return nil, err
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized memcached video cache")
+	initStep++
+
+	log.WithFields(logTags).WithField("initialize", initStep).Info("Initializing S3 client")
+
+	s3Client, err := utils.NewS3Client(config.VODConfig.RecordingStorage.S3)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Failed to create S3 client")
+		return nil, err
+	}
+
+	log.WithFields(logTags).WithField("initialize", initStep).Info("Initialized S3 client")
+	initStep++
+
+	// ====================================================================================
+	// Prepare segment management
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing live stream segment manager")
+
+	// Build segment manager
+	theNode.liveStreamSegmentMgmt, err = control.NewLiveStreamSegmentManager(
+		parentCtxt,
+		dbConns,
+		cache,
+		config.VODConfig.SegReceiverTrackingWindow(),
+	)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to define segment manager")
+		return nil, err
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized live stream segment manager")
+	initStep++
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing VOD server segment reader")
+
+	// Define segment reader
+	vodSegmentReader, err := utils.NewSegmentReader(
+		parentCtxt, config.VODConfig.SegmentReaderWorkerCount, s3Client,
+	)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to create segment reader")
+		return nil, err
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized VOD server segment reader")
+	initStep++
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing VOD server segment manager")
+
+	// Define segment manager
+	vodSegmentMgnt, err := vod.NewSegmentManager(
+		cache, vodSegmentReader, config.VODConfig.SegmentCacheTTL(),
+	)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to create video segment manager")
+		return nil, err
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized VOD server segment reader")
+	initStep++
+
+	// ====================================================================================
+	// Prepare base layer - RPC clients
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing RPC clients")
+
 	// Prepare core request-response client
 	theNode.psClient, theNode.rrClient, err = buildReqRespClients(
 		parentCtxt, nodeName, config.Management.RRClient,
@@ -114,8 +229,18 @@ func DefineControlNode(
 		return nil, err
 	}
 
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized RPC clients")
+	initStep++
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Preparing needed PubSub topic and subscriptions")
+
 	// Build subscription to listen to broadcast events
-	theNode.psSubCtxt, theNode.psSubCtxtCancel = context.WithCancel(parentCtxt)
 	broadcastSubName := fmt.Sprintf("ctrl-node.%s.%s", nodeName, config.BroadcastSystem.PubSub.Topic)
 	{
 		// Create broadcast topic if necessary
@@ -161,6 +286,17 @@ func DefineControlNode(
 		}
 	}
 
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Prepared needed PubSub topic and subscriptions")
+	initStep++
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing RPC driver")
+
 	// Define controller-to-edge request-response client
 	ctrlToEdgeRRClient, err := control.NewEdgeRequestClient(
 		parentCtxt,
@@ -176,15 +312,19 @@ func DefineControlNode(
 		return nil, err
 	}
 
-	// Define S3 client
-	s3Client, err := utils.NewS3Client(config.VODConfig.RecordingStorage.S3)
-	if err != nil {
-		log.
-			WithError(err).
-			WithFields(logTags).
-			Error("Failed to create S3 client")
-		return nil, err
-	}
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized RPC driver")
+	initStep++
+
+	// ====================================================================================
+	// Prepare control unit
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing system manager")
 
 	// Define the system manager
 	theNode.coreManager, err = control.NewManager(
@@ -203,26 +343,20 @@ func DefineControlNode(
 	// Link manager with request-response client
 	ctrlToEdgeRRClient.InstallReferenceToManager(theNode.coreManager)
 
-	// Build memcached segment cache
-	cache, err := utils.NewMemcachedVideoSegmentCache(config.VODConfig.Cache.Servers)
-	if err != nil {
-		log.WithError(err).WithFields(logTags).Error("Failed to define memcached segment cache")
-		return nil, err
-	}
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized system manager")
+	initStep++
 
-	// Build segment manager
-	theNode.segmentMgmt, err = control.NewSegmentManager(
-		parentCtxt,
-		dbConns,
-		cache,
-		config.VODConfig.SegReceiverTrackingWindow(),
-	)
-	if err != nil {
-		log.WithError(err).WithFields(logTags).Error("Failed to define segment manager")
-		return nil, err
-	}
+	// ====================================================================================
+	// Prepare admin REST API
 
-	// Define manager API HTTP server
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing system manager REST API server")
+
 	theNode.MgmtAPIServer, err = api.BuildSystemManagementServer(
 		config.Management.APIServer, theNode.coreManager,
 	)
@@ -234,21 +368,19 @@ func DefineControlNode(
 		return nil, err
 	}
 
-	// Define segment reader
-	segmentReader, err := utils.NewSegmentReader(
-		parentCtxt, config.VODConfig.SegmentReaderWorkerCount, s3Client,
-	)
-	if err != nil {
-		log.WithError(err).WithFields(logTags).Error("Failed to create segment reader")
-		return nil, err
-	}
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized system manager REST API server")
+	initStep++
 
-	// Define segment manager
-	segmentMgnt, err := vod.NewSegmentManager(cache, segmentReader, config.VODConfig.SegmentCacheTTL())
-	if err != nil {
-		log.WithError(err).WithFields(logTags).Error("Failed to create video segment manager")
-		return nil, err
-	}
+	// ====================================================================================
+	// Prepare control VOD server
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing VOD REST API server")
 
 	// Define live VOD playlist builder
 	plBuilder, err := vod.NewPlaylistBuilder(dbConns, config.VODConfig.LiveVODSegmentCount)
@@ -261,10 +393,10 @@ func DefineControlNode(
 	theNode.VODAPIServer, err = api.BuildCentralVODServer(
 		parentCtxt,
 		config.VODConfig.APIServer,
-		theNode.segmentMgmt.RegisterLiveStreamSegment,
+		theNode.liveStreamSegmentMgmt.RegisterLiveStreamSegment,
 		dbConns,
 		plBuilder,
-		segmentMgnt,
+		vodSegmentMgnt,
 	)
 	if err != nil {
 		log.
@@ -274,12 +406,21 @@ func DefineControlNode(
 		return nil, err
 	}
 
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized VOD REST API server")
+
+	// ====================================================================================
 	// Register manager to process broadcast message
+
 	theNode.wg.Add(1)
 	go func() {
 		defer theNode.wg.Done()
+		log.WithFields(logTags).Info("Starting broadcast message subscription task")
+		defer log.WithFields(logTags).Info("Broadcast message subscription task stopped")
 		if err := theNode.psClient.Subscribe(
-			theNode.psSubCtxt, broadcastSubName, theNode.coreManager.ProcessBroadcastMsgs,
+			theNode.workerCtxt, broadcastSubName, theNode.coreManager.ProcessBroadcastMsgs,
 		); err != nil {
 			log.
 				WithError(err).
