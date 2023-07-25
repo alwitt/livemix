@@ -57,7 +57,7 @@ type EdgeRequestClient interface {
 
 // edgeRequestClientImpl implements EdgeRequestClient
 type edgeRequestClientImpl struct {
-	ipc.RequestResponseDriver
+	goutils.RequestResponseDriver
 	core           SystemManager
 	requestTimeout time.Duration
 	validator      *validator.Validate
@@ -83,14 +83,15 @@ func NewEdgeRequestClient(
 	}
 
 	instance := &edgeRequestClientImpl{
-		RequestResponseDriver: ipc.RequestResponseDriver{
+		RequestResponseDriver: goutils.RequestResponseDriver{
 			Component: goutils.Component{
 				LogTags: logTags,
 				LogTagModifiers: []goutils.LogMetadataModifier{
 					goutils.ModifyLogMetadataByRestRequestParam,
 				},
 			},
-			Client: coreClient,
+			Client:        coreClient,
+			PayloadParser: ipc.ParseRawMessage,
 		},
 		core:           nil,
 		requestTimeout: requestTimeout,

@@ -53,7 +53,7 @@ type ControlRequestClient interface {
 
 // controlRequestClientImpl implements ControlRequestClient
 type controlRequestClientImpl struct {
-	ipc.RequestResponseDriver
+	goutils.RequestResponseDriver
 	core              VideoSourceOperator
 	controlRRTargetID string
 	requestTimeout    time.Duration
@@ -82,14 +82,15 @@ func NewControlRequestClient(
 	}
 
 	instance := &controlRequestClientImpl{
-		RequestResponseDriver: ipc.RequestResponseDriver{
+		RequestResponseDriver: goutils.RequestResponseDriver{
 			Component: goutils.Component{
 				LogTags: logTags,
 				LogTagModifiers: []goutils.LogMetadataModifier{
 					goutils.ModifyLogMetadataByRestRequestParam,
 				},
 			},
-			Client: coreClient,
+			Client:        coreClient,
+			PayloadParser: ipc.ParseRawMessage,
 		},
 		core:              nil,
 		controlRRTargetID: controlRRTargetID,
