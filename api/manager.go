@@ -1001,6 +1001,43 @@ func (h SystemManagerHandler) DeleteRecordingHandler() http.HandlerFunc {
 // ====================================================================================
 // Utilities
 
+// SystemManagerLivenessHandler liveness REST API interface for SystemManager
+type SystemManagerLivenessHandler struct {
+	goutils.RestAPIHandler
+	manager control.SystemManager
+}
+
+/*
+NewSystemManagerLivenessHandler define a new system manager liveness REST API handler
+
+	@param manager control.SystemManager - core system manager
+	@param logConfig common.HTTPRequestLogging - handler log settings
+	@returns new SystemManagerLivenessHandler
+*/
+func NewSystemManagerLivenessHandler(
+	manager control.SystemManager, logConfig common.HTTPRequestLogging,
+) (SystemManagerLivenessHandler, error) {
+	return SystemManagerLivenessHandler{
+		RestAPIHandler: goutils.RestAPIHandler{
+			Component: goutils.Component{
+				LogTags: log.Fields{"module": "api", "component": "system-manager-liveness-handler"},
+				LogTagModifiers: []goutils.LogMetadataModifier{
+					goutils.ModifyLogMetadataByRestRequestParam,
+				},
+			},
+			CallRequestIDHeaderField: &logConfig.RequestIDHeader,
+			DoNotLogHeaders: func() map[string]bool {
+				result := map[string]bool{}
+				for _, v := range logConfig.DoNotLogHeaders {
+					result[v] = true
+				}
+				return result
+			}(),
+			LogLevel: logConfig.LogLevel,
+		}, manager: manager,
+	}, nil
+}
+
 // Alive godoc
 // @Summary System Manager API liveness check
 // @Description Will return success to indicate system manager REST API module is live
@@ -1012,7 +1049,7 @@ func (h SystemManagerHandler) DeleteRecordingHandler() http.HandlerFunc {
 // @Failure 404 {string} string "error"
 // @Failure 500 {object} goutils.RestAPIBaseResponse "error"
 // @Router /v1/alive [get]
-func (h SystemManagerHandler) Alive(w http.ResponseWriter, r *http.Request) {
+func (h SystemManagerLivenessHandler) Alive(w http.ResponseWriter, r *http.Request) {
 	logTags := h.GetLogTagsForContext(r.Context())
 	if err := h.WriteRESTResponse(
 		w, http.StatusOK, h.GetStdRESTSuccessMsg(r.Context()), nil,
@@ -1022,7 +1059,7 @@ func (h SystemManagerHandler) Alive(w http.ResponseWriter, r *http.Request) {
 }
 
 // AliveHandler Wrapper around Alive
-func (h SystemManagerHandler) AliveHandler() http.HandlerFunc {
+func (h SystemManagerLivenessHandler) AliveHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		h.Alive(w, r)
 	}
@@ -1041,7 +1078,7 @@ func (h SystemManagerHandler) AliveHandler() http.HandlerFunc {
 // @Failure 404 {string} string "error"
 // @Failure 500 {object} goutils.RestAPIBaseResponse "error"
 // @Router /v1/ready [get]
-func (h SystemManagerHandler) Ready(w http.ResponseWriter, r *http.Request) {
+func (h SystemManagerLivenessHandler) Ready(w http.ResponseWriter, r *http.Request) {
 	var respCode int
 	var response interface{}
 	logTags := h.GetLogTagsForContext(r.Context())
@@ -1062,7 +1099,7 @@ func (h SystemManagerHandler) Ready(w http.ResponseWriter, r *http.Request) {
 }
 
 // ReadyHandler Wrapper around Alive
-func (h SystemManagerHandler) ReadyHandler() http.HandlerFunc {
+func (h SystemManagerLivenessHandler) ReadyHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		h.Ready(w, r)
 	}

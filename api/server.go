@@ -35,17 +35,24 @@ func BuildSystemManagementServer(
 		return nil, err
 	}
 
+	livenessHTTPHandler, err := NewSystemManagerLivenessHandler(manager, httpCfg.APIs.RequestLogging)
+	if err != nil {
+		return nil, err
+	}
+
 	router := mux.NewRouter()
 	mainRouter := registerPathPrefix(router, httpCfg.APIs.Endpoint.PathPrefix, nil)
+	livenessRounter := registerPathPrefix(mainRouter, "/liveness", nil)
 	v1Router := registerPathPrefix(mainRouter, "/v1", nil)
 
 	// --------------------------------------------------------------------------------
 	// Health check
-	_ = registerPathPrefix(v1Router, "/alive", map[string]http.HandlerFunc{
-		"get": httpHandler.AliveHandler(),
+
+	_ = registerPathPrefix(livenessRounter, "/alive", map[string]http.HandlerFunc{
+		"get": livenessHTTPHandler.AliveHandler(),
 	})
-	_ = registerPathPrefix(v1Router, "/ready", map[string]http.HandlerFunc{
-		"get": httpHandler.ReadyHandler(),
+	_ = registerPathPrefix(livenessRounter, "/ready", map[string]http.HandlerFunc{
+		"get": livenessHTTPHandler.ReadyHandler(),
 	})
 
 	// --------------------------------------------------------------------------------
@@ -99,8 +106,11 @@ func BuildSystemManagementServer(
 	// --------------------------------------------------------------------------------
 	// Middleware
 
-	router.Use(func(next http.Handler) http.Handler {
+	v1Router.Use(func(next http.Handler) http.Handler {
 		return httpHandler.LoggingMiddleware(next.ServeHTTP)
+	})
+	livenessRounter.Use(func(next http.Handler) http.Handler {
+		return livenessHTTPHandler.LoggingMiddleware(next.ServeHTTP)
 	})
 
 	// --------------------------------------------------------------------------------
