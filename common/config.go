@@ -127,6 +127,28 @@ type HTTPClientConfig struct {
 	Retry HTTPClientRetryConfig `mapstructure:"retry" json:"retry" validate:"required,dive"`
 }
 
+// MetricsFeatureConfig metrics framework features config
+type MetricsFeatureConfig struct {
+	// EnableAppMetrics whether to enable Golang application metrics
+	EnableAppMetrics bool `mapstructure:"enableAppMetrics" json:"enableAppMetrics"`
+	// EnableHTTPMetrics whether to enable HTTP request tracking metrics
+	EnableHTTPMetrics bool `mapstructure:"enableHTTPMetrics" json:"enableHTTPMetrics"`
+	// EnablePubSubMetrics whether to enable PubSub operational metrics
+	EnablePubSubMetrics bool `mapstructure:"enablePubSubMetrics" json:"enablePubSubMetrics"`
+}
+
+// MetricsConfig application metrics config
+type MetricsConfig struct {
+	// Server defines HTTP server parameters
+	Server HTTPServerConfig `mapstructure:"service" json:"service" validate:"required_with=Enabled,dive"`
+	// MetricsEndpoint path to host the Prometheus metrics endpoint
+	MetricsEndpoint string `mapstructure:"metricsEndpoint" json:"metricsEndpoint" validate:"required"`
+	// MaxRequests max number of metrics requests in parallel to support
+	MaxRequests int `mapstructure:"maxRequests" json:"maxRequests" validate:"gte=1"`
+	// Features metrics framework features to enable
+	Features MetricsFeatureConfig `mapstructure:"features" json:"features" validate:"gte=1"`
+}
+
 // ===============================================================================
 // Persistence Configuration Structures
 
@@ -391,6 +413,8 @@ func (c CentralVODServerConfig) SegReceiverTrackingWindow() time.Duration {
 
 // ControlNodeConfig define control node settings and behavior
 type ControlNodeConfig struct {
+	// Metrics metrics framework configuration
+	Metrics MetricsConfig `mapstructure:"metrics" json:"metrics" validate:"required,dive"`
 	// Postgres postgres DB configuration
 	Postgres PostgresConfig `mapstructure:"postgres" json:"postgres" validate:"required,dive"`
 	// Management management
@@ -403,6 +427,8 @@ type ControlNodeConfig struct {
 
 // EdgeNodeConfig define edge node settings and behavior
 type EdgeNodeConfig struct {
+	// Metrics metrics framework configuration
+	Metrics MetricsConfig `mapstructure:"metrics" json:"metrics" validate:"required,dive"`
 	// VideoSource the video source this edge is monitoring
 	VideoSource VideoSourceConfig `mapstructure:"videoSource" json:"videoSource" validate:"required,dive"`
 	// SegmentCache video segment cache config
@@ -427,6 +453,20 @@ type EdgeNodeConfig struct {
 // InstallDefaultControlNodeConfigValues installs default config parameters in viper for
 // control node
 func InstallDefaultControlNodeConfigValues() {
+	// Default metrics config
+	viper.SetDefault("metrics.metricsEndpoint", "/metrics")
+	viper.SetDefault("metrics.maxRequests", 4)
+	// Default metrics features config
+	viper.SetDefault("metrics.features.enableAppMetrics", false)
+	viper.SetDefault("metrics.features.enableHTTPMetrics", true)
+	viper.SetDefault("metrics.features.enablePubSubMetrics", true)
+	// Default metrics HTTP server config
+	viper.SetDefault("metrics.service.listenOn", "0.0.0.0")
+	viper.SetDefault("metrics.service.appPort", 3001)
+	viper.SetDefault("metrics.service.timeoutSecs.read", 60)
+	viper.SetDefault("metrics.service.timeoutSecs.write", 60)
+	viper.SetDefault("metrics.service.timeoutSecs.idle", 60)
+
 	// Default Postgres config
 	viper.SetDefault("postgres.port", 5432)
 	viper.SetDefault("postgres.ssl.enabled", false)
@@ -484,6 +524,20 @@ func InstallDefaultControlNodeConfigValues() {
 
 // InstallDefaultEdgeNodeConfigValues installs default config parameters in viper for edge node
 func InstallDefaultEdgeNodeConfigValues() {
+	// Default metrics config
+	viper.SetDefault("metrics.metricsEndpoint", "/metrics")
+	viper.SetDefault("metrics.maxRequests", 4)
+	// Default metrics features config
+	viper.SetDefault("metrics.features.enableAppMetrics", false)
+	viper.SetDefault("metrics.features.enableHTTPMetrics", true)
+	viper.SetDefault("metrics.features.enablePubSubMetrics", true)
+	// Default metrics HTTP server config
+	viper.SetDefault("metrics.service.listenOn", "0.0.0.0")
+	viper.SetDefault("metrics.service.appPort", 3001)
+	viper.SetDefault("metrics.service.timeoutSecs.read", 60)
+	viper.SetDefault("metrics.service.timeoutSecs.write", 60)
+	viper.SetDefault("metrics.service.timeoutSecs.idle", 60)
+
 	// Default video source config
 	viper.SetDefault("videoSource.statusReportIntInSec", 60)
 

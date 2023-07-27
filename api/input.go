@@ -41,6 +41,7 @@ NewPlaylistReceiveHandler define a new HLS playlist receiver
 	@param forwardPlaylist - callback function for sending newly received HLS playlist
 		onward for processing
 	@param logConfig common.HTTPRequestLogging - handler log settings
+	@param metrics goutils.HTTPRequestMetricHelper - metric collection agent
 	@returns new PlaylistReceiveHandler
 */
 func NewPlaylistReceiveHandler(
@@ -48,6 +49,7 @@ func NewPlaylistReceiveHandler(
 	playlistParser hls.PlaylistParser,
 	forwardPlaylist PlaylistForwardCB,
 	logConfig common.HTTPRequestLogging,
+	metrics goutils.HTTPRequestMetricHelper,
 ) (PlaylistReceiveHandler, error) {
 	return PlaylistReceiveHandler{
 		RestAPIHandler: goutils.RestAPIHandler{
@@ -65,7 +67,8 @@ func NewPlaylistReceiveHandler(
 				}
 				return result
 			}(),
-			LogLevel: logConfig.LogLevel,
+			LogLevel:      logConfig.LogLevel,
+			MetricsHelper: metrics,
 		}, parentCtxt: parentCtxt, parser: playlistParser, forwardPlaylist: forwardPlaylist,
 	}, nil
 }
@@ -207,12 +210,14 @@ NewSegmentReceiveHandler define a new video segment receiver
 	@param forwardSegment VideoSegmentForwardCB - callback function for sending newly received
 	    video segment onward for processing
 	@param logConfig common.HTTPRequestLogging - handler log settings
+	@param metrics goutils.HTTPRequestMetricHelper - metric collection agent
 	@returns new SegmentReceiveHandler
 */
 func NewSegmentReceiveHandler(
 	parentCtxt context.Context,
 	forwardSegment VideoSegmentForwardCB,
 	logConfig common.HTTPRequestLogging,
+	metrics goutils.HTTPRequestMetricHelper,
 ) (SegmentReceiveHandler, error) {
 	return SegmentReceiveHandler{
 		RestAPIHandler: goutils.RestAPIHandler{
@@ -230,7 +235,8 @@ func NewSegmentReceiveHandler(
 				}
 				return result
 			}(),
-			LogLevel: logConfig.LogLevel,
+			LogLevel:      logConfig.LogLevel,
+			MetricsHelper: metrics,
 		}, parentCtxt: parentCtxt, forwardSegment: forwardSegment,
 	}, nil
 }

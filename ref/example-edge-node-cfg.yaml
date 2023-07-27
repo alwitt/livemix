@@ -1,5 +1,44 @@
 ---
 #########################################################################################
+# Metrics framework configuration
+metrics:
+  # HTTP hosting server configuration
+  service:
+    # HTTP server binding interface
+    listenOn: 0.0.0.0
+    # HTTP server binding port
+    appPort: 3001
+    # Connection timeout configurations in seconds
+    timeoutSecs:
+      # Maximum duration for reading the entire request, including the body in seconds.
+      # A zero or negative value means there will be no timeout.
+      read: 60
+      # Maximum duration before timing out writes of the response in seconds. A zero
+      # or negative value means there will be no timeout.
+      write: 60
+      # Maximum amount of time to wait for the next request when keep-alives are enabled
+      # in seconds. If IdleTimeout is zero, the value of ReadTimeout is used. If both
+      # are zero, there is no timeout.
+      idle: 300
+
+  # Path to host the Prometheus metrics endpoint
+  metricsEndpoint: /metrics
+
+  # Max number of metrics requests in parallel to support
+  maxRequests: 4
+
+  # Metrics framework features to enable
+  features:
+    # Whether to enable Golang application metrics
+    enableAppMetrics: false
+
+    # Whether to enable HTTP request tracking metrics
+    enableHTTPMetrics: true
+
+    # Whether to enable PubSub operational metrics
+    enablePubSubMetrics: true
+
+#########################################################################################
 # Video source being monitored
 videoSource:
   # video source system entry name (as recorded by the system control node)

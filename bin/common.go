@@ -10,7 +10,10 @@ import (
 
 // buildReqRespClients helper function for defining all the PubSub request-response client parts
 func buildReqRespClients(
-	ctxt context.Context, nodeName string, config common.ReqRespClientConfig,
+	ctxt context.Context,
+	nodeName string,
+	config common.ReqRespClientConfig,
+	metrics goutils.PubSubMetricHelper,
 ) (goutils.PubSubClient, goutils.RequestResponseClient, error) {
 	var psClient goutils.PubSubClient
 	var rrClient goutils.RequestResponseClient
@@ -25,7 +28,7 @@ func buildReqRespClients(
 	// Define PubSub client
 	psClient, err = goutils.GetNewPubSubClientInstance(rawPSClient, log.Fields{
 		"module": "go-utils", "component": "pubsub-client", "project": config.GCPProject,
-	})
+	}, metrics)
 	if err != nil {
 		log.WithError(err).Error("Failed to create PubSub client")
 		return psClient, rrClient, err
@@ -66,4 +69,23 @@ func buildReqRespClients(
 	}
 
 	return psClient, rrClient, nil
+}
+
+/*
+NewMetricsCollector define metrics collector
+
+	@param config common.MetricsFeatureConfig - metrics framework config
+	@returns new metrics collector
+*/
+func NewMetricsCollector(config common.MetricsFeatureConfig) (goutils.MetricsCollector, error) {
+	framework, err := goutils.GetNewMetricsCollector(
+		log.Fields{"module": "utils", "component": "metrics-core"}, []goutils.LogMetadataModifier{},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if config.EnableAppMetrics {
+		framework.InstallApplicationMetrics()
+	}
+	return framework, nil
 }

@@ -28,7 +28,7 @@ func TestManagerDefineNewVideoSource(t *testing.T) {
 
 	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
 		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
-	})
+	}, nil)
 	assert.Nil(err)
 
 	// Case 0: no parameters given
@@ -146,7 +146,7 @@ func TestManagerListVideoSources(t *testing.T) {
 
 	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
 		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
-	})
+	}, nil)
 	assert.Nil(err)
 
 	testSources := []common.VideoSource{}
@@ -191,7 +191,7 @@ func TestManagerGetVideoSource(t *testing.T) {
 
 	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
 		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
-	})
+	}, nil)
 	assert.Nil(err)
 
 	// Prepare mock
@@ -232,7 +232,7 @@ func TestManagerDeleteVideoSource(t *testing.T) {
 
 	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
 		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
-	})
+	}, nil)
 	assert.Nil(err)
 
 	// Prepare mock
@@ -268,7 +268,7 @@ func TestManagerUpdateVideoSourceName(t *testing.T) {
 
 	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
 		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
-	})
+	}, nil)
 	assert.Nil(err)
 
 	// Prepare mock
@@ -317,7 +317,7 @@ func TestManagerChangeVideoStreamingState(t *testing.T) {
 
 	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
 		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
-	})
+	}, nil)
 	assert.Nil(err)
 
 	// Prepare mock
@@ -361,7 +361,7 @@ func TestManagerStartRecordingSession(t *testing.T) {
 
 	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
 		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
-	})
+	}, nil)
 	assert.Nil(err)
 
 	testSourceID := uuid.NewString()
@@ -476,7 +476,7 @@ func TestManagerListRecordingSession(t *testing.T) {
 
 	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
 		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
-	})
+	}, nil)
 	assert.Nil(err)
 
 	// Prepare mock
@@ -523,7 +523,7 @@ func TestManagerListRecordingOfSource(t *testing.T) {
 
 	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
 		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
-	})
+	}, nil)
 	assert.Nil(err)
 
 	testSourceID := uuid.NewString()
@@ -618,7 +618,7 @@ func TestManagerGetRecording(t *testing.T) {
 
 	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
 		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
-	})
+	}, nil)
 	assert.Nil(err)
 
 	testRecording := common.Recording{ID: uuid.NewString(), SourceID: uuid.NewString()}
@@ -659,7 +659,7 @@ func TestManagerListSegmentsOfRecording(t *testing.T) {
 
 	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
 		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
-	})
+	}, nil)
 	assert.Nil(err)
 
 	testRecordingID := uuid.NewString()
@@ -714,7 +714,7 @@ func TestManagerStopRecording(t *testing.T) {
 
 	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
 		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
-	})
+	}, nil)
 	assert.Nil(err)
 
 	testRecording := common.Recording{ID: uuid.NewString(), SourceID: uuid.NewString()}
@@ -757,7 +757,7 @@ func TestManagerDeleteRecording(t *testing.T) {
 
 	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
 		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
-	})
+	}, nil)
 	assert.Nil(err)
 
 	testRecordingID := uuid.NewString()

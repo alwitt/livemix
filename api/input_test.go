@@ -38,7 +38,7 @@ func TestPlaylistReceiver(t *testing.T) {
 	uut, err := api.NewPlaylistReceiveHandler(
 		utCtxt, parser, receivePlaylist, common.HTTPRequestLogging{
 			RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
-		},
+		}, nil,
 	)
 	assert.Nil(err)
 
@@ -127,7 +127,7 @@ func TestSegmentReceive(t *testing.T) {
 	uut, err := api.NewSegmentReceiveHandler(
 		utCtxt, receiveSegment, common.HTTPRequestLogging{
 			RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
-		},
+		}, nil,
 	)
 	assert.Nil(err)
 

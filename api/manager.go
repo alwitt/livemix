@@ -28,10 +28,13 @@ NewSystemManagerHandler define a new system manager REST API handler
 
 	@param manager control.SystemManager - core system manager
 	@param logConfig common.HTTPRequestLogging - handler log settings
+	@param metrics goutils.HTTPRequestMetricHelper - metric collection agent
 	@returns new SystemManagerHandler
 */
 func NewSystemManagerHandler(
-	manager control.SystemManager, logConfig common.HTTPRequestLogging,
+	manager control.SystemManager,
+	logConfig common.HTTPRequestLogging,
+	metrics goutils.HTTPRequestMetricHelper,
 ) (SystemManagerHandler, error) {
 	return SystemManagerHandler{
 		RestAPIHandler: goutils.RestAPIHandler{
@@ -49,7 +52,8 @@ func NewSystemManagerHandler(
 				}
 				return result
 			}(),
-			LogLevel: logConfig.LogLevel,
+			LogLevel:      logConfig.LogLevel,
+			MetricsHelper: metrics,
 		}, validate: validator.New(), manager: manager,
 	}, nil
 }

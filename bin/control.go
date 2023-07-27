@@ -30,6 +30,7 @@ type ControlNode struct {
 	coreManager           control.SystemManager
 	MgmtAPIServer         *http.Server
 	VODAPIServer          *http.Server
+	MetricsServer         *http.Server
 }
 
 /*
@@ -90,6 +91,48 @@ func DefineControlNode(
 	theNode.workerCtxt, theNode.workerCtxtCancel = context.WithCancel(parentCtxt)
 
 	initStep := 0
+
+	// ====================================================================================
+	// Prepare base layer - Metrics
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing metrics framework")
+
+	metrics, err := NewMetricsCollector(config.Metrics.Features)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Failed to create metrics collector")
+		return nil, err
+	}
+
+	var httpMetricsAgent goutils.HTTPRequestMetricHelper
+	if config.Metrics.Features.EnableHTTPMetrics {
+		httpMetricsAgent = metrics.InstallHTTPMetrics()
+	}
+
+	var pubsubMetricsAgent goutils.PubSubMetricHelper
+	if config.Metrics.Features.EnablePubSubMetrics {
+		pubsubMetricsAgent = metrics.InstallPubSubMetrics()
+	}
+
+	// Create server to host metrics collection endpoint
+	theNode.MetricsServer, err = api.BuildMetricsCollectionServer(
+		config.Metrics.Server, metrics, config.Metrics.MetricsEndpoint, config.Metrics.MaxRequests,
+	)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Failed to create metrics collection hosting server")
+		return nil, err
+	}
+
+	log.WithFields(logTags).WithField("initialize", initStep).Info("Initialized metrics framework")
+	initStep++
 
 	// ====================================================================================
 	// Prepare base layer - Persistence
@@ -219,7 +262,7 @@ func DefineControlNode(
 
 	// Prepare core request-response client
 	theNode.psClient, theNode.rrClient, err = buildReqRespClients(
-		parentCtxt, nodeName, config.Management.RRClient,
+		parentCtxt, nodeName, config.Management.RRClient, pubsubMetricsAgent,
 	)
 	if err != nil {
 		log.
@@ -358,7 +401,7 @@ func DefineControlNode(
 		Info("Initializing system manager REST API server")
 
 	theNode.MgmtAPIServer, err = api.BuildSystemManagementServer(
-		config.Management.APIServer, theNode.coreManager,
+		config.Management.APIServer, theNode.coreManager, httpMetricsAgent,
 	)
 	if err != nil {
 		log.
@@ -397,6 +440,7 @@ func DefineControlNode(
 		dbConns,
 		plBuilder,
 		vodSegmentMgnt,
+		httpMetricsAgent,
 	)
 	if err != nil {
 		log.

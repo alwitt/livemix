@@ -32,6 +32,7 @@ NewVODHandler define a new HLS VOD handler
 	@param playlists vod.PlaylistBuilder - support playlist builder
 	@param segments vod.SegmentManager - support playlist segment manager
 	@param logConfig common.HTTPRequestLogging - handler log settings
+	@param metrics goutils.HTTPRequestMetricHelper - metric collection agent
 	@returns new LiveStreamHandler
 */
 func NewVODHandler(
@@ -39,6 +40,7 @@ func NewVODHandler(
 	playlists vod.PlaylistBuilder,
 	segments vod.SegmentManager,
 	logConfig common.HTTPRequestLogging,
+	metrics goutils.HTTPRequestMetricHelper,
 ) (VODHandler, error) {
 	return VODHandler{
 		RestAPIHandler: goutils.RestAPIHandler{
@@ -56,7 +58,8 @@ func NewVODHandler(
 				}
 				return result
 			}(),
-			LogLevel: logConfig.LogLevel,
+			LogLevel:      logConfig.LogLevel,
+			MetricsHelper: metrics,
 		}, validate: validator.New(), dbConns: dbConns, playlists: playlists, segments: segments,
 	}, nil
 }

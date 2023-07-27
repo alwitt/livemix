@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/alwitt/goutils"
 	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/control"
 	"github.com/alwitt/livemix/db"
@@ -16,6 +17,38 @@ import (
 	"golang.org/x/net/http2/h2c"
 )
 
+/*
+BuildMetricsCollectionServer create server to host metrics collection endpoint
+
+	@param httpCfg common.HTTPServerConfig - HTTP server configuration
+	@param metricsCollector goutils.MetricsCollector - metrics collector
+	@param collectionEndpoint string - endpoint to expose the metrics on
+	@param maxRESTRequests int - max number fo parallel requests to support
+	@returns HTTP server instance
+*/
+func BuildMetricsCollectionServer(
+	httpCfg common.HTTPServerConfig,
+	metricsCollector goutils.MetricsCollector,
+	collectionEndpoint string,
+	maxRESTRequests int,
+) (*http.Server, error) {
+	router := mux.NewRouter()
+	metricsCollector.ExposeCollectionEndpoint(router, collectionEndpoint, maxRESTRequests)
+
+	serverListen := fmt.Sprintf(
+		"%s:%d", httpCfg.ListenOn, httpCfg.Port,
+	)
+	httpSrv := &http.Server{
+		Addr:         serverListen,
+		WriteTimeout: time.Second * time.Duration(httpCfg.Timeouts.WriteTimeout),
+		ReadTimeout:  time.Second * time.Duration(httpCfg.Timeouts.ReadTimeout),
+		IdleTimeout:  time.Second * time.Duration(httpCfg.Timeouts.IdleTimeout),
+		Handler:      h2c.NewHandler(router, &http2.Server{}),
+	}
+
+	return httpSrv, nil
+}
+
 // ====================================================================================
 // System Manage Server
 
@@ -24,13 +57,15 @@ BuildSystemManagementServer create system management API server
 
 	@param httpCfg common.APIServerConfig - HTTP server configuration
 	@param manager control.SystemManager - core system manager
+	@param metrics goutils.HTTPRequestMetricHelper - metric collection agent
 	@returns HTTP server instance
 */
 func BuildSystemManagementServer(
 	httpCfg common.APIServerConfig,
 	manager control.SystemManager,
+	metrics goutils.HTTPRequestMetricHelper,
 ) (*http.Server, error) {
-	httpHandler, err := NewSystemManagerHandler(manager, httpCfg.APIs.RequestLogging)
+	httpHandler, err := NewSystemManagerHandler(manager, httpCfg.APIs.RequestLogging, metrics)
 	if err != nil {
 		return nil, err
 	}
@@ -139,13 +174,17 @@ BuildPlaylistReceiverServer create edge node playlist receive server
 	@param parentCtxt context.Context - REST handler parent context
 	@param httpCfg common.APIServerConfig - HTTP server configuration
 	@param forwardCB PlaylistForwardCB - callback to forward newly received playlists
+	@param metrics goutils.HTTPRequestMetricHelper - metric collection agent
 	@returns HTTP server instance
 */
 func BuildPlaylistReceiverServer(
-	parentCtxt context.Context, httpCfg common.APIServerConfig, forwardCB PlaylistForwardCB,
+	parentCtxt context.Context,
+	httpCfg common.APIServerConfig,
+	forwardCB PlaylistForwardCB,
+	metrics goutils.HTTPRequestMetricHelper,
 ) (*http.Server, error) {
 	httpHandler, err := NewPlaylistReceiveHandler(
-		parentCtxt, hls.NewPlaylistParser(), forwardCB, httpCfg.APIs.RequestLogging,
+		parentCtxt, hls.NewPlaylistParser(), forwardCB, httpCfg.APIs.RequestLogging, metrics,
 	)
 	if err != nil {
 		return nil, err
@@ -199,6 +238,7 @@ BuildCentralVODServer create control node VOD server. It is responsible for
 	@param dbConns db.ConnectionManager - DB connection manager
 	@param playlistBuilder vod.PlaylistBuilder - support HLS playlist builder
 	@param segments vod.SegmentManager - video segment manager
+	@param metrics goutils.HTTPRequestMetricHelper - metric collection agent
 	@returns HTTP server instance
 */
 func BuildCentralVODServer(
@@ -208,15 +248,16 @@ func BuildCentralVODServer(
 	dbConns db.ConnectionManager,
 	playlistBuilder vod.PlaylistBuilder,
 	segments vod.SegmentManager,
+	metrics goutils.HTTPRequestMetricHelper,
 ) (*http.Server, error) {
 	segmentRXHandler, err := NewSegmentReceiveHandler(
-		parentCtxt, forwardCB, httpCfg.APIs.RequestLogging,
+		parentCtxt, forwardCB, httpCfg.APIs.RequestLogging, metrics,
 	)
 	if err != nil {
 		return nil, err
 	}
 	vodHandler, err := NewVODHandler(
-		dbConns, playlistBuilder, segments, httpCfg.APIs.RequestLogging,
+		dbConns, playlistBuilder, segments, httpCfg.APIs.RequestLogging, metrics,
 	)
 	if err != nil {
 		return nil, err
@@ -280,6 +321,7 @@ BuildVODServer create HLS VOD server
 	@param dbConns db.ConnectionManager - DB connection manager
 	@param playlistBuilder vod.PlaylistBuilder - support HLS playlist builder
 	@param segments vod.SegmentManager - video segment manager
+	@param metrics goutils.HTTPRequestMetricHelper - metric collection agent
 	@returns HTTP server instance
 */
 func BuildVODServer(
@@ -287,9 +329,10 @@ func BuildVODServer(
 	dbConns db.ConnectionManager,
 	playlistBuilder vod.PlaylistBuilder,
 	segments vod.SegmentManager,
+	metrics goutils.HTTPRequestMetricHelper,
 ) (*http.Server, error) {
 	httpHandler, err := NewVODHandler(
-		dbConns, playlistBuilder, segments, httpCfg.APIs.RequestLogging,
+		dbConns, playlistBuilder, segments, httpCfg.APIs.RequestLogging, metrics,
 	)
 	if err != nil {
 		return nil, err

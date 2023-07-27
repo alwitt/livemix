@@ -33,7 +33,7 @@ func TestVodLiveStreamHandler(t *testing.T) {
 	uut, err := api.NewVODHandler(
 		mockSQL, mockPlaylist, mockSegment, common.HTTPRequestLogging{
 			RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
-		},
+		}, nil,
 	)
 	assert.Nil(err)
 
@@ -243,7 +243,7 @@ func TestVodRecordingHandler(t *testing.T) {
 	uut, err := api.NewVODHandler(
 		mockSQL, mockPlaylist, mockSegment, common.HTTPRequestLogging{
 			RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
-		},
+		}, nil,
 	)
 	assert.Nil(err)
 
