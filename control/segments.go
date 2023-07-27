@@ -12,6 +12,19 @@ import (
 	"github.com/apex/log"
 )
 
+/*
+TODO FIXME:
+
+Add metrics:
+* segment register action:
+	* total segments - count
+	* total bytes - count
+
+Labels:
+* "source": video source ID
+
+*/
+
 // LiveStreamSegmentManager central video segment manager which operates within the
 // system control node
 type LiveStreamSegmentManager interface {

@@ -16,6 +16,19 @@ import (
 	"github.com/apex/log"
 )
 
+/*
+TODO FIXME:
+
+Need pure gauge with no labels
+
+Add metrics:
+* total registered video source - gauge
+* total video sources able to receive inbound requests - gauge
+* total registered recordings - gauge
+* total active recordings - gauge
+
+*/
+
 // SystemManager system operations manager
 type SystemManager interface {
 	/*

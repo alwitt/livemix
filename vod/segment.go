@@ -53,6 +53,20 @@ func NewSegmentManager(
 	}, nil
 }
 
+/*
+TODO FIXME:
+
+Add metrics
+* segment get action
+	* total bytes - count
+	* total segments - count
+
+Labels:
+* "cache-hit": "true" or "false"
+* "source": video source ID
+
+*/
+
 func (m *segmentManagerImpl) GetSegment(
 	ctxt context.Context, target common.VideoSegment,
 ) ([]byte, error) {

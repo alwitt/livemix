@@ -581,6 +581,20 @@ func (o *videoSourceOperatorImpl) newSegmentFromSource(params interface{}) error
 	return err
 }
 
+/*
+TODO FIXME:
+
+Add metrics:
+* new segment from source:
+	* total segments - count
+	* total bytes - count
+* number of active recordings - gauge
+
+Labels:
+* "source": video source ID
+
+*/
+
 func (o *videoSourceOperatorImpl) handleNewSegmentFromSource(
 	segment common.VideoSegmentWithData,
 ) error {

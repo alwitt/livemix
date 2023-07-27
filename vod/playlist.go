@@ -16,6 +16,20 @@ func GetReferenceTime() (time.Time, error) {
 	return time.Parse("2006-Jan-02", "2023-Jan-01")
 }
 
+/*
+TODO FIXME:
+
+Add metrics:
+* generate playlist action
+	* total playlists - count
+	* total segments - count
+
+Labels:
+* "type": "live" or "replay"
+* "source": video source ID
+
+*/
+
 // PlaylistBuilder construct HLS playlist on demand
 type PlaylistBuilder interface {
 	/*

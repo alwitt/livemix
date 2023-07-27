@@ -14,6 +14,20 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
+/*
+TODO FIXME:
+
+Add metrics:
+* segment forward action
+	* total segments - count
+	* total bytes - count
+
+Labels:
+* "target": "s3" or "http"
+* "source": video source ID
+
+*/
+
 // SegmentSender video segment transmit client
 type SegmentSender interface {
 	/*

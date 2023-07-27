@@ -142,6 +142,21 @@ func (r *segmentReader) readSegment(params interface{}) error {
 	return err
 }
 
+/*
+TODO FIXME:
+
+Add metrics:
+* segment read action:
+  * total bytes - count
+	* total segments - count
+
+Labels:
+* "type": "s3" or "file"
+* "source": video source ID
+	* This needs to be added
+
+*/
+
 // coreReadSegment contains the actual logic for the ReadSegment function
 func (r *segmentReader) coreReadSegment(
 	segmentID string, segment *url.URL, returnCB SegmentReturnCallback,

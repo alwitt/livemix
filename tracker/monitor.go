@@ -199,6 +199,20 @@ func (m *sourceHLSMonitorImpl) update(params interface{}) error {
 	return err
 }
 
+/*
+TODO FIXME:
+
+Add metrics:
+* playlist update action
+	* total playlists - count
+	* total new segments - count
+
+Labels:
+* "source": video source ID
+	* This needs to be added
+
+*/
+
 // coreUpdate contains the actual logic for the Update function
 func (m *sourceHLSMonitorImpl) coreUpdate(
 	currentPlaylist hls.Playlist, timestamp time.Time,
@@ -306,6 +320,23 @@ func (m *sourceHLSMonitorImpl) reportSegmentRead(params interface{}) error {
 	log.WithError(err).WithFields(logTags).Error("'update' processing failure")
 	return err
 }
+
+/*
+TODO FIXME:
+
+Add metrics:
+* segment received action
+	* total segments - count
+	* total bytes - count
+* segment forward action
+	* total segments - count
+	* total bytes - count
+
+Labels:
+* "source": video source ID
+	* This needs to be added
+
+*/
 
 // coreReportSegmentRead contains the actual logic for the ReportSegmentRead function
 func (m *sourceHLSMonitorImpl) coreReportSegmentRead(

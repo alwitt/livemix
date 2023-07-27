@@ -54,6 +54,27 @@ type VideoSegmentCache interface {
 // =====================================================================================
 // In-Process (Local Ram) Video Segment Cache
 
+/*
+TODO FIXME:
+
+Add metrics
+* current segments in cache - Gauge
+* segment put action
+	* total bytes - count
+	* total segments - count
+* segment get action
+	* total bytes - count
+	* total segment - count
+* segment purge action
+	* total segment - count
+
+Labels:
+* "type": Fixed at "ram"
+* "source": video source ID
+	* This needs to be added
+
+*/
+
 // inProcessCacheEntry wrapper structure holding content with retention support
 type inProcessCacheEntry struct {
 	expireAt time.Time
@@ -209,6 +230,26 @@ func (c *inProcessSegmentCacheImpl) purgeExpiredEntry(
 
 // =====================================================================================
 // Memcached Video Segment Cache
+
+/*
+TODO FIXME:
+
+Add metrics
+* segment put action
+	* total bytes - count
+	* total segments - count
+* segment get action
+	* total bytes - count
+	* total segment - count
+* segment purge action
+	* total segment - count
+
+Labels:
+* "type": Fixed at "memcached"
+* "source": video source ID
+	* This needs to be added
+
+*/
 
 // memcachedSegmentCacheImpl implements SourceHLSSegmentCache
 type memcachedSegmentCacheImpl struct {
