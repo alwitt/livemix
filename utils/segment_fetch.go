@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/alwitt/goutils"
+	"github.com/alwitt/livemix/common"
 	"github.com/apex/log"
 )
 
@@ -23,12 +24,11 @@ type SegmentReader interface {
 		ReadSegment read one segment from specified location
 
 			@param ctxt context.Context - execution context
-			@param segmentID string - video segment ID
-			@param segment *url.URL - video segment URL
+			@param segment common.VideoSegment - video segment
 			@param returnCB SegmentReturnCallback - callback used to return the read segment back
 	*/
 	ReadSegment(
-		ctxt context.Context, segmentID string, segment *url.URL, returnCB SegmentReturnCallback,
+		ctxt context.Context, segment common.VideoSegment, returnCB SegmentReturnCallback,
 	) error
 
 	/*
@@ -106,17 +106,29 @@ func NewSegmentReader(
 }
 
 type readSegmentRequest struct {
-	segmentID string
-	segment   *url.URL
-	returnCB  SegmentReturnCallback
+	segment  common.VideoSegment
+	fetchURI *url.URL
+	returnCB SegmentReturnCallback
 }
 
 func (r *segmentReader) ReadSegment(
-	ctxt context.Context, segmentID string, segment *url.URL, returnCB SegmentReturnCallback,
+	ctxt context.Context, segment common.VideoSegment, returnCB SegmentReturnCallback,
 ) error {
 	logTags := r.GetLogTagsForContext(ctxt)
 
-	request := readSegmentRequest{segmentID: segmentID, segment: segment, returnCB: returnCB}
+	parsedURI, err := url.Parse(segment.URI)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", segment.SourceID).
+			WithField("segemnt", segment.Name).
+			WithField("segment-uri", segment.URI).
+			Error("Unable to parse segment URI")
+		return err
+	}
+
+	request := readSegmentRequest{segment: segment, fetchURI: parsedURI, returnCB: returnCB}
 
 	if err := r.workers.Submit(ctxt, request); err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to submit 'ReadSegment' job")
@@ -125,7 +137,9 @@ func (r *segmentReader) ReadSegment(
 
 	log.
 		WithFields(logTags).
-		WithField("segment-url", segment.String()).
+		WithField("source-id", segment.SourceID).
+		WithField("segemnt", segment.Name).
+		WithField("segment-uri", parsedURI.String()).
 		Debug("Submitted 'ReadSegment' job request")
 
 	return nil
@@ -134,7 +148,7 @@ func (r *segmentReader) ReadSegment(
 func (r *segmentReader) readSegment(params interface{}) error {
 	// Convert params into expected data type
 	if readParams, ok := params.(readSegmentRequest); ok {
-		return r.coreReadSegment(readParams.segmentID, readParams.segment, readParams.returnCB)
+		return r.coreReadSegment(readParams.segment, readParams.fetchURI, readParams.returnCB)
 	}
 	err := fmt.Errorf("received unexpected call parameters: %s", reflect.TypeOf(params))
 	logTags := r.GetLogTagsForContext(r.workerContext)
@@ -153,28 +167,29 @@ Add metrics:
 Labels:
 * "type": "s3" or "file"
 * "source": video source ID
-	* This needs to be added
 
 */
 
 // coreReadSegment contains the actual logic for the ReadSegment function
 func (r *segmentReader) coreReadSegment(
-	segmentID string, segment *url.URL, returnCB SegmentReturnCallback,
+	segment common.VideoSegment, fetchURI *url.URL, returnCB SegmentReturnCallback,
 ) error {
 	logTags := r.GetLogTagsForContext(r.workerContext)
 
 	// Choose the read method based on the schema of the segment path URL
-	switch segment.Scheme {
+	switch fetchURI.Scheme {
 	case "file":
-		return r.readSegmentFromFile(segmentID, segment, returnCB)
+		return r.readSegmentFromFile(segment, fetchURI, returnCB)
 	case "s3":
-		return r.readSegmentFromS3(segmentID, segment, returnCB)
+		return r.readSegmentFromS3(segment, fetchURI, returnCB)
 	default:
 		err := fmt.Errorf("invalid segment path URL")
 		log.
 			WithError(err).
 			WithFields(logTags).
-			WithField("segment-url", segment.String()).
+			WithField("source-id", segment.SourceID).
+			WithField("segemnt", segment.Name).
+			WithField("segment-uri", segment.String()).
 			Error("Unable to read segment file")
 		return err
 	}
@@ -182,16 +197,18 @@ func (r *segmentReader) coreReadSegment(
 
 // readSegmentFromFile support reading video segment from file
 func (r *segmentReader) readSegmentFromFile(
-	segmentID string, segment *url.URL, returnCB SegmentReturnCallback,
+	segment common.VideoSegment, fetchURI *url.URL, returnCB SegmentReturnCallback,
 ) error {
 	logTags := r.GetLogTagsForContext(r.workerContext)
 
-	segmentFile, err := os.Open(segment.Path)
+	segmentFile, err := os.Open(fetchURI.Path)
 	if err != nil {
 		log.
 			WithError(err).
 			WithFields(logTags).
-			WithField("segment-url", segment.String()).
+			WithField("source-id", segment.SourceID).
+			WithField("segemnt", segment.Name).
+			WithField("segment-uri", fetchURI.String()).
 			Error("Unable to open segment file")
 		return err
 	}
@@ -204,21 +221,27 @@ func (r *segmentReader) readSegmentFromFile(
 		log.
 			WithError(err).
 			WithFields(logTags).
-			WithField("segment-url", segment.String()).
+			WithField("source-id", segment.SourceID).
+			WithField("segemnt", segment.Name).
+			WithField("segment-uri", fetchURI.String()).
 			Error("Reading segment file failed")
 		return err
 	}
 	log.
 		WithFields(logTags).
-		WithField("segment-url", segment.String()).
+		WithField("source-id", segment.SourceID).
+		WithField("segemnt", segment.Name).
+		WithField("segment-uri", fetchURI.String()).
 		WithField("length", len(content)).
 		Debug("Read segment file")
 
-	if err := returnCB(r.workerContext, segmentID, content); err != nil {
+	if err := returnCB(r.workerContext, segment.ID, content); err != nil {
 		log.
 			WithError(err).
 			WithFields(logTags).
-			WithField("segment-url", segment.String()).
+			WithField("source-id", segment.SourceID).
+			WithField("segemnt", segment.Name).
+			WithField("segment-uri", fetchURI.String()).
 			Error("Unable to pass on read segment content")
 		return err
 	}
@@ -240,7 +263,7 @@ func CleanupObjectKey(orig string) string {
 }
 
 func (r *segmentReader) readSegmentFromS3(
-	segmentID string, segment *url.URL, returnCB SegmentReturnCallback,
+	segment common.VideoSegment, fetchURI *url.URL, returnCB SegmentReturnCallback,
 ) error {
 	logTags := r.GetLogTagsForContext(r.workerContext)
 
@@ -249,19 +272,21 @@ func (r *segmentReader) readSegmentFromS3(
 		log.
 			WithError(err).
 			WithFields(logTags).
-			WithField("segment-id", segmentID).
-			WithField("segment-url", segment.String()).
+			WithField("source-id", segment.SourceID).
+			WithField("segemnt", segment.Name).
+			WithField("segment-uri", fetchURI.String()).
 			Error("Unable to to read segment from S3")
 		return err
 	}
 
-	sourceBucket := segment.Host
-	segmentObjectKey := CleanupObjectKey(segment.Path)
+	sourceBucket := fetchURI.Host
+	segmentObjectKey := CleanupObjectKey(fetchURI.Path)
 
 	log.
 		WithFields(logTags).
-		WithField("segment-id", segmentID).
-		WithField("segment-url", segment.String()).
+		WithField("source-id", segment.SourceID).
+		WithField("segemnt", segment.Name).
+		WithField("segment-uri", fetchURI.String()).
 		Debug("Fetching segment from S3")
 
 	content, err := r.s3.GetObject(r.workerContext, sourceBucket, segmentObjectKey)
@@ -269,25 +294,28 @@ func (r *segmentReader) readSegmentFromS3(
 		log.
 			WithError(err).
 			WithFields(logTags).
-			WithField("segment-id", segmentID).
-			WithField("segment-url", segment.String()).
+			WithField("source-id", segment.SourceID).
+			WithField("segemnt", segment.Name).
+			WithField("segment-uri", fetchURI.String()).
 			Error("Fetching segment failed")
 		return err
 	}
 
 	log.
 		WithFields(logTags).
-		WithField("segment-id", segmentID).
-		WithField("segment-url", segment.String()).
+		WithField("source-id", segment.SourceID).
+		WithField("segemnt", segment.Name).
+		WithField("segment-uri", fetchURI.String()).
 		WithField("length", len(content)).
 		Debug("Read segment from S3")
 
-	if err := returnCB(r.workerContext, segmentID, content); err != nil {
+	if err := returnCB(r.workerContext, segment.ID, content); err != nil {
 		log.
 			WithError(err).
 			WithFields(logTags).
-			WithField("segment-id", segmentID).
-			WithField("segment-url", segment.String()).
+			WithField("source-id", segment.SourceID).
+			WithField("segemnt", segment.Name).
+			WithField("segment-uri", fetchURI.String()).
 			Error("Unable to pass on read segment content")
 		return err
 	}

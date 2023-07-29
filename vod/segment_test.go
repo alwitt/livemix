@@ -3,7 +3,6 @@ package vod_test
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"testing"
 	"time"
 
@@ -40,12 +39,13 @@ func TestSegmentManager(t *testing.T) {
 		mockCache.On(
 			"GetSegment",
 			mock.AnythingOfType("*context.emptyCtx"),
-			segmentID,
-		).Return(nil, fmt.Errorf("dummy error")).Once()
+			mock.AnythingOfType("common.VideoSegment"),
+		).Run(func(args mock.Arguments) {
+			querySegment := args.Get(1).(common.VideoSegment)
+			assert.Equal(segmentID, querySegment.ID)
+		}).Return(nil, fmt.Errorf("dummy error")).Once()
 
-		_, err = uut.GetSegment(utCtxt, common.VideoSegment{
-			ID: segmentID,
-		})
+		_, err = uut.GetSegment(utCtxt, common.VideoSegment{ID: segmentID})
 		assert.NotNil(err)
 	}
 	{
@@ -59,12 +59,13 @@ func TestSegmentManager(t *testing.T) {
 		mockCache.On(
 			"GetSegment",
 			mock.AnythingOfType("*context.emptyCtx"),
-			segmentID,
-		).Return(content, nil).Once()
+			mock.AnythingOfType("common.VideoSegment"),
+		).Run(func(args mock.Arguments) {
+			querySegment := args.Get(1).(common.VideoSegment)
+			assert.Equal(segmentID, querySegment.ID)
+		}).Return(content, nil).Once()
 
-		resp, err := uut.GetSegment(utCtxt, common.VideoSegment{
-			ID: segmentID,
-		})
+		resp, err := uut.GetSegment(utCtxt, common.VideoSegment{ID: segmentID})
 		assert.Nil(err)
 		assert.Equal(content, resp)
 	}
@@ -88,24 +89,19 @@ func TestSegmentManager(t *testing.T) {
 		mockCache.On(
 			"GetSegment",
 			mock.AnythingOfType("*context.timerCtx"),
-			segmentID,
-		).Return(nil, fmt.Errorf("dummy error")).Once()
+			mock.AnythingOfType("common.VideoSegment"),
+		).Run(func(args mock.Arguments) {
+			querySegment := args.Get(1).(common.VideoSegment)
+			assert.Equal(segmentID, querySegment.ID)
+		}).Return(nil, fmt.Errorf("dummy error")).Once()
 		mockReader.On(
 			"ReadSegment",
 			mock.AnythingOfType("*context.timerCtx"),
-			segmentID,
-			mock.AnythingOfType("*url.URL"),
+			testSegment,
 			mock.AnythingOfType("utils.SegmentReturnCallback"),
 		).Run(func(args mock.Arguments) {
-			// Parse the parameters
-			id := args.Get(1).(string)
-			url := args.Get(2).(*url.URL)
-
-			assert.Equal(segmentID, id)
-			assert.Equal(testSegment.URI, url.String())
-
 			// Trigger the callback to return the read "segment"
-			returnCB := args.Get(3).(utils.SegmentReturnCallback)
+			returnCB := args.Get(2).(utils.SegmentReturnCallback)
 			go func() {
 				assert.Nil(returnCB(utCtxt, segmentID, content))
 			}()
@@ -113,10 +109,13 @@ func TestSegmentManager(t *testing.T) {
 		mockCache.On(
 			"CacheSegment",
 			mock.AnythingOfType("*context.timerCtx"),
-			segmentID,
-			content,
+			mock.AnythingOfType("common.VideoSegmentWithData"),
 			segmentTTL,
-		).Return(nil).Once()
+		).Run(func(args mock.Arguments) {
+			inputSegment := args.Get(1).(common.VideoSegmentWithData)
+			assert.Equal(segmentID, inputSegment.ID)
+			assert.Equal(content, inputSegment.Content)
+		}).Return(nil).Once()
 
 		lclCtxt, cancel := context.WithTimeout(utCtxt, time.Millisecond*10)
 		defer cancel()

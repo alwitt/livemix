@@ -407,11 +407,7 @@ func (o *videoSourceOperatorImpl) handleStartRecording(newRecording common.Recor
 	}
 
 	// Fetch the segments content from cache
-	segmentIDs := []string{}
-	for _, aSegment := range relevantSegments {
-		segmentIDs = append(segmentIDs, aSegment.ID)
-	}
-	segmentContents, err := o.VideoCache.GetSegments(o.workerCtxt, segmentIDs)
+	segmentContents, err := o.VideoCache.GetSegments(o.workerCtxt, relevantSegments)
 	if err != nil {
 		log.
 			WithError(err).

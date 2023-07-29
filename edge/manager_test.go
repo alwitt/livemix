@@ -120,10 +120,10 @@ func TestVideoSourceOperatorStartRecording(t *testing.T) {
 		testSegments := []common.VideoSegment{
 			{ID: uuid.NewString()}, {ID: uuid.NewString()}, {ID: uuid.NewString()},
 		}
-		testSegmentID := []string{}
+		testSegmentIDs := []string{}
 		testSegmentContents := map[string][]byte{}
 		for _, segment := range testSegments {
-			testSegmentID = append(testSegmentID, segment.ID)
+			testSegmentIDs = append(testSegmentIDs, segment.ID)
 			testSegmentContents[segment.ID] = []byte(uuid.NewString())
 		}
 
@@ -148,8 +148,13 @@ func TestVideoSourceOperatorStartRecording(t *testing.T) {
 		mockCache.On(
 			"GetSegments",
 			mock.AnythingOfType("*context.cancelCtx"),
-			testSegmentID,
-		).Return(testSegmentContents, nil).Once()
+			mock.AnythingOfType("[]common.VideoSegment"),
+		).Run(func(args mock.Arguments) {
+			querySegments := args.Get(1).([]common.VideoSegment)
+			for idx, oneSegment := range querySegments {
+				assert.Equal(testSegmentIDs[idx], oneSegment.ID)
+			}
+		}).Return(testSegmentContents, nil).Once()
 		mockRecordForwarder.On(
 			"ForwardSegment",
 			mock.AnythingOfType("*context.cancelCtx"),

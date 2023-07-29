@@ -3,7 +3,6 @@ package tracker
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"reflect"
 	"sort"
 	"sync"
@@ -48,6 +47,7 @@ type segmentReadBatch struct {
 // sourceHLSMonitorImpl implements SourceHLSMonitor
 type sourceHLSMonitorImpl struct {
 	goutils.Component
+	source         common.VideoSource
 	tracker        SourceHLSTracker
 	trackingWindow time.Duration
 	cache          utils.VideoSegmentCache
@@ -125,6 +125,7 @@ func NewSourceHLSMonitor(
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
 		},
+		source:           source,
 		tracker:          tracker,
 		trackingWindow:   trackingWindow,
 		cache:            segmentCache,
@@ -209,7 +210,6 @@ Add metrics:
 
 Labels:
 * "source": video source ID
-	* This needs to be added
 
 */
 
@@ -244,17 +244,8 @@ func (m *sourceHLSMonitorImpl) coreUpdate(
 
 	// Send out segment read requests
 	for _, oneSegment := range newReadBatch.targetSegments {
-		parsedURI, err := url.Parse(oneSegment.URI)
-		if err != nil {
-			log.
-				WithError(err).
-				WithFields(logTags).
-				WithField("segment-uri", oneSegment.URI).
-				Error("Can't parse raw segment URI")
-			return err
-		}
 		if err := m.segmentReader.ReadSegment(
-			m.workerContext, oneSegment.ID, parsedURI, readSegmentDB,
+			m.workerContext, oneSegment, readSegmentDB,
 		); err != nil {
 			log.
 				WithError(err).
@@ -285,7 +276,11 @@ func (m *sourceHLSMonitorImpl) ReportSegmentRead(
 	logTags := m.GetLogTagsForContext(m.workerContext)
 
 	// Update the cache with read segment content
-	if err := m.cache.CacheSegment(ctxt, segmentID, content, m.trackingWindow); err != nil {
+	err := m.cache.CacheSegment(ctxt, common.VideoSegmentWithData{
+		VideoSegment: common.VideoSegment{ID: segmentID, SourceID: m.source.ID},
+		Content:      content,
+	}, m.trackingWindow)
+	if err != nil {
 		log.
 			WithError(err).
 			WithFields(logTags).
@@ -334,7 +329,6 @@ Add metrics:
 
 Labels:
 * "source": video source ID
-	* This needs to be added
 
 */
 

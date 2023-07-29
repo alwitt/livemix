@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alwitt/livemix/common"
 	"github.com/apex/log"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -20,49 +21,60 @@ func TestLocalSegmentCacheBasicSanity(t *testing.T) {
 
 	// Case 0: no segments cached
 	{
-		_, err := uut.GetSegment(utCtxt, uuid.NewString())
+		_, err := uut.GetSegment(utCtxt, common.VideoSegment{
+			ID: uuid.NewString(), SourceID: uuid.NewString(),
+		})
 		assert.NotNil(err)
 	}
 
 	// Case 1: add segment
-	segment0 := uuid.NewString()
-	content0 := []byte(uuid.NewString())
-	assert.Nil(uut.CacheSegment(utCtxt, segment0, content0, time.Second))
+	segment0 := common.VideoSegmentWithData{
+		VideoSegment: common.VideoSegment{ID: uuid.NewString(), SourceID: uuid.NewString()},
+		Content:      []byte(uuid.NewString()),
+	}
+	assert.Nil(uut.CacheSegment(utCtxt, segment0, time.Second))
 	{
-		content, err := uut.GetSegment(utCtxt, segment0)
+		content, err := uut.GetSegment(utCtxt, segment0.VideoSegment)
 		assert.Nil(err)
-		assert.Equal(content0, content)
-		_, err = uut.GetSegment(utCtxt, uuid.NewString())
+		assert.Equal(segment0.Content, content)
+		_, err = uut.GetSegment(
+			utCtxt, common.VideoSegment{ID: uuid.NewString(), SourceID: uuid.NewString()},
+		)
 		assert.NotNil(err)
 	}
 
 	// Case 2: update segment content
-	content1 := []byte(uuid.NewString())
-	assert.Nil(uut.CacheSegment(utCtxt, segment0, content1, time.Second))
+	segment0Dup := common.VideoSegmentWithData{
+		VideoSegment: segment0.VideoSegment,
+		Content:      []byte(uuid.NewString()),
+	}
+	assert.Nil(uut.CacheSegment(utCtxt, segment0Dup, time.Second))
 	{
-		content, err := uut.GetSegment(utCtxt, segment0)
+		content, err := uut.GetSegment(utCtxt, segment0Dup.VideoSegment)
 		assert.Nil(err)
-		assert.Equal(content1, content)
+		assert.Equal(segment0Dup.Content, content)
 	}
 
 	// Case 3: add segment
-	segment2 := uuid.NewString()
-	content2 := []byte(uuid.NewString())
-	assert.Nil(uut.CacheSegment(utCtxt, segment2, content2, time.Second))
+	segment2 := common.VideoSegmentWithData{
+		VideoSegment: common.VideoSegment{ID: uuid.NewString(), SourceID: uuid.NewString()},
+		Content:      []byte(uuid.NewString()),
+	}
+	assert.Nil(uut.CacheSegment(utCtxt, segment2, time.Second))
 	{
-		content, err := uut.GetSegment(utCtxt, segment2)
+		content, err := uut.GetSegment(utCtxt, segment2.VideoSegment)
 		assert.Nil(err)
-		assert.Equal(content2, content)
+		assert.Equal(segment2.Content, content)
 	}
 
 	// Case 4: delete from cache
-	assert.Nil(uut.PurgeSegments(utCtxt, []string{segment0}))
+	assert.Nil(uut.PurgeSegments(utCtxt, []common.VideoSegment{segment0.VideoSegment}))
 	{
-		checkIDs := []string{segment0, segment2}
+		checkIDs := []common.VideoSegment{segment0.VideoSegment, segment2.VideoSegment}
 		cached, err := uut.GetSegments(utCtxt, checkIDs)
 		assert.Nil(err)
 		assert.Len(cached, 1)
-		assert.Contains(cached, segment2)
+		assert.Contains(cached, segment2.ID)
 	}
 }
 
@@ -77,15 +89,24 @@ func TestLocalSegmentCacheManualCachePurgeTrigger(t *testing.T) {
 	startTime := time.Now().UTC()
 
 	// Setup test entries
-	entry0 := uuid.NewString()
+	entry0 := common.VideoSegmentWithData{
+		VideoSegment: common.VideoSegment{ID: uuid.NewString(), SourceID: uuid.NewString()},
+		Content:      []byte(uuid.NewString()),
+	}
 	ttl0 := time.Second
-	entry1 := uuid.NewString()
+	entry1 := common.VideoSegmentWithData{
+		VideoSegment: common.VideoSegment{ID: uuid.NewString(), SourceID: uuid.NewString()},
+		Content:      []byte(uuid.NewString()),
+	}
 	ttl1 := time.Second * 2
-	entry2 := uuid.NewString()
+	entry2 := common.VideoSegmentWithData{
+		VideoSegment: common.VideoSegment{ID: uuid.NewString(), SourceID: uuid.NewString()},
+		Content:      []byte(uuid.NewString()),
+	}
 	ttl2 := time.Second * 4
-	assert.Nil(uut.CacheSegment(utCtxt, entry0, []byte(uuid.NewString()), ttl0))
-	assert.Nil(uut.CacheSegment(utCtxt, entry1, []byte(uuid.NewString()), ttl1))
-	assert.Nil(uut.CacheSegment(utCtxt, entry2, []byte(uuid.NewString()), ttl2))
+	assert.Nil(uut.CacheSegment(utCtxt, entry0, ttl0))
+	assert.Nil(uut.CacheSegment(utCtxt, entry1, ttl1))
+	assert.Nil(uut.CacheSegment(utCtxt, entry2, ttl2))
 
 	uutCast, ok := uut.(*inProcessSegmentCacheImpl)
 	assert.True(ok)
@@ -93,7 +114,9 @@ func TestLocalSegmentCacheManualCachePurgeTrigger(t *testing.T) {
 	purgeTime := startTime
 	assert.Nil(uutCast.purgeExpiredEntry(utCtxt, purgeTime))
 	{
-		entries, err := uut.GetSegments(utCtxt, []string{entry0, entry1, entry2})
+		entries, err := uut.GetSegments(
+			utCtxt, []common.VideoSegment{entry0.VideoSegment, entry1.VideoSegment, entry2.VideoSegment},
+		)
 		assert.Nil(err)
 		assert.Len(entries, 3)
 	}
@@ -101,24 +124,28 @@ func TestLocalSegmentCacheManualCachePurgeTrigger(t *testing.T) {
 	purgeTime = purgeTime.Add(time.Millisecond * 1250)
 	assert.Nil(uutCast.purgeExpiredEntry(utCtxt, purgeTime))
 	{
-		entries, err := uut.GetSegments(utCtxt, []string{entry0, entry1, entry2})
+		entries, err := uut.GetSegments(
+			utCtxt, []common.VideoSegment{entry0.VideoSegment, entry1.VideoSegment, entry2.VideoSegment},
+		)
 		assert.Nil(err)
 		assert.Len(entries, 2)
-		_, err = uut.GetSegment(utCtxt, entry0)
+		_, err = uut.GetSegment(utCtxt, entry0.VideoSegment)
 		assert.NotNil(err)
 	}
 
 	purgeTime = purgeTime.Add(time.Millisecond * 2500)
 	assert.Nil(uutCast.purgeExpiredEntry(utCtxt, purgeTime))
 	{
-		entries, err := uut.GetSegments(utCtxt, []string{entry0, entry1, entry2})
+		entries, err := uut.GetSegments(
+			utCtxt, []common.VideoSegment{entry0.VideoSegment, entry1.VideoSegment, entry2.VideoSegment},
+		)
 		assert.Nil(err)
 		assert.Len(entries, 1)
-		_, err = uut.GetSegment(utCtxt, entry0)
+		_, err = uut.GetSegment(utCtxt, entry0.VideoSegment)
 		assert.NotNil(err)
-		_, err = uut.GetSegment(utCtxt, entry1)
+		_, err = uut.GetSegment(utCtxt, entry1.VideoSegment)
 		assert.NotNil(err)
-		_, err = uut.GetSegment(utCtxt, entry2)
+		_, err = uut.GetSegment(utCtxt, entry2.VideoSegment)
 		assert.Nil(err)
 	}
 }
@@ -132,19 +159,30 @@ func TestLocalSegmentCacheAutoCachePurge(t *testing.T) {
 	assert.Nil(err)
 
 	// Setup test entries
-	entry0 := uuid.NewString()
+	entry0 := common.VideoSegmentWithData{
+		VideoSegment: common.VideoSegment{ID: uuid.NewString(), SourceID: uuid.NewString()},
+		Content:      []byte(uuid.NewString()),
+	}
 	ttl0 := time.Millisecond * 50
-	entry1 := uuid.NewString()
+	entry1 := common.VideoSegmentWithData{
+		VideoSegment: common.VideoSegment{ID: uuid.NewString(), SourceID: uuid.NewString()},
+		Content:      []byte(uuid.NewString()),
+	}
 	ttl1 := time.Millisecond * 140
-	entry2 := uuid.NewString()
+	entry2 := common.VideoSegmentWithData{
+		VideoSegment: common.VideoSegment{ID: uuid.NewString(), SourceID: uuid.NewString()},
+		Content:      []byte(uuid.NewString()),
+	}
 	ttl2 := time.Millisecond * 240
-	assert.Nil(uut.CacheSegment(utCtxt, entry0, []byte(uuid.NewString()), ttl0))
-	assert.Nil(uut.CacheSegment(utCtxt, entry1, []byte(uuid.NewString()), ttl1))
-	assert.Nil(uut.CacheSegment(utCtxt, entry2, []byte(uuid.NewString()), ttl2))
+	assert.Nil(uut.CacheSegment(utCtxt, entry0, ttl0))
+	assert.Nil(uut.CacheSegment(utCtxt, entry1, ttl1))
+	assert.Nil(uut.CacheSegment(utCtxt, entry2, ttl2))
 
 	// Verify all entry are in place
 	{
-		entries, err := uut.GetSegments(utCtxt, []string{entry0, entry1, entry2})
+		entries, err := uut.GetSegments(
+			utCtxt, []common.VideoSegment{entry0.VideoSegment, entry1.VideoSegment, entry2.VideoSegment},
+		)
 		assert.Nil(err)
 		assert.Len(entries, 3)
 	}
@@ -152,24 +190,28 @@ func TestLocalSegmentCacheAutoCachePurge(t *testing.T) {
 	// Verify first entry is gone
 	time.Sleep(time.Millisecond * 120)
 	{
-		entries, err := uut.GetSegments(utCtxt, []string{entry0, entry1, entry2})
+		entries, err := uut.GetSegments(
+			utCtxt, []common.VideoSegment{entry0.VideoSegment, entry1.VideoSegment, entry2.VideoSegment},
+		)
 		assert.Nil(err)
 		assert.Len(entries, 2)
-		_, err = uut.GetSegment(utCtxt, entry0)
+		_, err = uut.GetSegment(utCtxt, entry0.VideoSegment)
 		assert.NotNil(err)
 	}
 
 	// Verify second entry is gone
 	time.Sleep(time.Millisecond * 90)
 	{
-		entries, err := uut.GetSegments(utCtxt, []string{entry0, entry1, entry2})
+		entries, err := uut.GetSegments(
+			utCtxt, []common.VideoSegment{entry0.VideoSegment, entry1.VideoSegment, entry2.VideoSegment},
+		)
 		assert.Nil(err)
 		assert.Len(entries, 1)
-		_, err = uut.GetSegment(utCtxt, entry0)
+		_, err = uut.GetSegment(utCtxt, entry0.VideoSegment)
 		assert.NotNil(err)
-		_, err = uut.GetSegment(utCtxt, entry1)
+		_, err = uut.GetSegment(utCtxt, entry1.VideoSegment)
 		assert.NotNil(err)
-		_, err = uut.GetSegment(utCtxt, entry2)
+		_, err = uut.GetSegment(utCtxt, entry2.VideoSegment)
 		assert.Nil(err)
 	}
 }
@@ -185,49 +227,60 @@ func TestMemcachedSegmentCacheBasicSanity(t *testing.T) {
 
 	// Case 0: no segments cached
 	{
-		_, err := uut.GetSegment(utCtxt, uuid.NewString())
+		_, err := uut.GetSegment(
+			utCtxt, common.VideoSegment{ID: uuid.NewString(), SourceID: uuid.NewString()},
+		)
 		assert.NotNil(err)
 	}
 
 	// Case 1: add segment
-	segment0 := uuid.NewString()
-	content0 := []byte(uuid.NewString())
-	assert.Nil(uut.CacheSegment(utCtxt, segment0, content0, time.Second))
+	segment0 := common.VideoSegmentWithData{
+		VideoSegment: common.VideoSegment{ID: uuid.NewString(), SourceID: uuid.NewString()},
+		Content:      []byte(uuid.NewString()),
+	}
+	assert.Nil(uut.CacheSegment(utCtxt, segment0, time.Second))
 	{
-		content, err := uut.GetSegment(utCtxt, segment0)
+		content, err := uut.GetSegment(utCtxt, segment0.VideoSegment)
 		assert.Nil(err)
-		assert.Equal(content0, content)
-		_, err = uut.GetSegment(utCtxt, uuid.NewString())
+		assert.Equal(segment0.Content, content)
+		_, err = uut.GetSegment(
+			utCtxt, common.VideoSegment{ID: uuid.NewString(), SourceID: uuid.NewString()},
+		)
 		assert.NotNil(err)
 	}
 
 	// Case 2: update segment content
-	content1 := []byte(uuid.NewString())
-	assert.Nil(uut.CacheSegment(utCtxt, segment0, content1, time.Second))
+	segment0Dup := common.VideoSegmentWithData{
+		VideoSegment: segment0.VideoSegment,
+		Content:      []byte(uuid.NewString()),
+	}
+	assert.Nil(uut.CacheSegment(utCtxt, segment0Dup, time.Second))
 	{
-		content, err := uut.GetSegment(utCtxt, segment0)
+		content, err := uut.GetSegment(utCtxt, segment0Dup.VideoSegment)
 		assert.Nil(err)
-		assert.Equal(content1, content)
+		assert.Equal(segment0Dup.Content, content)
 	}
 
 	// Case 3: add segment
-	segment2 := uuid.NewString()
-	content2 := []byte(uuid.NewString())
-	assert.Nil(uut.CacheSegment(utCtxt, segment2, content2, time.Second))
+	segment2 := common.VideoSegmentWithData{
+		VideoSegment: common.VideoSegment{ID: uuid.NewString(), SourceID: uuid.NewString()},
+		Content:      []byte(uuid.NewString()),
+	}
+	assert.Nil(uut.CacheSegment(utCtxt, segment2, time.Second))
 	{
-		content, err := uut.GetSegment(utCtxt, segment2)
+		content, err := uut.GetSegment(utCtxt, segment2.VideoSegment)
 		assert.Nil(err)
-		assert.Equal(content2, content)
+		assert.Equal(segment2.Content, content)
 	}
 
 	// Case 4: delete from cache
-	assert.Nil(uut.PurgeSegments(utCtxt, []string{segment0}))
+	assert.Nil(uut.PurgeSegments(utCtxt, []common.VideoSegment{segment0.VideoSegment}))
 	{
-		checkIDs := []string{segment0, segment2}
+		checkIDs := []common.VideoSegment{segment0.VideoSegment, segment2.VideoSegment}
 		cached, err := uut.GetSegments(utCtxt, checkIDs)
 		assert.Nil(err)
 		assert.Len(cached, 1)
-		assert.Contains(cached, segment2)
+		assert.Contains(cached, segment2.ID)
 	}
 }
 
@@ -241,14 +294,18 @@ func TestMemcachedSegmentCacheAutoCachePurge(t *testing.T) {
 	assert.Nil(err)
 
 	// Case 0: add segment
-	segment0 := uuid.NewString()
-	content0 := []byte(uuid.NewString())
-	assert.Nil(uut.CacheSegment(utCtxt, segment0, content0, time.Second))
+	segment0 := common.VideoSegmentWithData{
+		VideoSegment: common.VideoSegment{ID: uuid.NewString(), SourceID: uuid.NewString()},
+		Content:      []byte(uuid.NewString()),
+	}
+	assert.Nil(uut.CacheSegment(utCtxt, segment0, time.Second))
 	{
-		content, err := uut.GetSegment(utCtxt, segment0)
+		content, err := uut.GetSegment(utCtxt, segment0.VideoSegment)
 		assert.Nil(err)
-		assert.Equal(content0, content)
-		_, err = uut.GetSegment(utCtxt, uuid.NewString())
+		assert.Equal(segment0.Content, content)
+		_, err = uut.GetSegment(
+			utCtxt, common.VideoSegment{ID: uuid.NewString(), SourceID: uuid.NewString()},
+		)
 		assert.NotNil(err)
 	}
 
@@ -256,7 +313,7 @@ func TestMemcachedSegmentCacheAutoCachePurge(t *testing.T) {
 
 	// Case 1: segment should be gone
 	{
-		_, err = uut.GetSegment(utCtxt, segment0)
+		_, err = uut.GetSegment(utCtxt, segment0.VideoSegment)
 		assert.NotNil(err)
 	}
 }

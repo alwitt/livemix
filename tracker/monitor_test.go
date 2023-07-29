@@ -3,7 +3,6 @@ package tracker_test
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"testing"
 	"time"
 
@@ -97,23 +96,21 @@ func TestSourceHLSMonitor(t *testing.T) {
 	mockSegReader.On(
 		"ReadSegment",
 		mock.AnythingOfType("*context.cancelCtx"),
-		mock.AnythingOfType("string"),
-		mock.AnythingOfType("*url.URL"),
+		mock.AnythingOfType("common.VideoSegment"),
 		mock.AnythingOfType("utils.SegmentReturnCallback"),
 	).Run(func(args mock.Arguments) {
 		// Parse the parameters
-		segmentID := args.Get(1).(string)
-		segmentURL := args.Get(2).(*url.URL)
-		segmentNameToID[segmentURL.String()] = segmentID
+		segment := args.Get(1).(common.VideoSegment)
+		segmentNameToID[segment.URI] = segment.ID
 		log.Debugf(
 			"=================== READING %s for %s ==================================",
-			segmentURL.String(),
-			segmentID,
+			segment.URI,
+			segment.ID,
 		)
 
 		// Trigger the callback to return the read "segment"
-		returnCB := args.Get(3).(utils.SegmentReturnCallback)
-		assert.Nil(returnCB(utCtxt, segmentID, segmentData[segmentURL.String()]))
+		returnCB := args.Get(2).(utils.SegmentReturnCallback)
+		assert.Nil(returnCB(utCtxt, segment.ID, segmentData[segment.URI]))
 	}).Return(nil).Times(5)
 
 	// Case 0: registering new segments
@@ -148,7 +145,9 @@ func TestSourceHLSMonitor(t *testing.T) {
 		segURL := fmt.Sprintf("file:///%s", segmentName)
 		segID, ok := segmentNameToID[segURL]
 		assert.True(ok)
-		content, err := testCache.GetSegment(utCtxt, segID)
+		content, err := testCache.GetSegment(
+			utCtxt, common.VideoSegment{ID: segID, SourceID: testSource.ID},
+		)
 		assert.Nil(err)
 		assert.EqualValues(segmentData[segURL], content)
 	}
@@ -186,7 +185,9 @@ func TestSourceHLSMonitor(t *testing.T) {
 		segURL := fmt.Sprintf("file:///%s", segmentName)
 		segID, ok := segmentNameToID[segURL]
 		assert.True(ok)
-		content, err := testCache.GetSegment(utCtxt, segID)
+		content, err := testCache.GetSegment(
+			utCtxt, common.VideoSegment{ID: segID, SourceID: testSource.ID},
+		)
 		assert.Nil(err)
 		assert.EqualValues(segmentData[segURL], content)
 	}

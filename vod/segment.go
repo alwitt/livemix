@@ -3,7 +3,6 @@ package vod
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"time"
 
 	"github.com/alwitt/goutils"
@@ -73,7 +72,7 @@ func (m *segmentManagerImpl) GetSegment(
 	logTags := m.GetLogTagsForContext(ctxt)
 
 	// Check cache first
-	content, err := m.cache.GetSegment(ctxt, target.ID)
+	content, err := m.cache.GetSegment(ctxt, target)
 	if err == nil {
 		return content, nil
 	}
@@ -86,6 +85,7 @@ func (m *segmentManagerImpl) GetSegment(
 		log.
 			WithError(err).
 			WithFields(logTags).
+			WithField("source-id", target.SourceID).
 			WithField("segment", target.Name).
 			Error("Segment read failure")
 		return nil, err
@@ -99,19 +99,11 @@ func (m *segmentManagerImpl) GetSegment(
 	}
 
 	// Request reading segment from source
-	parsedURI, err := url.Parse(target.URI)
-	if err != nil {
+	if err := m.reader.ReadSegment(ctxt, target, readSegmentCB); err != nil {
 		log.
 			WithError(err).
 			WithFields(logTags).
-			WithField("segment-uri", target.URI).
-			Error("Segment read failed on invalud URI")
-		return nil, err
-	}
-	if err := m.reader.ReadSegment(ctxt, target.ID, parsedURI, readSegmentCB); err != nil {
-		log.
-			WithError(err).
-			WithFields(logTags).
+			WithField("source-id", target.SourceID).
 			WithField("segment", target.Name).
 			WithField("segment-uri", target.URI).
 			Error("Segment read request could not be submitted")
@@ -125,6 +117,7 @@ func (m *segmentManagerImpl) GetSegment(
 		log.
 			WithError(err).
 			WithFields(logTags).
+			WithField("source-id", target.SourceID).
 			WithField("segment", target.Name).
 			WithField("segment-uri", target.URI).
 			Error("Segment read request failed")
@@ -135,6 +128,7 @@ func (m *segmentManagerImpl) GetSegment(
 			log.
 				WithError(err).
 				WithFields(logTags).
+				WithField("source-id", target.SourceID).
 				WithField("segment", target.Name).
 				WithField("segment-uri", target.URI).
 				Error("Segment read request failed")
@@ -144,10 +138,14 @@ func (m *segmentManagerImpl) GetSegment(
 	}
 
 	// Record in cache for future reads
-	if err := m.cache.CacheSegment(ctxt, target.ID, content, m.cacheTTL); err != nil {
+	err = m.cache.CacheSegment(
+		ctxt, common.VideoSegmentWithData{VideoSegment: target, Content: content}, m.cacheTTL,
+	)
+	if err != nil {
 		log.
 			WithError(err).
 			WithFields(logTags).
+			WithField("source-id", target.SourceID).
 			WithField("segment", target.Name).
 			Error("Unable to cache newly read segment content")
 	}

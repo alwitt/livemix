@@ -3,12 +3,13 @@ package utils_test
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/alwitt/livemix/common"
+	"github.com/alwitt/livemix/hls"
 	"github.com/alwitt/livemix/mocks"
 	"github.com/alwitt/livemix/utils"
 	"github.com/apex/log"
@@ -55,9 +56,10 @@ func TestReadingSegmentFromFile(t *testing.T) {
 
 	// Read the file
 	testID := uuid.NewString()
-	testFileURL, err := url.Parse(fmt.Sprintf("file://%s", testFile))
-	assert.Nil(err)
-	assert.Nil(uut.ReadSegment(utCtxt, testID, testFileURL, processRead))
+	testFileURL := fmt.Sprintf("file://%s", testFile)
+	assert.Nil(uut.ReadSegment(
+		utCtxt, common.VideoSegment{ID: testID, Segment: hls.Segment{URI: testFileURL}}, processRead,
+	))
 
 	// Wait for process complete
 	{
@@ -101,8 +103,7 @@ func TestReadingSegmentFromS3(t *testing.T) {
 	testContent := []byte(uuid.NewString())
 	testBucket := uuid.NewString()
 	testObjectPath := fmt.Sprintf("segments/%s.ts", testID)
-	testSegmentURL, err := url.Parse(fmt.Sprintf("s3://%s/%s", testBucket, testObjectPath))
-	assert.Nil(err)
+	testSegmentURL := fmt.Sprintf("s3://%s/%s", testBucket, testObjectPath)
 
 	// Prepare mock
 	mockS3.On(
@@ -113,7 +114,11 @@ func TestReadingSegmentFromS3(t *testing.T) {
 	).Return(testContent, nil).Once()
 
 	// Make request
-	assert.Nil(uut.ReadSegment(utCtxt, testID, testSegmentURL, processRead))
+	assert.Nil(uut.ReadSegment(
+		utCtxt,
+		common.VideoSegment{ID: testID, Segment: hls.Segment{URI: testSegmentURL}},
+		processRead,
+	))
 
 	// Wait for process complete
 	{

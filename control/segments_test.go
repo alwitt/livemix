@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/control"
 	"github.com/alwitt/livemix/hls"
 	"github.com/alwitt/livemix/mocks"
@@ -40,13 +41,21 @@ func TestLiveSteamSegmentManagerRecordSegment(t *testing.T) {
 		testSourceID,
 		testSegment,
 	).Return(testSegmentID, nil).Once()
+	mockDB.On(
+		"GetLiveStreamSegment",
+		mock.AnythingOfType("*context.emptyCtx"),
+		testSegmentID,
+	).Return(common.VideoSegment{ID: testSegmentID, SourceID: testSourceID}, nil).Once()
 	mockCache.On(
 		"CacheSegment",
 		mock.AnythingOfType("*context.emptyCtx"),
-		testSegmentID,
-		testContent,
+		mock.AnythingOfType("common.VideoSegmentWithData"),
 		time.Minute,
-	).Return(nil).Once()
+	).Run(func(args mock.Arguments) {
+		cacheSegment := args.Get(1).(common.VideoSegmentWithData)
+		assert.Equal(testSourceID, cacheSegment.SourceID)
+		assert.EqualValues(testContent, cacheSegment.Content)
+	}).Return(nil).Once()
 
 	// Registry a segment
 	assert.Nil(uut.RegisterLiveStreamSegment(utCtxt, testSourceID, testSegment, testContent))

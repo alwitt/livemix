@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/alwitt/goutils"
+	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/db"
 	"github.com/alwitt/livemix/hls"
 	"github.com/alwitt/livemix/utils"
@@ -147,6 +148,17 @@ func (m *liveStreamSegmentManagerImpl) RegisterLiveStreamSegment(
 		return err
 	}
 
+	segmentEntry, err := dbClient.GetLiveStreamSegment(ctxt, segmentID)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", sourceID).
+			WithField("segment-name", segment.Name).
+			Error("Failed to read segment back")
+		return err
+	}
+
 	log.
 		WithFields(logTags).
 		WithField("source-id", sourceID).
@@ -155,7 +167,12 @@ func (m *liveStreamSegmentManagerImpl) RegisterLiveStreamSegment(
 		Debug("Recorded new segment")
 
 	// Cache segment record
-	if err := m.cache.CacheSegment(ctxt, segmentID, content, m.trackingWindow); err != nil {
+	err = m.cache.CacheSegment(
+		ctxt,
+		common.VideoSegmentWithData{VideoSegment: segmentEntry, Content: content},
+		m.trackingWindow,
+	)
+	if err != nil {
 		log.
 			WithError(err).
 			WithFields(logTags).
