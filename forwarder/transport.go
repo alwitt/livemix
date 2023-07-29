@@ -14,20 +14,6 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-/*
-TODO FIXME:
-
-Add metrics:
-* segment forward action
-	* total segments - count
-	* total bytes - count
-
-Labels:
-* "target": "s3" or "http"
-* "source": video source ID
-
-*/
-
 // SegmentSender video segment transmit client
 type SegmentSender interface {
 	/*
@@ -47,18 +33,25 @@ type httpSegmentSender struct {
 	goutils.Component
 	receiverURI *url.URL
 	client      *resty.Client
+
+	/* Metrics Collection Agents */
+	segmentIOMetrics utils.SegmentMetricsAgent
 }
 
 /*
 NewHTTPSegmentSender define new HTTP video segment transmit client
 
+	@param ctxt context.Context - execution context
 	@param segmentReceiverURI *url.URL - the URL to send the segments to
 	@param httpClient *resty.Client - HTTP client to use
+	@param segmentMetrics utils.SegmentMetricsAgent - segment forwarding metrics helper agent
 	@returns new sender instance
 */
 func NewHTTPSegmentSender(
+	ctxt context.Context,
 	segmentReceiverURI *url.URL,
 	httpClient *resty.Client,
+	segmentMetrics utils.SegmentMetricsAgent,
 ) (SegmentSender, error) {
 	logTags := log.Fields{
 		"module":    "forwarder",
@@ -68,16 +61,19 @@ func NewHTTPSegmentSender(
 
 	// The assumption is that the HTTP client has been prepared for operation
 
-	return &httpSegmentSender{
+	instance := &httpSegmentSender{
 		Component: goutils.Component{
 			LogTags: logTags,
 			LogTagModifiers: []goutils.LogMetadataModifier{
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
 		},
-		receiverURI: segmentReceiverURI,
-		client:      httpClient,
-	}, nil
+		receiverURI:      segmentReceiverURI,
+		client:           httpClient,
+		segmentIOMetrics: segmentMetrics,
+	}
+
+	return instance, nil
 }
 
 func (s *httpSegmentSender) ForwardSegment(
@@ -137,6 +133,12 @@ func (s *httpSegmentSender) ForwardSegment(
 		WithField("segment-name", segment.Name).
 		Debug("Segment forwarded")
 
+	// Update metrics
+	if s.segmentIOMetrics != nil {
+		s.segmentIOMetrics.RecordSegment(len(segment.Content), map[string]string{
+			"type": "http", "source": segment.SourceID,
+		})
+	}
 	return nil
 }
 
@@ -148,33 +150,44 @@ type s3SegmentSender struct {
 	goutils.Component
 	client  utils.S3Client
 	dbConns db.ConnectionManager
+
+	/* Metrics Collection Agents */
+	segmentIOMetrics utils.SegmentMetricsAgent
 }
 
 /*
 NewS3SegmentSender define new S3 video segment transmit client
 
+	@param ctxt context.Context - execution context
 	@param s3Client utils.S3Client - S3 operations client
 	@param dbConns db.ConnectionManager - DB connection manager
+	@param segmentMetrics utils.SegmentMetricsAgent - segment forwarding metrics helper agent
 	@returns new sender instance
 */
 func NewS3SegmentSender(
-	s3Client utils.S3Client, dbConns db.ConnectionManager,
+	ctxt context.Context,
+	s3Client utils.S3Client,
+	dbConns db.ConnectionManager,
+	segmentMetrics utils.SegmentMetricsAgent,
 ) (SegmentSender, error) {
 	logTags := log.Fields{
 		"module":    "forwarder",
 		"component": "s3-segment-sender",
 	}
 
-	return &s3SegmentSender{
+	instance := &s3SegmentSender{
 		Component: goutils.Component{
 			LogTags: logTags,
 			LogTagModifiers: []goutils.LogMetadataModifier{
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
 		},
-		client:  s3Client,
-		dbConns: dbConns,
-	}, nil
+		client:           s3Client,
+		dbConns:          dbConns,
+		segmentIOMetrics: segmentMetrics,
+	}
+
+	return instance, nil
 }
 
 func (s *s3SegmentSender) ForwardSegment(
@@ -252,5 +265,11 @@ func (s *s3SegmentSender) ForwardSegment(
 		WithField("target-object-key", targetObjectKey).
 		Debug("Video segment uploaded")
 
+	// Update metrics
+	if s.segmentIOMetrics != nil {
+		s.segmentIOMetrics.RecordSegment(len(segment.Content), map[string]string{
+			"type": "s3", "source": segment.SourceID,
+		})
+	}
 	return nil
 }

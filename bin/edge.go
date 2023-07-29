@@ -113,6 +113,24 @@ func DefineEdgeNode(
 		return theNode, err
 	}
 
+	// Define the segment forwarding tracking metrics right now
+	segmentForwarderMetrics, err := utils.NewSegmentMetricsAgent(
+		parentCtxt,
+		metrics,
+		utils.MetricsNameForwarderSenderSegmentForwardLen,
+		"Tracking total bytes forward by S3 segment forwarder",
+		utils.MetricsNameForwarderSenderSegmentForwardCount,
+		"Tracking total segments forwarded by S3 segment forwarder",
+		[]string{"type", "source"},
+	)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Failed to define segment forwarding metrics helper agent")
+		return theNode, err
+	}
+
 	log.WithFields(logTags).WithField("initialize", initStep).Info("Initialized metrics framework")
 	initStep++
 
@@ -136,7 +154,7 @@ func DefineEdgeNode(
 
 	// Define video segment cache
 	cache, err := utils.NewLocalVideoSegmentCache(
-		parentCtxt, config.SegmentCache.RetentionCheckInt(),
+		parentCtxt, config.SegmentCache.RetentionCheckInt(), metrics,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to define video segment cache")
@@ -290,7 +308,9 @@ func DefineEdgeNode(
 		Info("Initializing live stream segment forwarder")
 
 	// Define live segment HTTP forwarder
-	httpSegmentSender, err := forwarder.NewHTTPSegmentSender(httpForwardTarget, httpClient)
+	httpSegmentSender, err := forwarder.NewHTTPSegmentSender(
+		parentCtxt, httpForwardTarget, httpClient, segmentForwarderMetrics,
+	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create HTTP segment sender")
 		return theNode, err
@@ -339,7 +359,9 @@ func DefineEdgeNode(
 		Info("Initializing recording session segment forwarder")
 
 	// Define recordings segment forwarder
-	s3SegmentSender, err := forwarder.NewS3SegmentSender(s3Client, dbConns)
+	s3SegmentSender, err := forwarder.NewS3SegmentSender(
+		parentCtxt, s3Client, dbConns, segmentForwarderMetrics,
+	)
 	if err != nil {
 		log.
 			WithError(err).
@@ -385,7 +407,7 @@ func DefineEdgeNode(
 	log.WithFields(logTags).WithField("initialize", initStep).Info("Initializing node operator")
 
 	// Define video source operator
-	theNode.operator, err = edge.NewManager(parentCtxt, edgeOperatorConfig)
+	theNode.operator, err = edge.NewManager(parentCtxt, edgeOperatorConfig, metrics)
 	if err != nil {
 		log.
 			WithError(err).
@@ -410,7 +432,7 @@ func DefineEdgeNode(
 
 	// Define video segment reader
 	theNode.segmentReader, err = utils.NewSegmentReader(
-		parentCtxt, config.MonitorConfig.SegmentReaderWorkerCount, nil,
+		parentCtxt, config.MonitorConfig.SegmentReaderWorkerCount, nil, metrics,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create video segment reader")
@@ -437,6 +459,7 @@ func DefineEdgeNode(
 		cache,
 		theNode.segmentReader,
 		theNode.operator.NewSegmentFromSource,
+		metrics,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create HLS monitor")
@@ -480,7 +503,9 @@ func DefineEdgeNode(
 		Info("Initializing HTTP VOD server support components")
 
 	// Define live VOD playlist builder
-	plBuilder, err := vod.NewPlaylistBuilder(dbConns, config.VODConfig.LiveVODSegmentCount)
+	plBuilder, err := vod.NewPlaylistBuilder(
+		parentCtxt, dbConns, config.VODConfig.LiveVODSegmentCount, metrics,
+	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create VOD playlist builder")
 		return theNode, err
@@ -488,7 +513,7 @@ func DefineEdgeNode(
 
 	// Define segment manager
 	segmentMgnt, err := vod.NewSegmentManager(
-		cache, theNode.segmentReader, config.VODConfig.SegmentCacheTTL(),
+		parentCtxt, cache, theNode.segmentReader, config.VODConfig.SegmentCacheTTL(), metrics,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create video segment manager")

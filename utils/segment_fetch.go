@@ -47,6 +47,9 @@ type segmentReader struct {
 	workerContext    context.Context
 	workerCtxtCancel context.CancelFunc
 	s3               S3Client
+
+	/* Metrics Collection Agents */
+	segmentIOMetrics SegmentMetricsAgent
 }
 
 /*
@@ -55,10 +58,11 @@ NewSegmentReader define new SegmentReader
 	@param parentContext context.Context - context from which to define the worker context
 	@param workerCount int - number of parallel read worker to define
 	@param s3 S3Client - S3 client for operating against the S3 server
+	@param metrics goutils.MetricsCollector - metrics framework client
 	@return new SegmentReader
 */
 func NewSegmentReader(
-	parentContext context.Context, workerCount int, s3 S3Client,
+	parentContext context.Context, workerCount int, s3 S3Client, metrics goutils.MetricsCollector,
 ) (SegmentReader, error) {
 	logTags := log.Fields{
 		"module":    "utils",
@@ -86,6 +90,7 @@ func NewSegmentReader(
 		workerContext:    workerCtxt,
 		workerCtxtCancel: cancel,
 		s3:               s3,
+		segmentIOMetrics: nil,
 	}
 
 	// Define supported tasks
@@ -100,6 +105,26 @@ func NewSegmentReader(
 	if err := workers.StartEventLoop(&reader.wg); err != nil {
 		log.WithError(err).WithFields(logTags).Error("Unable to start the worker thread pool")
 		return nil, err
+	}
+
+	// Install metrics
+	if metrics != nil {
+		reader.segmentIOMetrics, err = NewSegmentMetricsAgent(
+			parentContext,
+			metrics,
+			MetricsNameUtilFetcherSegmentLen,
+			"Tracking total bytes read by video segment fetcher",
+			MetricsNameUtilFetcherIOCount,
+			"Tracking total segments read by video segment fetcher",
+			[]string{"type", "source"},
+		)
+		if err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				Error("Unable to define segment IO tracking metrics helper agent")
+			return nil, err
+		}
 	}
 
 	return reader, nil
@@ -155,20 +180,6 @@ func (r *segmentReader) readSegment(params interface{}) error {
 	log.WithError(err).WithFields(logTags).Error("'readSegment' processing failure")
 	return err
 }
-
-/*
-TODO FIXME:
-
-Add metrics:
-* segment read action:
-  * total bytes - count
-	* total segments - count
-
-Labels:
-* "type": "s3" or "file"
-* "source": video source ID
-
-*/
 
 // coreReadSegment contains the actual logic for the ReadSegment function
 func (r *segmentReader) coreReadSegment(
@@ -245,6 +256,13 @@ func (r *segmentReader) readSegmentFromFile(
 			Error("Unable to pass on read segment content")
 		return err
 	}
+
+	// Update metrics
+	if r.segmentIOMetrics != nil {
+		r.segmentIOMetrics.RecordSegment(len(content), map[string]string{
+			"type": "file", "source": segment.SourceID,
+		})
+	}
 	return nil
 }
 
@@ -318,6 +336,13 @@ func (r *segmentReader) readSegmentFromS3(
 			WithField("segment-uri", fetchURI.String()).
 			Error("Unable to pass on read segment content")
 		return err
+	}
+
+	// Update metrics
+	if r.segmentIOMetrics != nil {
+		r.segmentIOMetrics.RecordSegment(len(content), map[string]string{
+			"type": "s3", "source": segment.SourceID,
+		})
 	}
 	return nil
 }

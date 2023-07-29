@@ -14,18 +14,22 @@ import (
 	"github.com/alwitt/livemix/db"
 	"github.com/alwitt/livemix/utils"
 	"github.com/apex/log"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 /*
 TODO FIXME:
 
-Need pure gauge with no labels
+A new timer is needed
 
 Add metrics:
 * total registered video source - gauge
 * total video sources able to receive inbound requests - gauge
 * total registered recordings - gauge
 * total active recordings - gauge
+
+Labels:
+* "control": "true"
 
 */
 
@@ -259,9 +263,16 @@ type systemManagerImpl struct {
 	s3                          utils.S3Client
 	maxAgeForSourceStatusReport time.Duration
 	segmentCleanupTimer         goutils.IntervalTimer
+	metricsLogTimer             goutils.IntervalTimer
 	wg                          sync.WaitGroup
 	workerCtxt                  context.Context
 	workerCtxtCancel            context.CancelFunc
+
+	/* Metrics Collection Agents */
+	registeredSourcesMetrics    *prometheus.GaugeVec
+	connectedSourcesMetrics     *prometheus.GaugeVec
+	registeredRecordingsMetrics *prometheus.GaugeVec
+	activeRecordingsMetrics     *prometheus.GaugeVec
 }
 
 /*
@@ -276,6 +287,7 @@ NewManager define a new system manager
 	    within this time window before a request is made. If not, the video source is treated as
 	    connected.
 	@param segmentCleanupInt time.Duration - time interval between segment cleanup runs
+	@param metrics goutils.MetricsCollector - metrics framework client
 	@returns new manager
 */
 func NewManager(
@@ -285,6 +297,7 @@ func NewManager(
 	s3 utils.S3Client,
 	maxAgeForSourceStatusReport time.Duration,
 	segmentCleanupInt time.Duration,
+	metrics goutils.MetricsCollector,
 ) (SystemManager, error) {
 	logTags := log.Fields{"module": "control", "component": "system-manager"}
 
@@ -304,12 +317,12 @@ func NewManager(
 
 	// Define periodic timer for clearing out recording segments not associated with any
 	// recordings
-	timerLogTags := log.Fields{"sub-module": "recording-segment-cleanup-timer"}
+	cleanupTimerLogTags := log.Fields{"sub-module": "recording-segment-cleanup-timer"}
 	for lKey, lVal := range logTags {
-		timerLogTags[lKey] = lVal
+		cleanupTimerLogTags[lKey] = lVal
 	}
 	cleanupTimer, err := goutils.GetIntervalTimerInstance(
-		instance.workerCtxt, &instance.wg, timerLogTags,
+		instance.workerCtxt, &instance.wg, cleanupTimerLogTags,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to define segment cleanup timer")
@@ -317,12 +330,88 @@ func NewManager(
 	}
 	instance.segmentCleanupTimer = cleanupTimer
 
+	// Define periodic timer for reporting metrics
+	metricsTimerLogTags := log.Fields{"sub-module": "metrics-reporting-timer"}
+	for lKey, lVal := range logTags {
+		metricsTimerLogTags[lKey] = lVal
+	}
+	metricsTimer, err := goutils.GetIntervalTimerInstance(
+		instance.workerCtxt, &instance.wg, metricsTimerLogTags,
+	)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to define metrics logging timer")
+		return nil, err
+	}
+	instance.metricsLogTimer = metricsTimer
+
 	// -----------------------------------------------------------------------------
 	// Start timer to periodically cleanup recording segments not related to any recordings
 	err = cleanupTimer.Start(segmentCleanupInt, instance.PurgeUnassociatedRecordingSegments, false)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to start segment cleanup timer")
 		return nil, err
+	}
+	err = metricsTimer.Start(time.Second*30, instance.writeMetrics, false)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to start metrics logging timer")
+		return nil, err
+	}
+
+	// -----------------------------------------------------------------------------
+	// Install metrics
+	if metrics != nil {
+		instance.registeredSourcesMetrics, err = metrics.InstallCustomGaugeVecMetrics(
+			parentCtxt,
+			utils.MetricsNameControlManagerRegisteredSourceCount,
+			"Tracking registered video sources",
+			[]string{"controller"},
+		)
+		if err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				Error("Unable to define registered video sources tracking metrics")
+			return nil, err
+		}
+		instance.connectedSourcesMetrics, err = metrics.InstallCustomGaugeVecMetrics(
+			parentCtxt,
+			utils.MetricsNameControlManagerConnectedSourceCount,
+			"Tracking connected video sources",
+			[]string{"controller"},
+		)
+		if err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				Error("Unable to define connected video sources tracking metrics")
+			return nil, err
+		}
+		instance.registeredRecordingsMetrics, err = metrics.InstallCustomGaugeVecMetrics(
+			parentCtxt,
+			utils.MetricsNameControlManagerRegisteredRecordingCount,
+			"Tracking registered video recording sessions",
+			[]string{"controller"},
+		)
+		if err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				Error("Unable to define registered video recording sessions tracking metrics")
+			return nil, err
+		}
+		instance.activeRecordingsMetrics, err = metrics.InstallCustomGaugeVecMetrics(
+			parentCtxt,
+			utils.MetricsNameControlManagerActiveRecordingCount,
+			"Tracking active video recording sessions",
+			[]string{"controller"},
+		)
+		if err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				Error("Unable to define active video recording sessions tracking metrics")
+			return nil, err
+		}
 	}
 
 	return instance, nil
@@ -348,6 +437,9 @@ func (m *systemManagerImpl) canRequestVideoSource(source common.VideoSource) err
 
 func (m *systemManagerImpl) Stop(ctxt context.Context) error {
 	m.workerCtxtCancel()
+	if err := m.metricsLogTimer.Stop(); err != nil {
+		return err
+	}
 	if err := m.segmentCleanupTimer.Stop(); err != nil {
 		return err
 	}
@@ -904,6 +996,63 @@ func (m *systemManagerImpl) PurgeUnassociatedRecordingSegments() error {
 			WithField("recording-bucket", bucketName).
 			WithField("segments", len(segments)).
 			Info("Deleted unassociated recording segments in bucket")
+	}
+
+	return nil
+}
+
+func (m *systemManagerImpl) writeMetrics() error {
+	logTags := m.GetLogTagsForContext(m.workerCtxt)
+
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+
+	allSources, err := dbClient.ListVideoSources(m.workerCtxt)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to fetch all video sources")
+		return err
+	}
+
+	connectedSources := 0
+	totalRecordings := 0
+	activeRecordings := 0
+	for _, oneSource := range allSources {
+		if m.canRequestVideoSource(oneSource) == nil {
+			connectedSources++
+		}
+		recordings, err := dbClient.ListRecordingSessionsOfSource(m.workerCtxt, oneSource.ID, false)
+		if err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				WithField("source-id", oneSource.ID).
+				Error("Failed to fetch all recording of source")
+			return err
+		}
+		totalRecordings += len(recordings)
+		for _, oneRecording := range recordings {
+			if oneRecording.Active == 1 {
+				activeRecordings++
+			}
+		}
+	}
+
+	// Update metrics
+	if m.registeredSourcesMetrics != nil && m.connectedSourcesMetrics != nil {
+		m.registeredSourcesMetrics.
+			With(prometheus.Labels{"controller": "true"}).
+			Set(float64(len(allSources)))
+		m.connectedSourcesMetrics.
+			With(prometheus.Labels{"controller": "true"}).
+			Set(float64(connectedSources))
+	}
+	if m.registeredRecordingsMetrics != nil && m.activeRecordingsMetrics != nil {
+		m.registeredRecordingsMetrics.
+			With(prometheus.Labels{"controller": "true"}).
+			Set(float64(totalRecordings))
+		m.activeRecordingsMetrics.
+			With(prometheus.Labels{"controller": "true"}).
+			Set(float64(activeRecordings))
 	}
 
 	return nil

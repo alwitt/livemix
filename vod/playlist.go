@@ -8,27 +8,15 @@ import (
 	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/db"
 	"github.com/alwitt/livemix/hls"
+	"github.com/alwitt/livemix/utils"
 	"github.com/apex/log"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // GetReferenceTime helper function to get the reference time
 func GetReferenceTime() (time.Time, error) {
 	return time.Parse("2006-Jan-02", "2023-Jan-01")
 }
-
-/*
-TODO FIXME:
-
-Add metrics:
-* generate playlist action
-	* total playlists - count
-	* total segments - count
-
-Labels:
-* "type": "live" or "replay"
-* "source": video source ID
-
-*/
 
 // PlaylistBuilder construct HLS playlist on demand
 type PlaylistBuilder interface {
@@ -62,34 +50,64 @@ type playlistBuilderImpl struct {
 	// liveStreamSegCount number of segments to include when building a live stream playlist
 	liveStreamSegCount int
 	referenceTime      time.Time
+
+	/* Metrics Collection Agents */
+	playlistBuildMetrics *prometheus.CounterVec
 }
 
 /*
 NewPlaylistBuilder define new playlist builder
 
+	@param ctxt context.Context - execution context
 	@param dbConns db.ConnectionManager - DB connection manager
 	@param liveStreamSegCount int - number of segments to include when building a live stream playlist
+	@param metrics goutils.MetricsCollector - metrics framework client
 	@returns new PlaylistBuilder
 */
 func NewPlaylistBuilder(
-	dbConns db.ConnectionManager, liveStreamSegCount int,
+	ctxt context.Context,
+	dbConns db.ConnectionManager,
+	liveStreamSegCount int,
+	metrics goutils.MetricsCollector,
 ) (PlaylistBuilder, error) {
+	logTags := log.Fields{"module": "vod", "component": "playlist-builder"}
+
 	// Define the reference time from which all sequence numbers are built
 	referenceTime, err := GetReferenceTime()
 	if err != nil {
 		return nil, err
 	}
-	return &playlistBuilderImpl{
+
+	instance := &playlistBuilderImpl{
 		Component: goutils.Component{
-			LogTags: log.Fields{"module": "vod", "component": "playlist-builder"},
+			LogTags: logTags,
 			LogTagModifiers: []goutils.LogMetadataModifier{
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
 		},
-		dbConns:            dbConns,
-		liveStreamSegCount: liveStreamSegCount,
-		referenceTime:      referenceTime,
-	}, nil
+		dbConns:              dbConns,
+		liveStreamSegCount:   liveStreamSegCount,
+		referenceTime:        referenceTime,
+		playlistBuildMetrics: nil,
+	}
+
+	// Install metrics
+	if metrics != nil {
+		instance.playlistBuildMetrics, err = metrics.InstallCustomCounterVecMetrics(
+			ctxt,
+			utils.MetricsNameVODPlaylistBuiltCount,
+			"Tracking number of playlist generated",
+			[]string{"type", "source"},
+		)
+		if err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				Error("Unable to define playlist generation tracking metrics")
+			return nil, err
+		}
+	}
+	return instance, nil
 }
 
 func (b *playlistBuilderImpl) GetLiveStreamPlaylist(
@@ -127,6 +145,10 @@ func (b *playlistBuilderImpl) GetLiveStreamPlaylist(
 		result.AddMediaSequenceVal(b.referenceTime)
 	}
 
+	// Update metrics
+	if b.playlistBuildMetrics != nil {
+		b.playlistBuildMetrics.With(prometheus.Labels{"type": "live", "source": target.ID}).Inc()
+	}
 	return result, nil
 }
 
@@ -175,5 +197,11 @@ func (b *playlistBuilderImpl) GetRecordingStreamPlaylist(
 	defaultMediaSequenceVal := 1
 	result.MediaSequenceVal = &defaultMediaSequenceVal
 
+	// Update metrics
+	if b.playlistBuildMetrics != nil {
+		b.playlistBuildMetrics.
+			With(prometheus.Labels{"type": "replay", "source": recording.SourceID}).
+			Inc()
+	}
 	return result, nil
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/alwitt/livemix/forwarder"
 	"github.com/alwitt/livemix/utils"
 	"github.com/apex/log"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // VideoSourceOperator video source operations manager
@@ -125,6 +126,10 @@ type videoSourceOperatorImpl struct {
 	wg                 sync.WaitGroup
 	workerCtxt         context.Context
 	workerCtxtCancel   context.CancelFunc
+
+	/* Metrics Collection Agents */
+	segmentReadMetrics     utils.SegmentMetricsAgent
+	activeRecordingMetrics *prometheus.GaugeVec
 }
 
 /*
@@ -132,10 +137,11 @@ NewManager define a new video source operator
 
 	@param parentCtxt context.Context - parent execution context
 	@param params VideoSourceOperatorConfig - operator configuration
+	@param metrics goutils.MetricsCollector - metrics framework client
 	@return new operator
 */
 func NewManager(
-	parentCtxt context.Context, params VideoSourceOperatorConfig,
+	parentCtxt context.Context, params VideoSourceOperatorConfig, metrics goutils.MetricsCollector,
 ) (VideoSourceOperator, error) {
 	logTags := log.Fields{
 		"module": "edge", "component": "video-source-operator", "source-id": params.Self.ID,
@@ -150,6 +156,8 @@ func NewManager(
 		},
 		VideoSourceOperatorConfig: params,
 		wg:                        sync.WaitGroup{},
+		segmentReadMetrics:        nil,
+		activeRecordingMetrics:    nil,
 	}
 	instance.workerCtxt, instance.workerCtxtCancel = context.WithCancel(parentCtxt)
 
@@ -224,6 +232,39 @@ func NewManager(
 		return nil, err
 	}
 
+	// -----------------------------------------------------------------------------
+	// Install metrics
+	if metrics != nil {
+		instance.segmentReadMetrics, err = utils.NewSegmentMetricsAgent(
+			parentCtxt,
+			metrics,
+			utils.MetricsNameEdgeManagerSegmentReadLen,
+			"Tracking total segment bytes read by edge manager",
+			utils.MetricsNameEdgeManagerSegmentReadCount,
+			"Tracking total segments read by edge manager",
+			[]string{"source"},
+		)
+		if err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				Error("Unable to define segment IO tracking metrics helper agent")
+			return nil, err
+		}
+		instance.activeRecordingMetrics, err = metrics.InstallCustomGaugeVecMetrics(
+			parentCtxt,
+			utils.MetricsNameEdgeManagerActiveRecordingCount,
+			"Tracking currently active recording",
+			[]string{"source"},
+		)
+		if err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				Error("Unable to define active recording count tracking metrics")
+			return nil, err
+		}
+	}
 	return instance, nil
 }
 
@@ -577,20 +618,6 @@ func (o *videoSourceOperatorImpl) newSegmentFromSource(params interface{}) error
 	return err
 }
 
-/*
-TODO FIXME:
-
-Add metrics:
-* new segment from source:
-	* total segments - count
-	* total bytes - count
-* number of active recordings - gauge
-
-Labels:
-* "source": video source ID
-
-*/
-
 func (o *videoSourceOperatorImpl) handleNewSegmentFromSource(
 	segment common.VideoSegmentWithData,
 ) error {
@@ -628,6 +655,18 @@ func (o *videoSourceOperatorImpl) handleNewSegmentFromSource(
 			WithField("segment", segment.Name).
 			Error("Failed to list active recordings")
 		return err
+	}
+
+	// Update metrics
+	if o.segmentReadMetrics != nil {
+		o.segmentReadMetrics.RecordSegment(
+			len(segment.Content), map[string]string{"source": segment.SourceID},
+		)
+	}
+	if o.activeRecordingMetrics != nil {
+		o.activeRecordingMetrics.
+			With(prometheus.Labels{"source": segment.SourceID}).
+			Set(float64(len(activeRecordings)))
 	}
 
 	if len(activeRecordings) == 0 {

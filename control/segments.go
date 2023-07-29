@@ -13,19 +13,6 @@ import (
 	"github.com/apex/log"
 )
 
-/*
-TODO FIXME:
-
-Add metrics:
-* segment register action:
-	* total segments - count
-	* total bytes - count
-
-Labels:
-* "source": video source ID
-
-*/
-
 // LiveStreamSegmentManager central video segment manager which operates within the
 // system control node
 type LiveStreamSegmentManager interface {
@@ -71,6 +58,9 @@ type liveStreamSegmentManagerImpl struct {
 	workerCtxt       context.Context
 	workerCtxtCancel context.CancelFunc
 	wg               sync.WaitGroup
+
+	/* Metrics Collection Agents */
+	segmentReadMetrics utils.SegmentMetricsAgent
 }
 
 /*
@@ -81,6 +71,7 @@ NewLiveStreamSegmentManager define a new live stream segment manager
 	@param cache utils.VideoSegmentCache - video segment cache
 	@param trackingWindow time.Duration - tracking window is the duration in time a video
 	    segment is tracked. Recorded segments are forgotten after this tracking window.
+	@param metrics goutils.MetricsCollector - metrics framework client
 	@returns new manager
 */
 func NewLiveStreamSegmentManager(
@@ -88,6 +79,7 @@ func NewLiveStreamSegmentManager(
 	dbConns db.ConnectionManager,
 	cache utils.VideoSegmentCache,
 	trackingWindow time.Duration,
+	metrics goutils.MetricsCollector,
 ) (LiveStreamSegmentManager, error) {
 	logTags := log.Fields{"module": "control", "component": "segment-manager"}
 
@@ -98,10 +90,11 @@ func NewLiveStreamSegmentManager(
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
 		},
-		dbConns:        dbConns,
-		cache:          cache,
-		trackingWindow: trackingWindow,
-		wg:             sync.WaitGroup{},
+		dbConns:            dbConns,
+		cache:              cache,
+		trackingWindow:     trackingWindow,
+		wg:                 sync.WaitGroup{},
+		segmentReadMetrics: nil,
 	}
 	instance.workerCtxt, instance.workerCtxtCancel = context.WithCancel(parentCtxt)
 
@@ -119,6 +112,25 @@ func NewLiveStreamSegmentManager(
 		return nil, err
 	}
 
+	// Install metrics
+	if metrics != nil {
+		instance.segmentReadMetrics, err = utils.NewSegmentMetricsAgent(
+			parentCtxt,
+			metrics,
+			utils.MetricsNameControlCentralSegmentMgmtSegmentReadLen,
+			"Tracking total segments bytes received by central segment manager",
+			utils.MetricsNameControlCentralSegmentMgmtSegmentReadCount,
+			"Tracking total segments received by central segment manager",
+			[]string{"source"},
+		)
+		if err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				Error("Unable to define segment IO tracking metrics helper agent")
+			return nil, err
+		}
+	}
 	return instance, nil
 }
 
@@ -183,6 +195,11 @@ func (m *liveStreamSegmentManagerImpl) RegisterLiveStreamSegment(
 		return err
 	}
 
+	// Update metrics
+	if m.segmentReadMetrics != nil {
+		m.segmentReadMetrics.
+			RecordSegment(len(content), map[string]string{"source": segmentEntry.SourceID})
+	}
 	return nil
 }
 

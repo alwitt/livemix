@@ -30,7 +30,7 @@ func TestSegmentManager(t *testing.T) {
 
 	// Case 0: no segment reader provided
 	{
-		uut, err := vod.NewSegmentManager(mockCache, nil, segmentTTL)
+		uut, err := vod.NewSegmentManager(utCtxt, mockCache, nil, segmentTTL, nil)
 		assert.Nil(err)
 
 		segmentID := uuid.NewString()
@@ -49,7 +49,7 @@ func TestSegmentManager(t *testing.T) {
 		assert.NotNil(err)
 	}
 	{
-		uut, err := vod.NewSegmentManager(mockCache, nil, segmentTTL)
+		uut, err := vod.NewSegmentManager(utCtxt, mockCache, nil, segmentTTL, nil)
 		assert.Nil(err)
 
 		segmentID := uuid.NewString()
@@ -72,7 +72,7 @@ func TestSegmentManager(t *testing.T) {
 
 	// Case 1: segment reader provided
 	{
-		uut, err := vod.NewSegmentManager(mockCache, mockReader, segmentTTL)
+		uut, err := vod.NewSegmentManager(utCtxt, mockCache, mockReader, segmentTTL, nil)
 		assert.Nil(err)
 
 		segmentID := uuid.NewString()

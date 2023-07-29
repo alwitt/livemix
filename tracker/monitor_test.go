@@ -44,7 +44,7 @@ func TestSourceHLSMonitor(t *testing.T) {
 	segmentLength := time.Second * 5
 
 	mockSegReader := mocks.NewSegmentReader(t)
-	testCache, err := utils.NewLocalVideoSegmentCache(utCtxt, time.Minute)
+	testCache, err := utils.NewLocalVideoSegmentCache(utCtxt, time.Minute, nil)
 	assert.Nil(err)
 
 	segmentRX := make(chan common.VideoSegmentWithData)
@@ -55,7 +55,7 @@ func TestSourceHLSMonitor(t *testing.T) {
 
 	// Define SourceHLSMonitor
 	uut, err := tracker.NewSourceHLSMonitor(
-		utCtxt, testSource, conns, trackingWindow, testCache, mockSegReader, receiveSegCB,
+		utCtxt, testSource, conns, trackingWindow, testCache, mockSegReader, receiveSegCB, nil,
 	)
 	assert.Nil(err)
 

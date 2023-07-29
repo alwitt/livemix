@@ -29,42 +29,61 @@ type segmentManagerImpl struct {
 	cache    utils.VideoSegmentCache
 	reader   utils.SegmentReader
 	cacheTTL time.Duration
+
+	/* Metrics Collection Agents */
+	segmentIOMetrics utils.SegmentMetricsAgent
 }
 
 /*
 NewSegmentManager define new segment manager
 
+	@param ctxt context.Context - execution context
 	@param cache utils.VideoSegmentCache - segment cache
 	@param reader utils.SegmentReader - segment reader
 	@param cacheTTL time.Duration - when recording new entries in cache, use this TTL
+	@param metrics goutils.MetricsCollector - metrics framework client
 	@returns SegmentManager
 */
 func NewSegmentManager(
-	cache utils.VideoSegmentCache, reader utils.SegmentReader, cacheTTL time.Duration,
+	ctxt context.Context,
+	cache utils.VideoSegmentCache,
+	reader utils.SegmentReader,
+	cacheTTL time.Duration,
+	metrics goutils.MetricsCollector,
 ) (SegmentManager, error) {
-	return &segmentManagerImpl{
+	logTags := log.Fields{"module": "vod", "component": "segment-manager"}
+
+	instance := &segmentManagerImpl{
 		Component: goutils.Component{
-			LogTags: log.Fields{"module": "vod", "component": "segment-manager"},
+			LogTags: logTags,
 			LogTagModifiers: []goutils.LogMetadataModifier{
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
-		}, cache: cache, reader: reader, cacheTTL: cacheTTL,
-	}, nil
+		}, cache: cache, reader: reader, cacheTTL: cacheTTL, segmentIOMetrics: nil,
+	}
+
+	// Install metrics
+	if metrics != nil {
+		var err error
+		instance.segmentIOMetrics, err = utils.NewSegmentMetricsAgent(
+			ctxt,
+			metrics,
+			utils.MetricsNameVODSegmentMgmtSegmentLen,
+			"Tracking total bytes read VOD segment manager",
+			utils.MetricsNameVODSegmentMgmtIOCount,
+			"Tracking total segments read by VOD segment manager",
+			[]string{"cache_hit", "source"},
+		)
+		if err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				Error("Unable to define segment IO tracking metrics helper agent")
+			return nil, err
+		}
+	}
+	return instance, nil
 }
-
-/*
-TODO FIXME:
-
-Add metrics
-* segment get action
-	* total bytes - count
-	* total segments - count
-
-Labels:
-* "cache-hit": "true" or "false"
-* "source": video source ID
-
-*/
 
 func (m *segmentManagerImpl) GetSegment(
 	ctxt context.Context, target common.VideoSegment,
@@ -74,6 +93,12 @@ func (m *segmentManagerImpl) GetSegment(
 	// Check cache first
 	content, err := m.cache.GetSegment(ctxt, target)
 	if err == nil {
+		// Update metrics
+		if m.segmentIOMetrics != nil {
+			m.segmentIOMetrics.RecordSegment(len(content), map[string]string{
+				"cache_hit": "true", "source": target.SourceID,
+			})
+		}
 		return content, nil
 	}
 
@@ -150,5 +175,11 @@ func (m *segmentManagerImpl) GetSegment(
 			Error("Unable to cache newly read segment content")
 	}
 
+	// Update metrics
+	if m.segmentIOMetrics != nil {
+		m.segmentIOMetrics.RecordSegment(len(content), map[string]string{
+			"cache_hit": "false", "source": target.SourceID,
+		})
+	}
 	return content, nil
 }

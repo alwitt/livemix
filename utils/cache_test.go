@@ -16,7 +16,7 @@ func TestLocalSegmentCacheBasicSanity(t *testing.T) {
 
 	utCtxt := context.Background()
 
-	uut, err := NewLocalVideoSegmentCache(utCtxt, time.Minute)
+	uut, err := NewLocalVideoSegmentCache(utCtxt, time.Minute, nil)
 	assert.Nil(err)
 
 	// Case 0: no segments cached
@@ -83,7 +83,7 @@ func TestLocalSegmentCacheManualCachePurgeTrigger(t *testing.T) {
 
 	utCtxt := context.Background()
 
-	uut, err := NewLocalVideoSegmentCache(utCtxt, time.Minute)
+	uut, err := NewLocalVideoSegmentCache(utCtxt, time.Minute, nil)
 	assert.Nil(err)
 
 	startTime := time.Now().UTC()
@@ -155,7 +155,7 @@ func TestLocalSegmentCacheAutoCachePurge(t *testing.T) {
 
 	utCtxt := context.Background()
 
-	uut, err := NewLocalVideoSegmentCache(utCtxt, time.Millisecond*100)
+	uut, err := NewLocalVideoSegmentCache(utCtxt, time.Millisecond*100, nil)
 	assert.Nil(err)
 
 	// Setup test entries
@@ -222,7 +222,7 @@ func TestMemcachedSegmentCacheBasicSanity(t *testing.T) {
 
 	utCtxt := context.Background()
 
-	uut, err := NewMemcachedVideoSegmentCache([]string{"localhost:18080"})
+	uut, err := NewMemcachedVideoSegmentCache(utCtxt, []string{"localhost:18080"}, nil)
 	assert.Nil(err)
 
 	// Case 0: no segments cached
@@ -290,7 +290,7 @@ func TestMemcachedSegmentCacheAutoCachePurge(t *testing.T) {
 
 	utCtxt := context.Background()
 
-	uut, err := NewMemcachedVideoSegmentCache([]string{"localhost:18080"})
+	uut, err := NewMemcachedVideoSegmentCache(utCtxt, []string{"localhost:18080"}, nil)
 	assert.Nil(err)
 
 	// Case 0: add segment

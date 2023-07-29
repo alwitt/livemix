@@ -15,6 +15,7 @@ import (
 	"github.com/alwitt/livemix/utils"
 	"github.com/apex/log"
 	"github.com/oklog/ulid/v2"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // SourceHLSMonitor daemon to monitor a single HLS video source and process its video segments
@@ -60,6 +61,12 @@ type sourceHLSMonitorImpl struct {
 	wg               sync.WaitGroup
 	workerContext    context.Context
 	workerCtxtCancel context.CancelFunc
+
+	/* Metrics Collection Agents */
+	playlistReadMetrics   *prometheus.CounterVec
+	newSegmentMetrics     *prometheus.CounterVec
+	segmentReadMetrics    utils.SegmentMetricsAgent
+	segmentForwardMetrics utils.SegmentMetricsAgent
 }
 
 // SegmentForwardCallback function signature of callback to send out read video segments
@@ -79,6 +86,7 @@ after that.
 	@param segmentCache utils.VideoSegmentCache - HLS video segment cache
 	@param reader utils.SegmentReader - HLS video segment data reader
 	@param forwardSegment SegmentForwardCallback - callback to send out read video segments
+	@param metrics goutils.MetricsCollector - metrics framework client
 	@returns new SourceHLSMonitor
 */
 func NewSourceHLSMonitor(
@@ -89,6 +97,7 @@ func NewSourceHLSMonitor(
 	segmentCache utils.VideoSegmentCache,
 	reader utils.SegmentReader,
 	forwardSegment SegmentForwardCallback,
+	metrics goutils.MetricsCollector,
 ) (SourceHLSMonitor, error) {
 	logTags := log.Fields{
 		"module":       "tracker",
@@ -125,17 +134,19 @@ func NewSourceHLSMonitor(
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
 		},
-		source:           source,
-		tracker:          tracker,
-		trackingWindow:   trackingWindow,
-		cache:            segmentCache,
-		segmentReader:    reader,
-		ongoingReads:     make(map[string]segmentReadBatch),
-		forwardSegment:   forwardSegment,
-		worker:           worker,
-		wg:               sync.WaitGroup{},
-		workerContext:    workerCtxt,
-		workerCtxtCancel: cancel,
+		source:              source,
+		tracker:             tracker,
+		trackingWindow:      trackingWindow,
+		cache:               segmentCache,
+		segmentReader:       reader,
+		ongoingReads:        make(map[string]segmentReadBatch),
+		forwardSegment:      forwardSegment,
+		worker:              worker,
+		wg:                  sync.WaitGroup{},
+		workerContext:       workerCtxt,
+		workerCtxtCancel:    cancel,
+		playlistReadMetrics: nil,
+		newSegmentMetrics:   nil,
 	}
 
 	// -----------------------------------------------------------------------------
@@ -161,6 +172,70 @@ func NewSourceHLSMonitor(
 	if err := worker.StartEventLoop(&monitor.wg); err != nil {
 		log.WithError(err).WithFields(logTags).Error("Unable to start the worker thread")
 		return nil, err
+	}
+
+	// -----------------------------------------------------------------------------
+	// Install metrics
+
+	if metrics != nil {
+		monitor.playlistReadMetrics, err = metrics.InstallCustomCounterVecMetrics(
+			parentContext,
+			utils.MetricsNameTrackerMonitorPlaylistReadCount,
+			"Tracking total new playlists processed by HLS monitor",
+			[]string{"source"},
+		)
+		if err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				Error("Unable to define playlist processed tracking metrics")
+			return nil, err
+		}
+		monitor.newSegmentMetrics, err = metrics.InstallCustomCounterVecMetrics(
+			parentContext,
+			utils.MetricsNameTrackerMonitorNewSegmentCount,
+			"Tracking total new segments processed by HLS monitor",
+			[]string{"source"},
+		)
+		if err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				Error("Unable to define new segment observed tracking metrics")
+			return nil, err
+		}
+		monitor.segmentReadMetrics, err = utils.NewSegmentMetricsAgent(
+			parentContext,
+			metrics,
+			utils.MetricsNameTrackerMonitorSegmentReadLen,
+			"Tracking total bytes read by HLS monitor",
+			utils.MetricsNameTrackerMonitorSegmentReadCount,
+			"Tracking total segments read by HLS monitor",
+			[]string{"source"},
+		)
+		if err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				Error("Unable to define segment IO tracking metrics helper agent")
+			return nil, err
+		}
+		monitor.segmentForwardMetrics, err = utils.NewSegmentMetricsAgent(
+			parentContext,
+			metrics,
+			utils.MetricsNameTrackerMonitorSegmentForwardLen,
+			"Tracking total bytes forwarded by HLS monitor",
+			utils.MetricsNameTrackerMonitorSegmentForwardCount,
+			"Tracking total segments forwarded by HLS monitor",
+			[]string{"source"},
+		)
+		if err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				Error("Unable to define segment IO tracking metrics helper agent")
+			return nil, err
+		}
 	}
 
 	return monitor, nil
@@ -199,19 +274,6 @@ func (m *sourceHLSMonitorImpl) update(params interface{}) error {
 	log.WithError(err).WithFields(logTags).Error("'update' processing failure")
 	return err
 }
-
-/*
-TODO FIXME:
-
-Add metrics:
-* playlist update action
-	* total playlists - count
-	* total new segments - count
-
-Labels:
-* "source": video source ID
-
-*/
 
 // coreUpdate contains the actual logic for the Update function
 func (m *sourceHLSMonitorImpl) coreUpdate(
@@ -258,6 +320,13 @@ func (m *sourceHLSMonitorImpl) coreUpdate(
 	m.ongoingReads[readBatchID] = newReadBatch
 	log.WithFields(logTags).WithField("read-batch-id", readBatchID).Debug("Started new read batch")
 
+	// Update metrics
+	if m.playlistReadMetrics != nil && m.newSegmentMetrics != nil {
+		m.playlistReadMetrics.With(prometheus.Labels{"source": m.source.ID}).Inc()
+		m.newSegmentMetrics.
+			With(prometheus.Labels{"source": m.source.ID}).
+			Add(float64(len(newSegments)))
+	}
 	return nil
 }
 
@@ -316,22 +385,6 @@ func (m *sourceHLSMonitorImpl) reportSegmentRead(params interface{}) error {
 	return err
 }
 
-/*
-TODO FIXME:
-
-Add metrics:
-* segment received action
-	* total segments - count
-	* total bytes - count
-* segment forward action
-	* total segments - count
-	* total bytes - count
-
-Labels:
-* "source": video source ID
-
-*/
-
 // coreReportSegmentRead contains the actual logic for the ReportSegmentRead function
 func (m *sourceHLSMonitorImpl) coreReportSegmentRead(
 	readID, segmentID string, content []byte,
@@ -348,6 +401,11 @@ func (m *sourceHLSMonitorImpl) coreReportSegmentRead(
 			WithField("segment-id", segmentID).
 			Error("Unable to process segment read response")
 		return err
+	}
+
+	// Update metrics
+	if m.segmentReadMetrics != nil {
+		m.segmentReadMetrics.RecordSegment(len(content), map[string]string{"source": m.source.ID})
 	}
 
 	// Update read batch with content
@@ -373,6 +431,12 @@ func (m *sourceHLSMonitorImpl) coreReportSegmentRead(
 					WithField("segment-id", segment.ID).
 					Error("Video segment forward failed")
 				return err
+			}
+			// Update metrics
+			if m.segmentForwardMetrics != nil {
+				m.segmentForwardMetrics.RecordSegment(
+					len(msg.Content), map[string]string{"source": m.source.ID},
+				)
 			}
 		}
 		// Delete the read batch

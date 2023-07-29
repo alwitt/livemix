@@ -58,7 +58,7 @@ func TestVideoSourceOperatorStartRecording(t *testing.T) {
 		assert.Equal(uutConfig.SelfReqRespTargetID, report.RequestResponseTargetID)
 	}).Return(nil)
 
-	uut, err := edge.NewManager(utCtxt, uutConfig)
+	uut, err := edge.NewManager(utCtxt, uutConfig, nil)
 	assert.Nil(err)
 
 	// ====================================================================================
@@ -239,7 +239,7 @@ func TestVideoSourceOperatorStopRecording(t *testing.T) {
 		assert.Equal(uutConfig.SelfReqRespTargetID, report.RequestResponseTargetID)
 	}).Return(nil)
 
-	uut, err := edge.NewManager(utCtxt, uutConfig)
+	uut, err := edge.NewManager(utCtxt, uutConfig, nil)
 	assert.Nil(err)
 
 	// ====================================================================================
@@ -327,7 +327,7 @@ func TestVideoSourceOperatorNewSegmentFromSource(t *testing.T) {
 		assert.Equal(uutConfig.SelfReqRespTargetID, report.RequestResponseTargetID)
 	}).Return(nil)
 
-	uut, err := edge.NewManager(utCtxt, uutConfig)
+	uut, err := edge.NewManager(utCtxt, uutConfig, nil)
 	assert.Nil(err)
 
 	// ====================================================================================

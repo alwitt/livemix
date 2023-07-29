@@ -160,7 +160,9 @@ func DefineControlNode(
 		Info("Initializing memcached video cache")
 
 	// Build memcached segment cache
-	cache, err := utils.NewMemcachedVideoSegmentCache(config.VODConfig.Cache.Servers)
+	cache, err := utils.NewMemcachedVideoSegmentCache(
+		parentCtxt, config.VODConfig.Cache.Servers, metrics,
+	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to define memcached segment cache")
 		return nil, err
@@ -200,6 +202,7 @@ func DefineControlNode(
 		dbConns,
 		cache,
 		config.VODConfig.SegReceiverTrackingWindow(),
+		metrics,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to define segment manager")
@@ -219,7 +222,7 @@ func DefineControlNode(
 
 	// Define segment reader
 	vodSegmentReader, err := utils.NewSegmentReader(
-		parentCtxt, config.VODConfig.SegmentReaderWorkerCount, s3Client,
+		parentCtxt, config.VODConfig.SegmentReaderWorkerCount, s3Client, metrics,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create segment reader")
@@ -239,7 +242,7 @@ func DefineControlNode(
 
 	// Define segment manager
 	vodSegmentMgnt, err := vod.NewSegmentManager(
-		cache, vodSegmentReader, config.VODConfig.SegmentCacheTTL(),
+		parentCtxt, cache, vodSegmentReader, config.VODConfig.SegmentCacheTTL(), metrics,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create video segment manager")
@@ -377,6 +380,7 @@ func DefineControlNode(
 		s3Client,
 		config.Management.SourceManagement.StatusReportMaxDelay(),
 		config.Management.RecordingManagement.SegmentCleanupInt(),
+		metrics,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to define system manager")
@@ -426,7 +430,9 @@ func DefineControlNode(
 		Info("Initializing VOD REST API server")
 
 	// Define live VOD playlist builder
-	plBuilder, err := vod.NewPlaylistBuilder(dbConns, config.VODConfig.LiveVODSegmentCount)
+	plBuilder, err := vod.NewPlaylistBuilder(
+		parentCtxt, dbConns, config.VODConfig.LiveVODSegmentCount, metrics,
+	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create VOD playlist builder")
 		return nil, err

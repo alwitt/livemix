@@ -41,7 +41,7 @@ func TestBuildLiveStreamPlaylist(t *testing.T) {
 
 	segmentPerPlaylist := 3
 
-	uut, err := vod.NewPlaylistBuilder(mockSQL, segmentPerPlaylist)
+	uut, err := vod.NewPlaylistBuilder(utCtxt, mockSQL, segmentPerPlaylist, nil)
 	assert.Nil(err)
 
 	startTime := time.Now().UTC()
@@ -140,7 +140,7 @@ func TestBuildRecordingPlaylist(t *testing.T) {
 		{ID: uuid.NewString(), SourceID: testSource.ID},
 	}
 
-	uut, err := vod.NewPlaylistBuilder(mockSQL, 1)
+	uut, err := vod.NewPlaylistBuilder(utCtxt, mockSQL, 1, nil)
 	assert.Nil(err)
 
 	// Case 0: failed to find recording segments

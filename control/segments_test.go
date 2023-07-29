@@ -26,7 +26,7 @@ func TestLiveSteamSegmentManagerRecordSegment(t *testing.T) {
 	mockDB.On("Close").Return()
 	mockCache := mocks.NewVideoSegmentCache(t)
 
-	uut, err := control.NewLiveStreamSegmentManager(utCtxt, mockSQL, mockCache, time.Minute)
+	uut, err := control.NewLiveStreamSegmentManager(utCtxt, mockSQL, mockCache, time.Minute, nil)
 	assert.Nil(err)
 
 	testSourceID := uuid.NewString()

@@ -26,7 +26,7 @@ func TestReadingSegmentFromFile(t *testing.T) {
 
 	mockS3 := mocks.NewS3Client(t)
 
-	uut, err := utils.NewSegmentReader(utCtxt, 2, mockS3)
+	uut, err := utils.NewSegmentReader(utCtxt, 2, mockS3, nil)
 	assert.Nil(err)
 
 	// Define test file
@@ -86,7 +86,7 @@ func TestReadingSegmentFromS3(t *testing.T) {
 
 	mockS3 := mocks.NewS3Client(t)
 
-	uut, err := utils.NewSegmentReader(utCtxt, 2, mockS3)
+	uut, err := utils.NewSegmentReader(utCtxt, 2, mockS3, nil)
 	assert.Nil(err)
 
 	// Prepare result callback
