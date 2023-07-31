@@ -12,6 +12,7 @@ import (
 	"github.com/alwitt/livemix/utils"
 	"github.com/apex/log"
 	"github.com/go-resty/resty/v2"
+	"github.com/oklog/ulid/v2"
 )
 
 // SegmentSender video segment transmit client
@@ -31,8 +32,9 @@ type SegmentSender interface {
 // httpSegmentSender HTTP video segment transmit client implementing SegmentSender
 type httpSegmentSender struct {
 	goutils.Component
-	receiverURI *url.URL
-	client      *resty.Client
+	receiverURI     *url.URL
+	client          *resty.Client
+	requestIDHeader string
 
 	/* Metrics Collection Agents */
 	segmentIOMetrics utils.SegmentMetricsAgent
@@ -43,6 +45,7 @@ NewHTTPSegmentSender define new HTTP video segment transmit client
 
 	@param ctxt context.Context - execution context
 	@param segmentReceiverURI *url.URL - the URL to send the segments to
+	@param requestIDHeader string - HTTP header to set for the request ID
 	@param httpClient *resty.Client - HTTP client to use
 	@param segmentMetrics utils.SegmentMetricsAgent - segment forwarding metrics helper agent
 	@returns new sender instance
@@ -50,6 +53,7 @@ NewHTTPSegmentSender define new HTTP video segment transmit client
 func NewHTTPSegmentSender(
 	ctxt context.Context,
 	segmentReceiverURI *url.URL,
+	requestIDHeader string,
 	httpClient *resty.Client,
 	segmentMetrics utils.SegmentMetricsAgent,
 ) (SegmentSender, error) {
@@ -70,6 +74,7 @@ func NewHTTPSegmentSender(
 		},
 		receiverURI:      segmentReceiverURI,
 		client:           httpClient,
+		requestIDHeader:  requestIDHeader,
 		segmentIOMetrics: segmentMetrics,
 	}
 
@@ -81,15 +86,19 @@ func (s *httpSegmentSender) ForwardSegment(
 ) error {
 	logTags := s.GetLogTagsForContext(ctxt)
 
+	reqID := ulid.Make().String()
+
 	log.
 		WithFields(logTags).
 		WithField("source-id", segment.SourceID).
 		WithField("segment-name", segment.Name).
+		WithField("outbound-request-id", reqID).
 		Debug("Forwarding segment")
 
 	// Make request
 	resp, err := s.client.R().
 		// Set request header for segment reception
+		SetHeader(s.requestIDHeader, reqID).
 		SetHeader(ipc.HTTPSegmentForwardHeaderSourceID, segment.SourceID).
 		SetHeader(ipc.HTTPSegmentForwardHeaderName, segment.Name).
 		SetHeader(ipc.HTTPSegmentForwardHeaderStartTS, fmt.Sprintf("%d", segment.StartTime.Unix())).
@@ -107,6 +116,7 @@ func (s *httpSegmentSender) ForwardSegment(
 			WithFields(logTags).
 			WithField("source-id", segment.SourceID).
 			WithField("segment-name", segment.Name).
+			WithField("outbound-request-id", reqID).
 			Debug("Segment forward request failed on call")
 		return err
 	}
@@ -123,6 +133,7 @@ func (s *httpSegmentSender) ForwardSegment(
 		log.WithError(err).WithFields(logTags).
 			WithField("source-id", segment.SourceID).
 			WithField("segment-name", segment.Name).
+			WithField("outbound-request-id", reqID).
 			Debug("Segment forward failed")
 		return err
 	}
@@ -131,6 +142,7 @@ func (s *httpSegmentSender) ForwardSegment(
 		WithFields(logTags).
 		WithField("source-id", segment.SourceID).
 		WithField("segment-name", segment.Name).
+		WithField("outbound-request-id", reqID).
 		Debug("Segment forwarded")
 
 	// Update metrics

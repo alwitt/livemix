@@ -288,6 +288,8 @@ type MemcachedSegementCacheConfig struct {
 type HTTPForwarderTargetConfig struct {
 	// TargetURL URL to send new segments to
 	TargetURL string `mapstructure:"targetURL" json:"targetURL" validate:"required,url"`
+	// RequestIDHeader request ID header name to set when forwarding
+	RequestIDHeader string `mapstructure:"requestIDHeader" json:"requestIDHeader" validate:"required"`
 	// Client HTTP client config. This is designed to support `go-resty`
 	Client HTTPClientConfig `mapstructure:"client" json:"client" validate:"required,dive"`
 }
@@ -569,6 +571,7 @@ func InstallDefaultEdgeNodeConfigValues() {
 	// Default recording video segment forwarder config
 	viper.SetDefault("forwarder.recording.maxInFlightSegments", 4)
 	// Default live segment forwarder HTTP config
+	viper.SetDefault("forwarder.live.remote.requestIDHeader", "X-Request-ID")
 	viper.SetDefault("forwarder.live.remote.client.retry.maxAttempts", 5)
 	viper.SetDefault("forwarder.live.remote.client.retry.initialWaitTimeInSec", 2)
 	viper.SetDefault("forwarder.live.remote.client.retry.maxWaitTimeInSec", 30)

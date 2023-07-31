@@ -42,7 +42,7 @@ one-test: .prepare ## Run one unittest
 
 .PHONY: build
 build: lint ## Build the application
-	@go build -o stream-hub.bin .
+	@go build -o livemix.bin .
 
 .PHONY: compose
 compose: ## Prepare the development docker stack
@@ -54,11 +54,11 @@ clean: ## Clean up development environment
 
 .PHONY: ctrl
 ctrl: build ## Run local development system control node application
-	. .env; ./stream-hub.bin ctrl -c tmp/dev-ctrl-node-cfg.yaml -p postgres
+	. .env.ctrl; ./livemix.bin ctrl -c tmp/dev-ctrl-node-cfg.yaml -p postgres
 
 .PHONY: edge-%
 edge-%: build ## Run local development edge node application
-	. .env; ./stream-hub.bin edge -c tmp/dev-edge-node-$*-cfg.yaml
+	. .env.edge; ./livemix.bin edge -c tmp/dev-edge-node-$*-cfg.yaml
 
 .prepare: ## Prepare the project for local development
 	@pip3 install --user pre-commit

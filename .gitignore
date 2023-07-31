@@ -3,3 +3,5 @@ tmp/
 .prepare
 mocks/
 .env
+.env.ctrl
+.env.edge

@@ -309,7 +309,10 @@ func DefineEdgeNode(
 
 	// Define live segment HTTP forwarder
 	httpSegmentSender, err := forwarder.NewHTTPSegmentSender(
-		parentCtxt, httpForwardTarget, httpClient, segmentForwarderMetrics,
+		parentCtxt,
+		httpForwardTarget,
+		config.Forwarder.Live.Remote.RequestIDHeader,
+		httpClient, segmentForwarderMetrics,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create HTTP segment sender")

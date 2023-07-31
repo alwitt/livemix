@@ -39,7 +39,7 @@ func TestHTTPSegmentSender(t *testing.T) {
 	testURL, err := url.Parse("http://ut.testing.dev/new-segment")
 	assert.Nil(err)
 
-	uut, err := forwarder.NewHTTPSegmentSender(utCtxt, testURL, testClient, nil)
+	uut, err := forwarder.NewHTTPSegmentSender(utCtxt, testURL, "request-id", testClient, nil)
 	assert.Nil(err)
 
 	timestamp := time.Now().UTC()
@@ -59,6 +59,7 @@ func TestHTTPSegmentSender(t *testing.T) {
 		testURL.String(),
 		func(r *http.Request) (*http.Response, error) {
 			// Verify the headers
+			assert.NotEmpty(r.Header.Get("request-id"))
 			assert.Equal(testSourceID, r.Header.Get(ipc.HTTPSegmentForwardHeaderSourceID))
 			assert.Equal(testSegment.Name, r.Header.Get(ipc.HTTPSegmentForwardHeaderName))
 			assert.Equal(
