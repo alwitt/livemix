@@ -42,6 +42,8 @@ type HTTPServerConfig struct {
 type HTTPRequestLogging struct {
 	// LogLevel output request logs at this level
 	LogLevel goutils.HTTPRequestLogLevel `mapstructure:"logLevel" json:"logLevel" validate:"oneof=warn info debug"`
+	// HealthLogLevel output health check logs at this level
+	HealthLogLevel goutils.HTTPRequestLogLevel `mapstructure:"healthLogLevel" json:"healthLogLevel" validate:"oneof=warn info debug"`
 	// RequestIDHeader is the HTTP header containing the API request ID
 	RequestIDHeader string `mapstructure:"requestIDHeader" json:"requestIDHeader"`
 	// DoNotLogHeaders is the list of headers to not include in logging metadata
@@ -483,6 +485,7 @@ func InstallDefaultControlNodeConfigValues() {
 	viper.SetDefault("management.api.service.timeoutSecs.idle", 60)
 	viper.SetDefault("management.api.apis.endPoint.pathPrefix", "/")
 	viper.SetDefault("management.api.apis.requestLogging.logLevel", "warn")
+	viper.SetDefault("management.api.apis.requestLogging.healthLogLevel", "debug")
 	viper.SetDefault("management.api.apis.requestLogging.requestIDHeader", "X-Request-ID")
 	viper.SetDefault("management.api.apis.requestLogging.skipHeaders", []string{
 		"WWW-Authenticate", "Authorization", "Proxy-Authenticate", "Proxy-Authorization",
@@ -507,6 +510,7 @@ func InstallDefaultControlNodeConfigValues() {
 	viper.SetDefault("vod.api.service.timeoutSecs.idle", 60)
 	viper.SetDefault("vod.api.apis.endPoint.pathPrefix", "/")
 	viper.SetDefault("vod.api.apis.requestLogging.logLevel", "debug")
+	viper.SetDefault("vod.api.apis.requestLogging.healthLogLevel", "debug")
 	viper.SetDefault("vod.api.apis.requestLogging.requestIDHeader", "X-Request-ID")
 	viper.SetDefault("vod.api.apis.requestLogging.skipHeaders", []string{
 		"WWW-Authenticate", "Authorization", "Proxy-Authenticate", "Proxy-Authorization",
@@ -560,6 +564,7 @@ func InstallDefaultEdgeNodeConfigValues() {
 	viper.SetDefault("monitor.api.service.timeoutSecs.idle", 60)
 	viper.SetDefault("monitor.api.apis.endPoint.pathPrefix", "/")
 	viper.SetDefault("monitor.api.apis.requestLogging.logLevel", "debug")
+	viper.SetDefault("monitor.api.apis.requestLogging.healthLogLevel", "debug")
 	viper.SetDefault("monitor.api.apis.requestLogging.requestIDHeader", "X-Request-ID")
 	viper.SetDefault("monitor.api.apis.requestLogging.skipHeaders", []string{
 		"WWW-Authenticate", "Authorization", "Proxy-Authenticate", "Proxy-Authorization",
@@ -586,6 +591,7 @@ func InstallDefaultEdgeNodeConfigValues() {
 	viper.SetDefault("vod.api.service.timeoutSecs.idle", 60)
 	viper.SetDefault("vod.api.apis.endPoint.pathPrefix", "/")
 	viper.SetDefault("vod.api.apis.requestLogging.logLevel", "debug")
+	viper.SetDefault("vod.api.apis.requestLogging.healthLogLevel", "debug")
 	viper.SetDefault("vod.api.apis.requestLogging.requestIDHeader", "X-Request-ID")
 	viper.SetDefault("vod.api.apis.requestLogging.skipHeaders", []string{
 		"WWW-Authenticate", "Authorization", "Proxy-Authenticate", "Proxy-Authorization",

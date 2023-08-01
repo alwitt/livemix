@@ -1037,7 +1037,7 @@ func NewSystemManagerLivenessHandler(
 				}
 				return result
 			}(),
-			LogLevel: logConfig.LogLevel,
+			LogLevel: logConfig.HealthLogLevel,
 		}, manager: manager,
 	}, nil
 }

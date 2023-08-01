@@ -89,6 +89,8 @@ management:
       requestLogging:
         # Output request logs at this level
         logLevel: warn
+        # Output health check logs at this level
+        healthLogLevel: debug
         # HTTP header containing the API request ID
         requestIDHeader: X-Request-ID
         # List of headers to not include in logging metadata
