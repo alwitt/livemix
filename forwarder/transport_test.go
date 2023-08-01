@@ -39,7 +39,7 @@ func TestHTTPSegmentSender(t *testing.T) {
 	testURL, err := url.Parse("http://ut.testing.dev/new-segment")
 	assert.Nil(err)
 
-	uut, err := forwarder.NewHTTPSegmentSender(utCtxt, testURL, "request-id", testClient, nil)
+	uut, err := forwarder.NewHTTPSegmentSender(utCtxt, testURL, "request-id", testClient, nil, nil)
 	assert.Nil(err)
 
 	timestamp := time.Now().UTC()
@@ -120,7 +120,7 @@ func TestS3SegmentSender(t *testing.T) {
 	mockSQL.On("NewPersistanceManager").Return(mockDB)
 	mockDB.On("Close").Return()
 
-	uut, err := forwarder.NewS3SegmentSender(utCtxt, mockS3, mockSQL, nil)
+	uut, err := forwarder.NewS3SegmentSender(utCtxt, mockS3, mockSQL, nil, nil)
 	assert.Nil(err)
 
 	testSegmentID := uuid.NewString()

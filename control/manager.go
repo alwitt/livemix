@@ -17,22 +17,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-/*
-TODO FIXME:
-
-A new timer is needed
-
-Add metrics:
-* total registered video source - gauge
-* total video sources able to receive inbound requests - gauge
-* total registered recordings - gauge
-* total active recordings - gauge
-
-Labels:
-* "control": "true"
-
-*/
-
 // SystemManager system operations manager
 type SystemManager interface {
 	/*

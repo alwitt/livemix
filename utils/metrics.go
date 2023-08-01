@@ -11,10 +11,12 @@ import (
 const (
 	MetricsNameUtilCacheCurrentCount = "utils_segment_cache_currently_cached"
 	MetricsNameUtilCacheSegmentLen   = "utils_segment_cache_io_bytes_total"
+	MetricsNameUtilCacheIOLatency    = "utils_segment_cache_io_latency_sec_total"
 	MetricsNameUtilCacheIOCount      = "utils_segment_cache_io_ops_total"
 
-	MetricsNameUtilFetcherSegmentLen = "utils_segment_fetcher_read_bytes_total"
-	MetricsNameUtilFetcherIOCount    = "utils_segment_fetcher_read_ops_total"
+	MetricsNameUtilFetcherSegmentLen  = "utils_segment_fetcher_read_bytes_total"
+	MetricsNameUtilFetcherReadLatency = "utils_segment_fetcher_read_latency_sec_total"
+	MetricsNameUtilFetcherIOCount     = "utils_segment_fetcher_read_ops_total"
 
 	MetricsNameVODSegmentMgmtSegmentLen = "vod_segment_mgmt_read_bytes_total"
 	MetricsNameVODSegmentMgmtIOCount    = "vod_segment_mgmt_read_ops_total"
@@ -30,8 +32,9 @@ const (
 	MetricsNameTrackerMonitorSegmentForwardLen   = "tracker_monitor_forward_segment_bytes_total"
 	MetricsNameTrackerMonitorSegmentForwardCount = "tracker_monitor_forward_segment_total"
 
-	MetricsNameForwarderSenderSegmentForwardLen   = "forwarder_sender_segment_bytes_total"
-	MetricsNameForwarderSenderSegmentForwardCount = "forwarder_sender_segment_total"
+	MetricsNameForwarderSenderSegmentForwardLen     = "forwarder_sender_segment_bytes_total"
+	MetricsNameForwarderSenderSegmentForwardLatency = "forwarder_sender_segment_send_latency_sec_total"
+	MetricsNameForwarderSenderSegmentForwardCount   = "forwarder_sender_segment_total"
 
 	MetricsNameEdgeManagerSegmentReadLen       = "edge_manager_read_segment_bytes_total"
 	MetricsNameEdgeManagerSegmentReadCount     = "edge_manager_read_segment_total"

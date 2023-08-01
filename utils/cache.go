@@ -73,6 +73,7 @@ type inProcessSegmentCacheImpl struct {
 
 	/* Metrics Collection Agents */
 	segmentIOMetrics SegmentMetricsAgent
+	ioLatencyMetrics *prometheus.CounterVec
 	cacheSizeMetrics *prometheus.GaugeVec
 }
 
@@ -148,6 +149,19 @@ func NewLocalVideoSegmentCache(
 				Error("Unable to define segment IO tracking metrics helper agent")
 			return nil, err
 		}
+		instance.ioLatencyMetrics, err = metrics.InstallCustomCounterVecMetrics(
+			parentContext,
+			MetricsNameUtilCacheIOLatency,
+			"Tracking segment IO latency of the in memory video cache",
+			[]string{"action", "type"},
+		)
+		if err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				Error("Unable to define cache read latency tracking metrics")
+			return nil, err
+		}
 		instance.cacheSizeMetrics, err = metrics.InstallCustomGaugeVecMetrics(
 			parentContext,
 			MetricsNameUtilCacheCurrentCount,
@@ -169,16 +183,23 @@ func NewLocalVideoSegmentCache(
 func (c *inProcessSegmentCacheImpl) CacheSegment(
 	ctxt context.Context, segment common.VideoSegmentWithData, ttl time.Duration,
 ) error {
+	startTime := time.Now().UTC()
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.cache[segment.ID] = inProcessCacheEntry{
 		expireAt: time.Now().UTC().Add(ttl), content: segment.Content,
 	}
+	endTime := time.Now().UTC()
 	// Update metrics
 	if c.segmentIOMetrics != nil {
 		c.segmentIOMetrics.RecordSegment(len(segment.Content), map[string]string{
 			"action": "write", "type": "ram", "source": segment.SourceID,
 		})
+	}
+	if c.ioLatencyMetrics != nil {
+		c.ioLatencyMetrics.
+			With(prometheus.Labels{"action": "write", "type": "ram"}).
+			Add(float64(endTime.Sub(startTime).Seconds()))
 	}
 	return nil
 }
@@ -199,17 +220,24 @@ func (c *inProcessSegmentCacheImpl) PurgeSegments(
 func (c *inProcessSegmentCacheImpl) GetSegment(
 	ctxt context.Context, segment common.VideoSegment,
 ) ([]byte, error) {
+	startTime := time.Now().UTC()
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	content, ok := c.cache[segment.ID]
 	if !ok {
 		return nil, fmt.Errorf("segment ID '%s' is unknown", segment.ID)
 	}
+	endTime := time.Now().UTC()
 	// Update metrics
 	if c.segmentIOMetrics != nil {
 		c.segmentIOMetrics.RecordSegment(len(content.content), map[string]string{
 			"action": "read", "type": "ram", "source": segment.SourceID,
 		})
+	}
+	if c.ioLatencyMetrics != nil {
+		c.ioLatencyMetrics.
+			With(prometheus.Labels{"action": "read", "type": "ram"}).
+			Add(float64(endTime.Sub(startTime).Seconds()))
 	}
 	return content.content, nil
 }
@@ -217,6 +245,11 @@ func (c *inProcessSegmentCacheImpl) GetSegment(
 func (c *inProcessSegmentCacheImpl) GetSegments(
 	ctxt context.Context, segments []common.VideoSegment,
 ) (map[string][]byte, error) {
+	if len(segments) == 0 {
+		return nil, nil
+	}
+
+	startTime := time.Now().UTC()
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
@@ -231,6 +264,12 @@ func (c *inProcessSegmentCacheImpl) GetSegments(
 				})
 			}
 		}
+	}
+	endTime := time.Now().UTC()
+	if c.ioLatencyMetrics != nil {
+		c.ioLatencyMetrics.
+			With(prometheus.Labels{"action": "read", "type": "ram"}).
+			Add(float64(endTime.Sub(startTime).Seconds()))
 	}
 
 	return result, nil
@@ -285,6 +324,7 @@ type memcachedSegmentCacheImpl struct {
 
 	/* Metrics Collection Agents */
 	segmentIOMetrics SegmentMetricsAgent
+	ioLatencyMetrics *prometheus.CounterVec
 }
 
 /*
@@ -340,6 +380,19 @@ func NewMemcachedVideoSegmentCache(
 				Error("Unable to define segment IO tracking metrics helper agent")
 			return nil, err
 		}
+		instance.ioLatencyMetrics, err = metrics.InstallCustomCounterVecMetrics(
+			ctxt,
+			MetricsNameUtilCacheIOLatency,
+			"Tracking segment IO latency of the memcached video cache",
+			[]string{"action", "type"},
+		)
+		if err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				Error("Unable to define cache read latency tracking metrics")
+			return nil, err
+		}
 	}
 
 	return instance, nil
@@ -359,6 +412,7 @@ func (c *memcachedSegmentCacheImpl) CacheSegment(
 	cacheEntry := &memcache.Item{
 		Key: segment.ID, Value: segment.Content, Expiration: int32(ttl.Seconds()),
 	}
+	startTime := time.Now().UTC()
 	if err := c.client.Set(cacheEntry); err != nil {
 		log.
 			WithError(err).
@@ -368,6 +422,7 @@ func (c *memcachedSegmentCacheImpl) CacheSegment(
 			Error("Segment failed to cache")
 		return err
 	}
+	endTime := time.Now().UTC()
 	log.
 		WithFields(logTags).
 		WithField("source-id", segment.SourceID).
@@ -381,7 +436,11 @@ func (c *memcachedSegmentCacheImpl) CacheSegment(
 			"action": "write", "type": "memcached", "source": segment.SourceID,
 		})
 	}
-
+	if c.ioLatencyMetrics != nil {
+		c.ioLatencyMetrics.
+			With(prometheus.Labels{"action": "write", "type": "memcached"}).
+			Add(float64(endTime.Sub(startTime).Seconds()))
+	}
 	return nil
 }
 
@@ -441,6 +500,7 @@ func (c *memcachedSegmentCacheImpl) GetSegment(
 		WithField("source-id", segment.SourceID).
 		WithField("segment", segment.ID).
 		Debug("Reading segment")
+	startTime := time.Now().UTC()
 	entry, err := c.client.Get(segment.ID)
 	if err != nil {
 		log.
@@ -451,6 +511,7 @@ func (c *memcachedSegmentCacheImpl) GetSegment(
 			Error("Failed to fetch segment")
 		return nil, err
 	}
+	endTime := time.Now().UTC()
 	log.
 		WithFields(logTags).
 		WithField("source-id", segment.SourceID).
@@ -463,12 +524,21 @@ func (c *memcachedSegmentCacheImpl) GetSegment(
 			"action": "read", "type": "memcached", "source": segment.SourceID,
 		})
 	}
+	if c.ioLatencyMetrics != nil {
+		c.ioLatencyMetrics.
+			With(prometheus.Labels{"action": "read", "type": "memcached"}).
+			Add(float64(endTime.Sub(startTime).Seconds()))
+	}
 	return entry.Value, nil
 }
 
 func (c *memcachedSegmentCacheImpl) GetSegments(
 	ctxt context.Context, segments []common.VideoSegment,
 ) (map[string][]byte, error) {
+	if len(segments) == 0 {
+		return nil, nil
+	}
+
 	logTags := c.GetLogTagsForContext(ctxt)
 	sourceIDsCollect := map[string]bool{}
 	segmentNames := []string{}
@@ -489,6 +559,7 @@ func (c *memcachedSegmentCacheImpl) GetSegments(
 		WithField("source-ids", sourceIDs).
 		WithField("segments", segmentNames).
 		Debug("Reading segments")
+	startTime := time.Now().UTC()
 	entries, err := c.client.GetMulti(segmentIDs)
 	if err != nil {
 		log.
@@ -499,6 +570,7 @@ func (c *memcachedSegmentCacheImpl) GetSegments(
 			Debug("Multi-segment read failed")
 		return nil, err
 	}
+	endTime := time.Now().UTC()
 	log.
 		WithFields(logTags).
 		WithField("source-ids", sourceIDs).
@@ -513,6 +585,11 @@ func (c *memcachedSegmentCacheImpl) GetSegments(
 				"action": "read", "type": "memcached", "source": segmentToSourceID[segmentID],
 			})
 		}
+	}
+	if c.ioLatencyMetrics != nil {
+		c.ioLatencyMetrics.
+			With(prometheus.Labels{"action": "read", "type": "memcached"}).
+			Add(float64(endTime.Sub(startTime).Seconds()))
 	}
 	return result, nil
 }

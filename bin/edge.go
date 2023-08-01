@@ -118,9 +118,9 @@ func DefineEdgeNode(
 		parentCtxt,
 		metrics,
 		utils.MetricsNameForwarderSenderSegmentForwardLen,
-		"Tracking total bytes forward by S3 segment forwarder",
+		"Tracking total bytes forward by segment forwarder",
 		utils.MetricsNameForwarderSenderSegmentForwardCount,
-		"Tracking total segments forwarded by S3 segment forwarder",
+		"Tracking total segments forwarded by segment forwarder",
 		[]string{"type", "source"},
 	)
 	if err != nil {
@@ -128,6 +128,19 @@ func DefineEdgeNode(
 			WithError(err).
 			WithFields(logTags).
 			Error("Failed to define segment forwarding metrics helper agent")
+		return theNode, err
+	}
+	forwarderLatencyMetrics, err := metrics.InstallCustomCounterVecMetrics(
+		parentCtxt,
+		utils.MetricsNameForwarderSenderSegmentForwardLatency,
+		"Tracking segment forward latency by segment forwarder",
+		[]string{"type"},
+	)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Failed to define segment forward latency metrics")
 		return theNode, err
 	}
 
@@ -312,7 +325,9 @@ func DefineEdgeNode(
 		parentCtxt,
 		httpForwardTarget,
 		config.Forwarder.Live.Remote.RequestIDHeader,
-		httpClient, segmentForwarderMetrics,
+		httpClient,
+		segmentForwarderMetrics,
+		forwarderLatencyMetrics,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create HTTP segment sender")
@@ -363,7 +378,7 @@ func DefineEdgeNode(
 
 	// Define recordings segment forwarder
 	s3SegmentSender, err := forwarder.NewS3SegmentSender(
-		parentCtxt, s3Client, dbConns, segmentForwarderMetrics,
+		parentCtxt, s3Client, dbConns, segmentForwarderMetrics, forwarderLatencyMetrics,
 	)
 	if err != nil {
 		log.

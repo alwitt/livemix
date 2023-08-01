@@ -9,10 +9,12 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/alwitt/goutils"
 	"github.com/alwitt/livemix/common"
 	"github.com/apex/log"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // SegmentReturnCallback function signature of callback to receive a read segment
@@ -49,7 +51,8 @@ type segmentReader struct {
 	s3               S3Client
 
 	/* Metrics Collection Agents */
-	segmentIOMetrics SegmentMetricsAgent
+	segmentIOMetrics   SegmentMetricsAgent
+	readLatencyMetrics *prometheus.CounterVec
 }
 
 /*
@@ -123,6 +126,19 @@ func NewSegmentReader(
 				WithError(err).
 				WithFields(logTags).
 				Error("Unable to define segment IO tracking metrics helper agent")
+			return nil, err
+		}
+		reader.readLatencyMetrics, err = metrics.InstallCustomCounterVecMetrics(
+			parentContext,
+			MetricsNameUtilFetcherReadLatency,
+			"Tracking segment read latency of video segment fetcher",
+			[]string{"type"},
+		)
+		if err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				Error("Unable to define segment read latency tracking metrics")
 			return nil, err
 		}
 	}
@@ -212,6 +228,7 @@ func (r *segmentReader) readSegmentFromFile(
 ) error {
 	logTags := r.GetLogTagsForContext(r.workerContext)
 
+	startTime := time.Now().UTC()
 	segmentFile, err := os.Open(fetchURI.Path)
 	if err != nil {
 		log.
@@ -238,6 +255,7 @@ func (r *segmentReader) readSegmentFromFile(
 			Error("Reading segment file failed")
 		return err
 	}
+	endTime := time.Now().UTC()
 	log.
 		WithFields(logTags).
 		WithField("source-id", segment.SourceID).
@@ -262,6 +280,11 @@ func (r *segmentReader) readSegmentFromFile(
 		r.segmentIOMetrics.RecordSegment(len(content), map[string]string{
 			"type": "file", "source": segment.SourceID,
 		})
+	}
+	if r.readLatencyMetrics != nil {
+		r.readLatencyMetrics.
+			With(prometheus.Labels{"type": "file"}).
+			Add(float64(endTime.Sub(startTime).Seconds()))
 	}
 	return nil
 }
@@ -307,6 +330,7 @@ func (r *segmentReader) readSegmentFromS3(
 		WithField("segment-uri", fetchURI.String()).
 		Debug("Fetching segment from S3")
 
+	startTime := time.Now().UTC()
 	content, err := r.s3.GetObject(r.workerContext, sourceBucket, segmentObjectKey)
 	if err != nil {
 		log.
@@ -318,6 +342,7 @@ func (r *segmentReader) readSegmentFromS3(
 			Error("Fetching segment failed")
 		return err
 	}
+	endTime := time.Now().UTC()
 
 	log.
 		WithFields(logTags).
@@ -343,6 +368,11 @@ func (r *segmentReader) readSegmentFromS3(
 		r.segmentIOMetrics.RecordSegment(len(content), map[string]string{
 			"type": "s3", "source": segment.SourceID,
 		})
+	}
+	if r.readLatencyMetrics != nil {
+		r.readLatencyMetrics.
+			With(prometheus.Labels{"type": "s3"}).
+			Add(float64(endTime.Sub(startTime).Seconds()))
 	}
 	return nil
 }

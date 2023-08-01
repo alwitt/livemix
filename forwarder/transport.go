@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/alwitt/goutils"
 	"github.com/alwitt/livemix/common"
@@ -13,6 +14,7 @@ import (
 	"github.com/apex/log"
 	"github.com/go-resty/resty/v2"
 	"github.com/oklog/ulid/v2"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // SegmentSender video segment transmit client
@@ -37,7 +39,8 @@ type httpSegmentSender struct {
 	requestIDHeader string
 
 	/* Metrics Collection Agents */
-	segmentIOMetrics utils.SegmentMetricsAgent
+	segmentIOMetrics   utils.SegmentMetricsAgent
+	readLatencyMetrics *prometheus.CounterVec
 }
 
 /*
@@ -48,6 +51,7 @@ NewHTTPSegmentSender define new HTTP video segment transmit client
 	@param requestIDHeader string - HTTP header to set for the request ID
 	@param httpClient *resty.Client - HTTP client to use
 	@param segmentMetrics utils.SegmentMetricsAgent - segment forwarding metrics helper agent
+	@param readLatencyMetrics *prometheus.CounterVec - segment forward latency metrics
 	@returns new sender instance
 */
 func NewHTTPSegmentSender(
@@ -56,6 +60,7 @@ func NewHTTPSegmentSender(
 	requestIDHeader string,
 	httpClient *resty.Client,
 	segmentMetrics utils.SegmentMetricsAgent,
+	readLatencyMetrics *prometheus.CounterVec,
 ) (SegmentSender, error) {
 	logTags := log.Fields{
 		"module":    "forwarder",
@@ -72,10 +77,11 @@ func NewHTTPSegmentSender(
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
 		},
-		receiverURI:      segmentReceiverURI,
-		client:           httpClient,
-		requestIDHeader:  requestIDHeader,
-		segmentIOMetrics: segmentMetrics,
+		receiverURI:        segmentReceiverURI,
+		client:             httpClient,
+		requestIDHeader:    requestIDHeader,
+		segmentIOMetrics:   segmentMetrics,
+		readLatencyMetrics: readLatencyMetrics,
 	}
 
 	return instance, nil
@@ -96,6 +102,7 @@ func (s *httpSegmentSender) ForwardSegment(
 		Debug("Forwarding segment")
 
 	// Make request
+	startTime := time.Now().UTC()
 	resp, err := s.client.R().
 		// Set request header for segment reception
 		SetHeader(s.requestIDHeader, reqID).
@@ -120,10 +127,11 @@ func (s *httpSegmentSender) ForwardSegment(
 			Debug("Segment forward request failed on call")
 		return err
 	}
+	endTime := time.Now().UTC()
 
 	// Segment forwarded
 	if !resp.IsSuccess() {
-		respError := resp.Error().(goutils.RestAPIBaseResponse)
+		respError := resp.Error().(*goutils.RestAPIBaseResponse)
 		var err error
 		if respError.Error != nil {
 			err = fmt.Errorf(respError.Error.Detail)
@@ -151,6 +159,11 @@ func (s *httpSegmentSender) ForwardSegment(
 			"type": "http", "source": segment.SourceID,
 		})
 	}
+	if s.readLatencyMetrics != nil {
+		s.readLatencyMetrics.
+			With(prometheus.Labels{"type": "http"}).
+			Add(float64(endTime.Sub(startTime).Seconds()))
+	}
 	return nil
 }
 
@@ -164,7 +177,8 @@ type s3SegmentSender struct {
 	dbConns db.ConnectionManager
 
 	/* Metrics Collection Agents */
-	segmentIOMetrics utils.SegmentMetricsAgent
+	segmentIOMetrics   utils.SegmentMetricsAgent
+	readLatencyMetrics *prometheus.CounterVec
 }
 
 /*
@@ -174,6 +188,7 @@ NewS3SegmentSender define new S3 video segment transmit client
 	@param s3Client utils.S3Client - S3 operations client
 	@param dbConns db.ConnectionManager - DB connection manager
 	@param segmentMetrics utils.SegmentMetricsAgent - segment forwarding metrics helper agent
+	@param readLatencyMetrics *prometheus.CounterVec - segment forward latency metrics
 	@returns new sender instance
 */
 func NewS3SegmentSender(
@@ -181,6 +196,7 @@ func NewS3SegmentSender(
 	s3Client utils.S3Client,
 	dbConns db.ConnectionManager,
 	segmentMetrics utils.SegmentMetricsAgent,
+	readLatencyMetrics *prometheus.CounterVec,
 ) (SegmentSender, error) {
 	logTags := log.Fields{
 		"module":    "forwarder",
@@ -194,9 +210,10 @@ func NewS3SegmentSender(
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
 		},
-		client:           s3Client,
-		dbConns:          dbConns,
-		segmentIOMetrics: segmentMetrics,
+		client:             s3Client,
+		dbConns:            dbConns,
+		segmentIOMetrics:   segmentMetrics,
+		readLatencyMetrics: readLatencyMetrics,
 	}
 
 	return instance, nil
@@ -256,6 +273,7 @@ func (s *s3SegmentSender) ForwardSegment(
 		WithField("target-object-key", targetObjectKey).
 		Debug("Uploading video segment")
 
+	startTime := time.Now().UTC()
 	if err := s.client.PutObject(ctxt, targetBucket, targetObjectKey, segment.Content); err != nil {
 		log.
 			WithError(err).
@@ -268,6 +286,7 @@ func (s *s3SegmentSender) ForwardSegment(
 		dbClient.MarkExternalError(err)
 		return err
 	}
+	endTime := time.Now().UTC()
 
 	log.
 		WithFields(logTags).
@@ -282,6 +301,11 @@ func (s *s3SegmentSender) ForwardSegment(
 		s.segmentIOMetrics.RecordSegment(len(segment.Content), map[string]string{
 			"type": "s3", "source": segment.SourceID,
 		})
+	}
+	if s.readLatencyMetrics != nil {
+		s.readLatencyMetrics.
+			With(prometheus.Labels{"type": "s3"}).
+			Add(float64(endTime.Sub(startTime).Seconds()))
 	}
 	return nil
 }
