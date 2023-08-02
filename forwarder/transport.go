@@ -162,7 +162,7 @@ func (s *httpSegmentSender) ForwardSegment(
 	if s.readLatencyMetrics != nil {
 		s.readLatencyMetrics.
 			With(prometheus.Labels{"type": "http"}).
-			Add(float64(endTime.Sub(startTime).Seconds()))
+			Add(endTime.Sub(startTime).Seconds())
 	}
 	return nil
 }
@@ -305,7 +305,7 @@ func (s *s3SegmentSender) ForwardSegment(
 	if s.readLatencyMetrics != nil {
 		s.readLatencyMetrics.
 			With(prometheus.Labels{"type": "s3"}).
-			Add(float64(endTime.Sub(startTime).Seconds()))
+			Add(endTime.Sub(startTime).Seconds())
 	}
 	return nil
 }
