@@ -236,8 +236,7 @@ BuildCentralVODServer create control node VOD server. It is responsible for
 	@param httpCfg common.APIServerConfig - HTTP server configuration
 	@param forwardCB VideoSegmentForwardCB - callback to forward newly received segments
 	@param dbConns db.ConnectionManager - DB connection manager
-	@param playlistBuilder vod.PlaylistBuilder - support HLS playlist builder
-	@param segments vod.SegmentManager - video segment manager
+	@param manager vod.PlaylistManager - video playlist manager
 	@param metrics goutils.HTTPRequestMetricHelper - metric collection agent
 	@returns HTTP server instance
 */
@@ -246,8 +245,7 @@ func BuildCentralVODServer(
 	httpCfg common.APIServerConfig,
 	forwardCB VideoSegmentForwardCB,
 	dbConns db.ConnectionManager,
-	playlistBuilder vod.PlaylistBuilder,
-	segments vod.SegmentManager,
+	manager vod.PlaylistManager,
 	metrics goutils.HTTPRequestMetricHelper,
 ) (*http.Server, error) {
 	segmentRXHandler, err := NewSegmentReceiveHandler(
@@ -257,7 +255,7 @@ func BuildCentralVODServer(
 		return nil, err
 	}
 	vodHandler, err := NewVODHandler(
-		dbConns, playlistBuilder, segments, httpCfg.APIs.RequestLogging, metrics,
+		dbConns, manager, httpCfg.APIs.RequestLogging, metrics,
 	)
 	if err != nil {
 		return nil, err
@@ -319,20 +317,18 @@ BuildVODServer create HLS VOD server
 
 	@param httpCfg common.APIServerConfig - HTTP server configuration
 	@param dbConns db.ConnectionManager - DB connection manager
-	@param playlistBuilder vod.PlaylistBuilder - support HLS playlist builder
-	@param segments vod.SegmentManager - video segment manager
+	@param manager vod.PlaylistManager - video playlist manager
 	@param metrics goutils.HTTPRequestMetricHelper - metric collection agent
 	@returns HTTP server instance
 */
 func BuildVODServer(
 	httpCfg common.APIServerConfig,
 	dbConns db.ConnectionManager,
-	playlistBuilder vod.PlaylistBuilder,
-	segments vod.SegmentManager,
+	manager vod.PlaylistManager,
 	metrics goutils.HTTPRequestMetricHelper,
 ) (*http.Server, error) {
 	httpHandler, err := NewVODHandler(
-		dbConns, playlistBuilder, segments, httpCfg.APIs.RequestLogging, metrics,
+		dbConns, manager, httpCfg.APIs.RequestLogging, metrics,
 	)
 	if err != nil {
 		return nil, err

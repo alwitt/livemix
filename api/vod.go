@@ -19,26 +19,23 @@ import (
 // VODHandler HLS VOD handler
 type VODHandler struct {
 	goutils.RestAPIHandler
-	validate  *validator.Validate
-	dbConns   db.ConnectionManager
-	playlists vod.PlaylistBuilder
-	segments  vod.SegmentManager
+	validate *validator.Validate
+	dbConns  db.ConnectionManager
+	manager  vod.PlaylistManager
 }
 
 /*
 NewVODHandler define a new HLS VOD handler
 
 	@param dbConns db.ConnectionManager - DB connection manager
-	@param playlists vod.PlaylistBuilder - support playlist builder
-	@param segments vod.SegmentManager - support playlist segment manager
+	@param manager vod.PlaylistManager - video playlist manager
 	@param logConfig common.HTTPRequestLogging - handler log settings
 	@param metrics goutils.HTTPRequestMetricHelper - metric collection agent
 	@returns new LiveStreamHandler
 */
 func NewVODHandler(
 	dbConns db.ConnectionManager,
-	playlists vod.PlaylistBuilder,
-	segments vod.SegmentManager,
+	manager vod.PlaylistManager,
 	logConfig common.HTTPRequestLogging,
 	metrics goutils.HTTPRequestMetricHelper,
 ) (VODHandler, error) {
@@ -60,7 +57,7 @@ func NewVODHandler(
 			}(),
 			LogLevel:      logConfig.LogLevel,
 			MetricsHelper: metrics,
-		}, validate: validator.New(), dbConns: dbConns, playlists: playlists, segments: segments,
+		}, validate: validator.New(), dbConns: dbConns, manager: manager,
 	}, nil
 }
 
@@ -161,13 +158,13 @@ func (h VODHandler) getVideoFiles(w http.ResponseWriter, r *http.Request, opMode
 		var continuous bool
 		if liveStream {
 			// live stream mode
-			newPlaylist, err = h.playlists.GetLiveStreamPlaylist(
+			newPlaylist, err = h.manager.GetLiveStreamPlaylist(
 				r.Context(), videoSource, currentTime, true,
 			)
 			continuous = true
 		} else {
 			// recording mode
-			newPlaylist, err = h.playlists.GetRecordingStreamPlaylist(r.Context(), recording)
+			newPlaylist, err = h.manager.GetRecordingStreamPlaylist(r.Context(), recording)
 			continuous = false
 		}
 		if err != nil {
@@ -227,7 +224,7 @@ func (h VODHandler) getVideoFiles(w http.ResponseWriter, r *http.Request, opMode
 			return
 		}
 		// Get the segment
-		segment, err := h.segments.GetSegment(r.Context(), segmentEntry)
+		segment, err := h.manager.GetSegment(r.Context(), segmentEntry)
 		if err != nil {
 			msg := "Failed to find segment"
 			log.WithError(err).WithFields(logTags).Error(msg)

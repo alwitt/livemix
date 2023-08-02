@@ -27,11 +27,10 @@ func TestVodLiveStreamHandler(t *testing.T) {
 	mockDB := mocks.NewPersistenceManager(t)
 	mockSQL.On("NewPersistanceManager").Return(mockDB)
 	mockDB.On("Close").Return()
-	mockPlaylist := mocks.NewPlaylistBuilder(t)
-	mockSegment := mocks.NewSegmentManager(t)
+	mockPLManager := mocks.NewPlaylistManager(t)
 
 	uut, err := api.NewVODHandler(
-		mockSQL, mockPlaylist, mockSegment, common.HTTPRequestLogging{
+		mockSQL, mockPLManager, common.HTTPRequestLogging{
 			RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
 		}, nil,
 	)
@@ -92,7 +91,7 @@ func TestVodLiveStreamHandler(t *testing.T) {
 			mock.AnythingOfType("*context.valueCtx"),
 			sourceID,
 		).Return(common.VideoSource{ID: sourceID}, nil).Once()
-		mockPlaylist.On(
+		mockPLManager.On(
 			"GetLiveStreamPlaylist",
 			mock.AnythingOfType("*context.valueCtx"),
 			common.VideoSource{ID: sourceID},
@@ -136,7 +135,7 @@ func TestVodLiveStreamHandler(t *testing.T) {
 		mockDB.On(
 			"GetVideoSource", mock.AnythingOfType("*context.valueCtx"), sourceID,
 		).Return(common.VideoSource{ID: sourceID}, nil).Once()
-		mockPlaylist.On(
+		mockPLManager.On(
 			"GetLiveStreamPlaylist",
 			mock.AnythingOfType("*context.valueCtx"),
 			common.VideoSource{ID: sourceID},
@@ -214,7 +213,7 @@ func TestVodLiveStreamHandler(t *testing.T) {
 		mockDB.On(
 			"GetLiveStreamSegmentByName", mock.AnythingOfType("*context.valueCtx"), target,
 		).Return(testSegment, nil).Once()
-		mockSegment.On(
+		mockPLManager.On(
 			"GetSegment", mock.AnythingOfType("*context.valueCtx"), testSegment,
 		).Return(testSegContent, nil).Once()
 
@@ -237,11 +236,10 @@ func TestVodRecordingHandler(t *testing.T) {
 	mockDB := mocks.NewPersistenceManager(t)
 	mockSQL.On("NewPersistanceManager").Return(mockDB)
 	mockDB.On("Close").Return()
-	mockPlaylist := mocks.NewPlaylistBuilder(t)
-	mockSegment := mocks.NewSegmentManager(t)
+	mockPLManager := mocks.NewPlaylistManager(t)
 
 	uut, err := api.NewVODHandler(
-		mockSQL, mockPlaylist, mockSegment, common.HTTPRequestLogging{
+		mockSQL, mockPLManager, common.HTTPRequestLogging{
 			RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
 		}, nil,
 	)
@@ -302,7 +300,7 @@ func TestVodRecordingHandler(t *testing.T) {
 			mock.AnythingOfType("*context.valueCtx"),
 			testRecording.ID,
 		).Return(testRecording, nil).Once()
-		mockPlaylist.On(
+		mockPLManager.On(
 			"GetRecordingStreamPlaylist",
 			mock.AnythingOfType("*context.valueCtx"),
 			mock.AnythingOfType("common.Recording"),
@@ -351,7 +349,7 @@ func TestVodRecordingHandler(t *testing.T) {
 			mock.AnythingOfType("*context.valueCtx"),
 			testRecording.ID,
 		).Return(testRecording, nil).Once()
-		mockPlaylist.On(
+		mockPLManager.On(
 			"GetRecordingStreamPlaylist",
 			mock.AnythingOfType("*context.valueCtx"),
 			mock.AnythingOfType("common.Recording"),
@@ -442,7 +440,7 @@ func TestVodRecordingHandler(t *testing.T) {
 			mock.AnythingOfType("*context.valueCtx"),
 			target,
 		).Return(testSegment, nil).Once()
-		mockSegment.On(
+		mockPLManager.On(
 			"GetSegment",
 			mock.AnythingOfType("*context.valueCtx"),
 			testSegment,

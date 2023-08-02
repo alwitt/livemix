@@ -27,6 +27,7 @@ type EdgeNode struct {
 	segmentReader         utils.SegmentReader
 	monitor               tracker.SourceHLSMonitor
 	operator              edge.VideoSourceOperator
+	playlistManager       vod.PlaylistManager
 	PlaylistReceiveServer *http.Server
 	VODServer             *http.Server
 	MetricsServer         *http.Server
@@ -43,6 +44,9 @@ func (n EdgeNode) Cleanup(ctxt context.Context) error {
 		return err
 	}
 	if err := n.segmentReader.Stop(ctxt); err != nil {
+		return err
+	}
+	if err := n.playlistManager.Stop(ctxt); err != nil {
 		return err
 	}
 	if err := n.rrClient.Stop(ctxt); err != nil {
@@ -538,6 +542,14 @@ func DefineEdgeNode(
 		return theNode, err
 	}
 
+	theNode.playlistManager, err = vod.NewPlaylistManager(
+		parentCtxt, dbConns, 2, plBuilder, segmentMgnt,
+	)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to create video playlist manager")
+		return theNode, err
+	}
+
 	log.
 		WithFields(logTags).
 		WithField("initialize", initStep).
@@ -551,7 +563,7 @@ func DefineEdgeNode(
 
 	// Define live VOD HTTP server
 	theNode.VODServer, err = api.BuildVODServer(
-		config.VODConfig.APIServer, dbConns, plBuilder, segmentMgnt, httpMetricsAgent,
+		config.VODConfig.APIServer, dbConns, theNode.playlistManager, httpMetricsAgent,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create live VOD HTTP server")

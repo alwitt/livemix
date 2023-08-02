@@ -24,6 +24,7 @@ mock: .prepare ## Generate test mock interfaces
 	@mockery --dir utils --name Broadcaster
 	@mockery --dir vod --name PlaylistBuilder
 	@mockery --dir vod --name SegmentManager
+	@mockery --dir vod --name PlaylistManager
 	@mockery --dir api --name RequestResponseClient
 	@mockery --dir control --name SystemManager
 	@mockery --dir control --name EdgeRequestClient

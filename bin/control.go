@@ -28,6 +28,7 @@ type ControlNode struct {
 	workerCtxtCancel      context.CancelFunc
 	liveStreamSegmentMgmt control.LiveStreamSegmentManager
 	coreManager           control.SystemManager
+	playlistManager       vod.PlaylistManager
 	MgmtAPIServer         *http.Server
 	VODAPIServer          *http.Server
 	MetricsServer         *http.Server
@@ -47,6 +48,9 @@ func (n *ControlNode) Cleanup(ctxt context.Context) error {
 		return err
 	}
 	if err := n.liveStreamSegmentMgmt.Stop(ctxt); err != nil {
+		return nil
+	}
+	if err := n.playlistManager.Stop(ctxt); err != nil {
 		return nil
 	}
 	if err := n.coreManager.Stop(ctxt); err != nil {
@@ -438,14 +442,21 @@ func DefineControlNode(
 		return nil, err
 	}
 
+	theNode.playlistManager, err = vod.NewPlaylistManager(
+		parentCtxt, dbConns, config.VODConfig.SegmentReaderWorkerCount, plBuilder, vodSegmentMgnt,
+	)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to create video playlist manager")
+		return nil, err
+	}
+
 	// Define VOD API HTTP server
 	theNode.VODAPIServer, err = api.BuildCentralVODServer(
 		parentCtxt,
 		config.VODConfig.APIServer,
 		theNode.liveStreamSegmentMgmt.RegisterLiveStreamSegment,
 		dbConns,
-		plBuilder,
-		vodSegmentMgnt,
+		theNode.playlistManager,
 		httpMetricsAgent,
 	)
 	if err != nil {
