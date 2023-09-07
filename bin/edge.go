@@ -298,8 +298,29 @@ func DefineEdgeNode(
 		Info("Initializing HTTP client for segment forwarding")
 
 	// Define resty HTTP client for forwarder
-	httpClient, err := utils.DefineHTTPClient(
-		theNode.nodeRuntimeCtxt, config.Forwarder.Live.Remote.Client,
+	var httpClientAuthConfig *goutils.HTTPClientAuthConfig
+	if config.Forwarder.Live.Remote.Client.OAuth != nil {
+		httpClientAuthConfig = &goutils.HTTPClientAuthConfig{
+			IssuerURL:      config.Forwarder.Live.Remote.Client.OAuth.IssuerURL,
+			ClientID:       config.Forwarder.Live.Remote.Client.OAuth.ClientID,
+			ClientSecret:   config.Forwarder.Live.Remote.Client.OAuth.ClientSecret,
+			TargetAudience: config.Forwarder.Live.Remote.Client.OAuth.TargetAudience,
+			LogTags: log.Fields{
+				"module": "go-utils", "component": "oauth-token-manager", "instance": "client-cred-flow",
+			},
+		}
+	} else {
+		httpClientAuthConfig = nil
+	}
+
+	httpClient, err := goutils.DefineHTTPClient(
+		theNode.nodeRuntimeCtxt,
+		goutils.HTTPClientRetryConfig{
+			MaxAttempts:  config.Forwarder.Live.Remote.Client.Retry.MaxAttempts,
+			InitWaitTime: config.Forwarder.Live.Remote.Client.Retry.InitWaitTime(),
+			MaxWaitTime:  config.Forwarder.Live.Remote.Client.Retry.MaxWaitTime(),
+		},
+		httpClientAuthConfig,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to define resty HTTP client")

@@ -50,7 +50,7 @@ func (recordingVideoSegment) TableName() string {
 	return "recorded_segments"
 }
 
-// segmentToRecordingAssociation manage to manage association
+// segmentToRecordingAssociation segment to recording association
 type segmentToRecordingAssociation struct {
 	SegmentID   string                `gorm:"column:segment_id;primaryKey"`
 	Segment     recordingVideoSegment `gorm:"foreignKey:segment_id;constraint:OnDelete:CASCADE;"`
