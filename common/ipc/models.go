@@ -520,6 +520,6 @@ func parseRawBroadcastMessage(rawMsg []byte) (interface{}, error) {
 		return broadcast, nil
 
 	default:
-		return nil, fmt.Errorf("unknown IPC broadcast message type '%s'", asBroadcastMsg.Type)
+		return nil, fmt.Errorf("unknown IPC broadcast message type '%s'", asBroadcastMsg.BroadcastType)
 	}
 }
