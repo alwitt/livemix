@@ -124,7 +124,7 @@ func (s *httpSegmentSender) ForwardSegment(
 			WithField("source-id", segment.SourceID).
 			WithField("segment-name", segment.Name).
 			WithField("outbound-request-id", reqID).
-			Debug("Segment forward request failed on call")
+			Error("Segment forward request failed on call")
 		return err
 	}
 	endTime := time.Now().UTC()

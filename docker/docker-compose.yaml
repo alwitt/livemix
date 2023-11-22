@@ -1,7 +1,7 @@
 version: '3'
 
 services:
-  ctrl-db:
+  livemix-ctrl-db:
     container_name: livemix-ctrl-db
     restart: always
     hostname: "postgres"
@@ -13,7 +13,7 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
 
-  memcached:
+  livemix-memcached:
     container_name: livemix-ctrl-memcached
     restart: always
     hostname: memcached
@@ -30,7 +30,7 @@ services:
       - -p
       - '18080'
 
-  minio:
+  livemix-minio:
     container_name: livemix-ctrl-minio
     restart: always
     hostname: minio
