@@ -78,6 +78,8 @@ cicd:
 docker:
   stage: build
 
+  image: docker:latest
+
   services:
     - docker:dind
 
