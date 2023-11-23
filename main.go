@@ -24,7 +24,9 @@ type ctrlNodeCliArgs struct {
 }
 
 type edgeNodeCliArgs struct {
-	ConfigFile string `validate:"required,file"`
+	ConfigFile        string `validate:"required,file"`
+	OAuthClientID     string
+	OAuthClientSecret string
 }
 
 type cliArgs struct {
@@ -147,6 +149,26 @@ func main() {
 						EnvVars:     []string{"CONFIG_FILE"},
 						Destination: &edgeNodeArgs.ConfigFile,
 						Required:    true,
+					},
+					&cli.StringFlag{
+						Name:        "oauth-client-id",
+						Usage:       "OAuth client ID",
+						Aliases:     []string{"i"},
+						EnvVars:     []string{"OAUTH_CLIENT_ID"},
+						Value:       "",
+						DefaultText: "",
+						Destination: &edgeNodeArgs.OAuthClientID,
+						Required:    false,
+					},
+					&cli.StringFlag{
+						Name:        "oauth-client-secret",
+						Usage:       "OAuth client secret",
+						Aliases:     []string{"s"},
+						EnvVars:     []string{"OAUTH_CLIENT_SECRET"},
+						Value:       "",
+						DefaultText: "",
+						Destination: &edgeNodeArgs.OAuthClientSecret,
+						Required:    false,
 					},
 				},
 				Action: startEdgeNode,
@@ -357,6 +379,12 @@ func startEdgeNode(c *cli.Context) error {
 	if err := viper.Unmarshal(&configs); err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to parse edge node config")
 		return err
+	}
+
+	// Inject the OAuth client creds if the OAuth section is defined
+	if configs.Forwarder.Live.Remote.Client.OAuth != nil {
+		configs.Forwarder.Live.Remote.Client.OAuth.ClientID = edgeNodeArgs.OAuthClientID
+		configs.Forwarder.Live.Remote.Client.OAuth.ClientSecret = edgeNodeArgs.OAuthClientSecret
 	}
 
 	// Validate edge node config

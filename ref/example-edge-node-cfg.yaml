@@ -151,10 +151,6 @@ forwarder:
         oauth:
           # OpenID provider issuer URL
           issuerURL: https://idenity.provider.com
-          # OAuth client ID
-          clientID:
-          # OAuth client secret
-          clientSecret:
           # Get a token from IDP with this target audience
           targetAudience:
 

@@ -94,9 +94,9 @@ type HTTPClientAuthConfig struct {
 	// IssuerURL OpenID provider issuer URL
 	IssuerURL string `mapstructure:"issuerURL" json:"issuerURL" validate:"required,url"`
 	// ClientID OAuth client ID
-	ClientID string `mapstructure:"clientID" json:"clientID" validate:"required"`
+	ClientID string `json:"clientID" validate:"required"`
 	// ClientSecret OAuth client secret
-	ClientSecret string `mapstructure:"clientSecret" json:"clientSecret" validate:"required"`
+	ClientSecret string `json:"clientSecret" validate:"required"`
 	// TargetAudience target audience `aud` to acquire a token for
 	TargetAudience string `mapstructure:"targetAudience" json:"targetAudience" validate:"required,url"`
 }
