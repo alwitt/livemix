@@ -2,6 +2,9 @@ package utils
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -216,13 +219,22 @@ func TestLocalSegmentCacheAutoCachePurge(t *testing.T) {
 	}
 }
 
+func getUnitTestMemcachedConfig(assert *assert.Assertions) []string {
+	memcachedHost := os.Getenv("MEMCACHED_HOST")
+	assert.NotEmpty(memcachedHost)
+	memcachedPortRaw := os.Getenv("MEMCACHED_PORT")
+	memcachedPort, err := strconv.Atoi(memcachedPortRaw)
+	assert.Nil(err)
+	return []string{fmt.Sprintf("%s:%d", memcachedHost, memcachedPort)}
+}
+
 func TestMemcachedSegmentCacheBasicSanity(t *testing.T) {
 	assert := assert.New(t)
 	log.SetLevel(log.DebugLevel)
 
 	utCtxt := context.Background()
 
-	uut, err := NewMemcachedVideoSegmentCache(utCtxt, []string{"localhost:18080"}, nil)
+	uut, err := NewMemcachedVideoSegmentCache(utCtxt, getUnitTestMemcachedConfig(assert), nil)
 	assert.Nil(err)
 
 	// Case 0: no segments cached
@@ -290,7 +302,7 @@ func TestMemcachedSegmentCacheAutoCachePurge(t *testing.T) {
 
 	utCtxt := context.Background()
 
-	uut, err := NewMemcachedVideoSegmentCache(utCtxt, []string{"localhost:18080"}, nil)
+	uut, err := NewMemcachedVideoSegmentCache(utCtxt, getUnitTestMemcachedConfig(assert), nil)
 	assert.Nil(err)
 
 	// Case 0: add segment

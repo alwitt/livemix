@@ -1,0 +1,57 @@
+image: golang:1.20.1
+
+stages:
+  - test
+
+cicd:
+  stage: test
+  services:
+    # Support Postgres
+    - name: postgres:15
+      alias: postgres
+      variables:
+        POSTGRES_DB: postgres
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+
+    # Support memcached
+    - name: memcached:1.6.20-alpine
+      alias: memcached
+      command:
+        - -m
+        - "256"
+        - -I
+        - 10m
+        - -p
+        - "18080"
+
+    # Support S3
+    - name: quay.io/minio/minio:RELEASE.2023-07-07T07-13-57Z
+      alias: minio
+      variables:
+        LOG_LEVEL: info
+        MINIO_ROOT_USER: root
+        MINIO_ROOT_PASSWORD: password
+      command:
+        - server
+        - /data
+        - --console-address
+        - ":9090"
+
+  variables:
+    GOOGLE_APPLICATION_CREDENTIALS: gcp-creds.json
+    PGHOST: postgres
+    PGPORT: 5432
+    PGDATABASE: postgres
+    PGUSER: postgres
+    PGPASSWORD: postgres
+    MEMCACHED_HOST: memcached
+    MEMCACHED_PORT: 18080
+    AWS_ACCESS_KEY_ID: root
+    AWS_SECRET_ACCESS_KEY: password
+    UNITTEST_S3_ENDPOINT: minio:9000
+
+  script:
+    - go fmt $(go list ./...)
+    - go vet $(go list ./...)
+    - go test ./...
