@@ -44,6 +44,7 @@ one-test: .prepare ## Run one unittest
 .PHONY: build
 build: lint ## Build the application
 	@go build -o livemix.bin .
+	@go build -o livemix-util.bin ./bin/util/...
 
 .PHONY: compose
 compose: ## Prepare the development docker stack

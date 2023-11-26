@@ -17,9 +17,11 @@ COPY ./vod /app/vod
 COPY ./main.go /app/main.go
 RUN cd /app && \
     go build -o livemix.bin . && \
-    cp -v ./livemix.bin /usr/bin/
+    go build -o livemix-util.bin ./bin/util/... && \
+    cp -v ./livemix.bin ./livemix-util.bin /usr/bin/
 
 # deploy environment
 FROM alpine
 COPY --from=build /usr/bin/livemix.bin /usr/bin/
+COPY --from=build /usr/bin/livemix-util.bin /usr/bin/
 ENTRYPOINT ["/usr/bin/livemix.bin"]
