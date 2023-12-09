@@ -13,6 +13,7 @@ import (
 	"github.com/alwitt/livemix/hls"
 	"github.com/alwitt/livemix/vod"
 	"github.com/gorilla/mux"
+	"github.com/rs/cors"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
@@ -148,6 +149,16 @@ func BuildSystemManagementServer(
 		return livenessHTTPHandler.LoggingMiddleware(next.ServeHTTP)
 	})
 
+	// CORS middleware
+	corsWrapper := cors.New(cors.Options{
+		AllowedOrigins:      []string{"*"},
+		AllowedMethods:      []string{"POST", "GET", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:      []string{"*"},
+		ExposedHeaders:      []string{httpCfg.APIs.RequestLogging.RequestIDHeader},
+		AllowCredentials:    true,
+		AllowPrivateNetwork: true,
+	})
+
 	// --------------------------------------------------------------------------------
 	// HTTP Server
 
@@ -159,7 +170,7 @@ func BuildSystemManagementServer(
 		WriteTimeout: time.Second * time.Duration(httpCfg.Server.Timeouts.WriteTimeout),
 		ReadTimeout:  time.Second * time.Duration(httpCfg.Server.Timeouts.ReadTimeout),
 		IdleTimeout:  time.Second * time.Duration(httpCfg.Server.Timeouts.IdleTimeout),
-		Handler:      h2c.NewHandler(router, &http2.Server{}),
+		Handler:      h2c.NewHandler(corsWrapper.Handler(router), &http2.Server{}),
 	}
 
 	return httpSrv, nil
@@ -292,6 +303,16 @@ func BuildCentralVODServer(
 		return segmentRXHandler.LoggingMiddleware(next.ServeHTTP)
 	})
 
+	// CORS middleware
+	corsWrapper := cors.New(cors.Options{
+		AllowedOrigins:      []string{"*"},
+		AllowedMethods:      []string{"GET", "OPTIONS"},
+		AllowedHeaders:      []string{"*"},
+		ExposedHeaders:      []string{httpCfg.APIs.RequestLogging.RequestIDHeader},
+		AllowCredentials:    true,
+		AllowPrivateNetwork: true,
+	})
+
 	// --------------------------------------------------------------------------------
 	// HTTP Server
 
@@ -303,7 +324,7 @@ func BuildCentralVODServer(
 		WriteTimeout: time.Second * time.Duration(httpCfg.Server.Timeouts.WriteTimeout),
 		ReadTimeout:  time.Second * time.Duration(httpCfg.Server.Timeouts.ReadTimeout),
 		IdleTimeout:  time.Second * time.Duration(httpCfg.Server.Timeouts.IdleTimeout),
-		Handler:      h2c.NewHandler(router, &http2.Server{}),
+		Handler:      h2c.NewHandler(corsWrapper.Handler(router), &http2.Server{}),
 	}
 
 	return httpSrv, nil

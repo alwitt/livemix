@@ -16,6 +16,7 @@ require (
 	github.com/minio/minio-go/v7 v7.0.60
 	github.com/oklog/ulid/v2 v2.1.0
 	github.com/prometheus/client_golang v1.16.0
+	github.com/rs/cors v1.10.1
 	github.com/spf13/viper v1.16.0
 	github.com/stretchr/testify v1.8.4
 	github.com/urfave/cli/v2 v2.25.7
