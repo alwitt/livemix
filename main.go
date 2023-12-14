@@ -46,6 +46,13 @@ var cmdArgs cliArgs
 
 var logTags log.Fields
 
+// @title livemix
+// @version v0.1.0-rc2
+// @description HLS Live Streaming Proxy
+
+// @host localhost:8080
+// @BasePath /
+// @query.collection.format multi
 func main() {
 	hostname, err := os.Hostname()
 	if err != nil {

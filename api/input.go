@@ -253,7 +253,7 @@ func NewSegmentReceiveHandler(
 // @Param Segment-Start-TS header int64 true "Video segment start timestamp - epoch seconds"
 // @Param Segment-Length-MSec header int64 true "Video segment duration in millisecond"
 // @Param Segment-URI header string true "Video segment URI"
-// @Param segmentContent body []byte] true "Video segment content"
+// @Param segmentContent body []byte true "Video segment content"
 // @Success 200 {object} goutils.RestAPIBaseResponse "success"
 // @Failure 400 {object} goutils.RestAPIBaseResponse "error"
 // @Failure 403 {object} goutils.RestAPIBaseResponse "error"

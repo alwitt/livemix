@@ -526,7 +526,7 @@ type RecordingSessionResponse struct {
 // @Produce json
 // @Param X-Request-ID header string false "Request ID"
 // @Param sourceID path string true "Video source ID"
-// @Param body StartNewRecordingRequest false "Recording session parameters"
+// @Param requestPayload body StartNewRecordingRequest false "Recording session parameters"
 // @Success 200 {object} RecordingSessionResponse "success"
 // @Failure 400 {object} goutils.RestAPIBaseResponse "error"
 // @Failure 403 {object} goutils.RestAPIBaseResponse "error"

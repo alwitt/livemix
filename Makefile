@@ -1,3 +1,4 @@
+BASE_DIR = $(realpath .)
 SHELL = bash
 
 all: build
@@ -45,6 +46,23 @@ one-test: .prepare ## Run one unittest
 build: lint ## Build the application
 	@go build -o livemix.bin .
 	@go build -o livemix-util.bin ./bin/util/...
+
+.PHONY: doc
+doc: .prepare ## Generate the OpenAPI spec
+	@swag init -g main.go --parseDependency
+	@rm docs/docs.go
+
+.PHONY: ts-sdk
+ts-sdk: .prepare ## Generate Javascript client
+	@mkdir -vp tmp/sdk/ts-axios
+	@docker run --rm \
+	  --mount type=bind,source=$(BASE_DIR)/docs,target=/input,readonly \
+	  --mount type=bind,source=$(BASE_DIR)/tmp,target=/output \
+	  openapitools/openapi-generator-cli:latest-release \
+	    generate -i /input/swagger.yaml -g typescript-axios -o /output/sdk/ts-axios
+	@echo
+	@echo '!!! IMPORTANT: The generated Typescript SDK at $(BASE_DIR)/tmp/sdk/ts-axios is owned by root !!!'
+	@echo
 
 .PHONY: compose
 compose: ## Prepare the development docker stack
