@@ -49,8 +49,8 @@ cloud.google.com/go/storage v1.14.0/go.mod h1:GrKmX003DSIwi9o29oFT7YDnHYwZoctc3f
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
-github.com/alwitt/goutils v0.6.1 h1:IDXn4xsKmVmBcHq9hC3yVjdwky/lmEMgdZZ1YuJPJ/4=
-github.com/alwitt/goutils v0.6.1/go.mod h1:vUuby9IQsHG/BCwo2Dd5b29ouHYy3ll2pZMeivHZlNU=
+github.com/alwitt/goutils v0.6.3 h1:XSH0qLiOmd3gupVozt2GnFRABq+I3scnsYwhuVVRiiQ=
+github.com/alwitt/goutils v0.6.3/go.mod h1:vUuby9IQsHG/BCwo2Dd5b29ouHYy3ll2pZMeivHZlNU=
 github.com/antihax/optional v1.0.0/go.mod h1:uupD/76wgC+ih3iEmQUL+0Ugr19nfwCT1kdvxnR2qWY=
 github.com/apex/log v1.9.0 h1:FHtw/xuaM8AgmvDDTI9fiwoAL25Sq2cxojnZICUU8l0=
 github.com/apex/log v1.9.0/go.mod h1:m82fZlWIuiWzWP04XCTXmnX0xRkYYbCdYn8jbJeLBEA=
