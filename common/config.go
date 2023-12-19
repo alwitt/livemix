@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/alwitt/goutils"
+	"github.com/oklog/ulid/v2"
 	"github.com/spf13/viper"
 )
 
@@ -551,7 +552,7 @@ func InstallDefaultEdgeNodeConfigValues() {
 	viper.SetDefault("cache.retentionCheckIntInSec", 60)
 
 	// Default sqlite config
-	viper.SetDefault("sqlite.db", fmt.Sprintf("/tmp/livemix-edge-%d.db", time.Now().Unix()))
+	viper.SetDefault("sqlite.db", fmt.Sprintf("/tmp/livemix-edge-%s.db", ulid.Make().String()))
 
 	// Default video source monitor config
 	viper.SetDefault("monitor.segmentReaderWorkerCount", 4)
