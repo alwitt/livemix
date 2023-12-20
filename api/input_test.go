@@ -14,10 +14,12 @@ import (
 	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/common/ipc"
 	"github.com/alwitt/livemix/hls"
+	"github.com/alwitt/livemix/mocks"
 	"github.com/apex/log"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestPlaylistReceiver(t *testing.T) {
@@ -185,5 +187,85 @@ func TestSegmentReceive(t *testing.T) {
 		assert.Equal(testStartTime.Add(testSegmentLen).Unix(), rxSegmentInfo.EndTime.Unix())
 		assert.Equal(testSegmentLen.Seconds(), rxSegmentInfo.Length)
 		assert.Equal(testURI, rxSegmentInfo.URI)
+	}
+}
+
+func TestEdgeNodeReadiness(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	mockSQL := mocks.NewConnectionManager(t)
+	mockDB := mocks.NewPersistenceManager(t)
+	mockSQL.On("NewPersistanceManager").Return(mockDB)
+	mockDB.On("Close").Return()
+	mockDB.On(
+		"Ready",
+		mock.AnythingOfType("*context.valueCtx"),
+	).Return(nil)
+
+	timestamp := time.Now().UTC()
+
+	sourceName := uuid.NewString()
+	uut, err := api.NewEdgeNodeLivenessHandler(
+		common.VideoSourceConfig{
+			Name: sourceName, StatusReportIntInSec: 20,
+		}, mockSQL, common.HTTPRequestLogging{
+			RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
+		},
+	)
+	assert.Nil(err)
+
+	// Case 0: no status report within deadline duration
+	{
+		testSource := common.VideoSource{SourceLocalTime: timestamp.Add(-time.Minute)}
+
+		// Prepare mock
+		mockDB.On(
+			"GetVideoSourceByName",
+			mock.AnythingOfType("*context.valueCtx"),
+			sourceName,
+		).Return(testSource, nil).Once()
+
+		req, err := http.NewRequest("GET", "/v1/ready", nil)
+		assert.Nil(err)
+
+		// Setup HTTP handling
+		router := mux.NewRouter()
+		respRecorder := httptest.NewRecorder()
+		router.HandleFunc(
+			"/v1/ready", uut.LoggingMiddleware(uut.ReadyHandler()),
+		)
+
+		// Request
+		router.ServeHTTP(respRecorder, req)
+
+		assert.Equal(http.StatusInternalServerError, respRecorder.Code)
+	}
+
+	// Case 1: success
+	{
+		testSource := common.VideoSource{SourceLocalTime: timestamp.Add(-time.Second * 30)}
+
+		// Prepare mock
+		mockDB.On(
+			"GetVideoSourceByName",
+			mock.AnythingOfType("*context.valueCtx"),
+			sourceName,
+		).Return(testSource, nil).Once()
+
+		req, err := http.NewRequest("GET", "/v1/ready", nil)
+		assert.Nil(err)
+
+		// Setup HTTP handling
+		router := mux.NewRouter()
+		respRecorder := httptest.NewRecorder()
+		router.HandleFunc(
+			"/v1/ready", uut.LoggingMiddleware(uut.ReadyHandler()),
+		)
+
+		// Request
+		router.ServeHTTP(respRecorder, req)
+
+		assert.Equal(http.StatusOK, respRecorder.Code)
 	}
 }

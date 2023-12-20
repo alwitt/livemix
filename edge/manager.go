@@ -223,6 +223,7 @@ func NewManager(
 		return nil, err
 	}
 
+	// TODO FIXME: Tie a ready signal to this
 	// Start timer to periodically send video source status reports to the system control node
 	err = reportTriggerTimer.Start(
 		params.StatusReportInterval, instance.sendSourceStatusReport, false,
@@ -319,10 +320,21 @@ func (o *videoSourceOperatorImpl) ChangeVideoSourceStreamState(
 func (o *videoSourceOperatorImpl) sendSourceStatusReport() error {
 	logTags := o.GetLogTagsForContext(o.workerCtxt)
 
+	timestamp := time.Now().UTC()
+
 	report := ipc.NewVideoSourceStatusReport(o.Self.ID, o.SelfReqRespTargetID, time.Now().UTC())
 
 	if err := o.BroadcastClient.Broadcast(o.workerCtxt, &report); err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to send status report message")
+		return err
+	}
+
+	db := o.DBConns.NewPersistanceManager()
+	defer db.Close()
+
+	err := db.UpdateVideoSourceStats(o.workerCtxt, o.Self.ID, o.SelfReqRespTargetID, timestamp)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to locally update video source stats")
 		return err
 	}
 

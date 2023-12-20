@@ -183,6 +183,8 @@ func BuildSystemManagementServer(
 BuildPlaylistReceiverServer create edge node playlist receive server
 
 	@param parentCtxt context.Context - REST handler parent context
+	@param self common.VideoSourceConfig - video source entity parameter
+	@param dbConns db.ConnectionManager - DB connection manager
 	@param httpCfg common.APIServerConfig - HTTP server configuration
 	@param forwardCB PlaylistForwardCB - callback to forward newly received playlists
 	@param metrics goutils.HTTPRequestMetricHelper - metric collection agent
@@ -190,6 +192,8 @@ BuildPlaylistReceiverServer create edge node playlist receive server
 */
 func BuildPlaylistReceiverServer(
 	parentCtxt context.Context,
+	sourceCfg common.VideoSourceConfig,
+	dbConns db.ConnectionManager,
 	httpCfg common.APIServerConfig,
 	forwardCB PlaylistForwardCB,
 	metrics goutils.HTTPRequestMetricHelper,
@@ -200,10 +204,27 @@ func BuildPlaylistReceiverServer(
 	if err != nil {
 		return nil, err
 	}
+	livenessHTTPHandler, err := NewEdgeNodeLivenessHandler(
+		sourceCfg, dbConns, httpCfg.APIs.RequestLogging,
+	)
+	if err != nil {
+		return nil, err
+	}
 
 	router := mux.NewRouter()
 	mainRouter := registerPathPrefix(router, httpCfg.APIs.Endpoint.PathPrefix, nil)
+	livenessRouter := registerPathPrefix(mainRouter, "/liveness", nil)
 	v1Router := registerPathPrefix(mainRouter, "/v1", nil)
+
+	// --------------------------------------------------------------------------------
+	// Health check
+
+	_ = registerPathPrefix(livenessRouter, "/alive", map[string]http.HandlerFunc{
+		"get": livenessHTTPHandler.AliveHandler(),
+	})
+	_ = registerPathPrefix(livenessRouter, "/ready", map[string]http.HandlerFunc{
+		"get": livenessHTTPHandler.ReadyHandler(),
+	})
 
 	// --------------------------------------------------------------------------------
 	// Playlist input
@@ -216,6 +237,9 @@ func BuildPlaylistReceiverServer(
 
 	router.Use(func(next http.Handler) http.Handler {
 		return httpHandler.LoggingMiddleware(next.ServeHTTP)
+	})
+	livenessRouter.Use(func(next http.Handler) http.Handler {
+		return livenessHTTPHandler.LoggingMiddleware(next.ServeHTTP)
 	})
 
 	// --------------------------------------------------------------------------------

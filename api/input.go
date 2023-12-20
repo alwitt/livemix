@@ -12,6 +12,7 @@ import (
 	"github.com/alwitt/goutils"
 	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/common/ipc"
+	"github.com/alwitt/livemix/db"
 	"github.com/alwitt/livemix/hls"
 	"github.com/apex/log"
 )
@@ -380,5 +381,143 @@ func (h SegmentReceiveHandler) NewSegment(w http.ResponseWriter, r *http.Request
 func (h SegmentReceiveHandler) NewSegmentHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		h.NewSegment(w, r)
+	}
+}
+
+// =====================================================================================
+// Edge Node Utilities
+
+// EdgeNodeLivenessHandler liveness REST API interface for edge node
+type EdgeNodeLivenessHandler struct {
+	goutils.RestAPIHandler
+	self    common.VideoSourceConfig
+	dbConns db.ConnectionManager
+}
+
+/*
+NewEdgeNodeLivenessHandler define a new edge node liveness REST API handler
+
+	@param self common.VideoSourceConfig - video source entity parameter
+	@param dbConns db.ConnectionManager - DB connection manager
+	@param logConfig common.HTTPRequestLogging - handler log settings
+	@return new EdgeNodeLivenessHandler
+*/
+func NewEdgeNodeLivenessHandler(
+	self common.VideoSourceConfig,
+	dbConns db.ConnectionManager,
+	logConfig common.HTTPRequestLogging,
+) (EdgeNodeLivenessHandler, error) {
+	return EdgeNodeLivenessHandler{
+		RestAPIHandler: goutils.RestAPIHandler{
+			Component: goutils.Component{
+				LogTags: log.Fields{"module": "api", "component": "edge-node-liveness-handler"},
+				LogTagModifiers: []goutils.LogMetadataModifier{
+					goutils.ModifyLogMetadataByRestRequestParam,
+				},
+			},
+			CallRequestIDHeaderField: &logConfig.RequestIDHeader,
+			DoNotLogHeaders: func() map[string]bool {
+				result := map[string]bool{}
+				for _, v := range logConfig.DoNotLogHeaders {
+					result[v] = true
+				}
+				return result
+			}(),
+			LogLevel: logConfig.HealthLogLevel,
+		}, self: self, dbConns: dbConns,
+	}, nil
+}
+
+// -----------------------------------------------------------------------
+
+// Alive godoc
+// @Summary Edge Node liveness check
+// @Description Will return success to indicate Edge Node is live
+// @tags util,management,edge
+// @Produce json
+// @Param X-Request-ID header string false "Request ID"
+// @Success 200 {object} goutils.RestAPIBaseResponse "success"
+// @Failure 400 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 404 {string} string "error"
+// @Failure 500 {object} goutils.RestAPIBaseResponse "error"
+// @Router /v1/alive [get]
+func (h EdgeNodeLivenessHandler) Alive(w http.ResponseWriter, r *http.Request) {
+	logTags := h.GetLogTagsForContext(r.Context())
+	if err := h.WriteRESTResponse(
+		w, http.StatusOK, h.GetStdRESTSuccessMsg(r.Context()), nil,
+	); err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to form response")
+	}
+}
+
+// AliveHandler Wrapper around Alive
+func (h EdgeNodeLivenessHandler) AliveHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.Alive(w, r)
+	}
+}
+
+// -----------------------------------------------------------------------
+
+// Ready godoc
+// @Summary Edge Node readiness check
+// @Description Will return success to indicate Edge Node is ready
+// @tags util,management,edge
+// @Produce json
+// @Param X-Request-ID header string false "Request ID"
+// @Success 200 {object} goutils.RestAPIBaseResponse "success"
+// @Failure 400 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 404 {string} string "error"
+// @Failure 500 {object} goutils.RestAPIBaseResponse "error"
+// @Router /v1/ready [get]
+func (h EdgeNodeLivenessHandler) Ready(w http.ResponseWriter, r *http.Request) {
+	var respCode int
+	var response interface{}
+	logTags := h.GetLogTagsForContext(r.Context())
+	defer func() {
+		if err := h.WriteRESTResponse(w, respCode, response, nil); err != nil {
+			log.WithError(err).WithFields(logTags).Error("Failed to form response")
+		}
+	}()
+
+	db := h.dbConns.NewPersistanceManager()
+	defer db.Close()
+
+	if err := db.Ready(r.Context()); err != nil {
+		respCode = http.StatusInternalServerError
+		response = h.GetStdRESTErrorMsg(
+			r.Context(), http.StatusInternalServerError, "not ready", err.Error(),
+		)
+		return
+	}
+
+	timestamp := time.Now().UTC()
+	updatedEntity, err := db.GetVideoSourceByName(r.Context(), h.self.Name)
+	if err != nil {
+		respCode = http.StatusInternalServerError
+		response = h.GetStdRESTErrorMsg(
+			r.Context(), http.StatusInternalServerError, "local cache not setup", err.Error(),
+		)
+		return
+	}
+
+	timeToLastUpdate := timestamp.Sub(updatedEntity.SourceLocalTime)
+	if timeToLastUpdate > h.self.StatusReportInt()*2 {
+		err := fmt.Errorf("status report transmission passed deadline")
+		respCode = http.StatusInternalServerError
+		response = h.GetStdRESTErrorMsg(
+			r.Context(), http.StatusInternalServerError, "not ready", err.Error(),
+		)
+		return
+	}
+
+	respCode = http.StatusOK
+	response = h.GetStdRESTSuccessMsg(r.Context())
+}
+
+// ReadyHandler Wrapper around Ready
+func (h EdgeNodeLivenessHandler) ReadyHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.Ready(w, r)
 	}
 }

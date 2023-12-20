@@ -233,10 +233,10 @@ type SystemManager interface {
 	) error
 
 	/*
-		PurgeUnassociatedRecordingSegments trigger to purge recording segments unassociated
+		DeleteUnassociatedRecordingSegments trigger to purge recording segments unassociated
 		with any recordings from storage
 	*/
-	PurgeUnassociatedRecordingSegments() error
+	DeleteUnassociatedRecordingSegments() error
 }
 
 // systemManagerImpl implements SystemManager
@@ -330,7 +330,7 @@ func NewManager(
 
 	// -----------------------------------------------------------------------------
 	// Start timer to periodically cleanup recording segments not related to any recordings
-	err = cleanupTimer.Start(segmentCleanupInt, instance.PurgeUnassociatedRecordingSegments, false)
+	err = cleanupTimer.Start(segmentCleanupInt, instance.DeleteUnassociatedRecordingSegments, false)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to start segment cleanup timer")
 		return nil, err
@@ -871,7 +871,7 @@ func (m *systemManagerImpl) ProcessBroadcastMsgs(
 	case reflect.TypeOf(ipc.VideoSourceStatusReport{}):
 		statusReport := parsed.(ipc.VideoSourceStatusReport)
 		// Record
-		if err := dbClient.RefreshVideoSourceStats(
+		if err := dbClient.UpdateVideoSourceStats(
 			ctxt,
 			statusReport.SourceID,
 			statusReport.RequestResponseTargetID,
@@ -909,14 +909,14 @@ func (m *systemManagerImpl) ProcessBroadcastMsgs(
 	return nil
 }
 
-func (m *systemManagerImpl) PurgeUnassociatedRecordingSegments() error {
+func (m *systemManagerImpl) DeleteUnassociatedRecordingSegments() error {
 	logTags := m.GetLogTagsForContext(m.workerCtxt)
 
 	dbClient := m.dbConns.NewPersistanceManager()
 	defer dbClient.Close()
 
 	// Purge the un-associated segments
-	segmentsToDelete, err := dbClient.PurgeUnassociatedRecordingSegments(m.workerCtxt)
+	segmentsToDelete, err := dbClient.DeleteUnassociatedRecordingSegments(m.workerCtxt)
 	if err != nil {
 		log.
 			WithError(err).

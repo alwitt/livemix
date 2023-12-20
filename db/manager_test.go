@@ -141,7 +141,7 @@ func TestDBManagerVideoSource(t *testing.T) {
 		assert.Nil(uut.ChangeVideoSourceStreamState(utCtxt, sourceID1, -1))
 		reqRespID := uuid.NewString()
 		timestamp := time.Now().UTC()
-		assert.Nil(uut.RefreshVideoSourceStats(utCtxt, sourceID1, reqRespID, timestamp))
+		assert.Nil(uut.UpdateVideoSourceStats(utCtxt, sourceID1, reqRespID, timestamp))
 		entry, err := uut.GetVideoSource(utCtxt, sourceID1)
 		assert.Nil(err)
 		assert.Equal(-1, entry.Streaming)
@@ -540,7 +540,7 @@ func TestDBManagerVideoSegmentPurgeOldSegments(t *testing.T) {
 	{
 		uut := conns.NewPersistanceManager()
 		markTime := currentTime.Add(segmentLength * 3)
-		assert.Nil(uut.PurgeOldLiveStreamSegments(utCtxt, markTime))
+		assert.Nil(uut.DeleteOldLiveStreamSegments(utCtxt, markTime))
 		segments, err := uut.ListAllLiveStreamSegments(utCtxt, sourceID)
 		assert.Nil(err)
 		assert.Len(segments, 4)
@@ -554,7 +554,7 @@ func TestDBManagerVideoSegmentPurgeOldSegments(t *testing.T) {
 	{
 		uut := conns.NewPersistanceManager()
 		markTime := currentTime.Add(segmentLength * 6)
-		assert.Nil(uut.PurgeOldLiveStreamSegments(utCtxt, markTime))
+		assert.Nil(uut.DeleteOldLiveStreamSegments(utCtxt, markTime))
 		segments, err := uut.ListAllLiveStreamSegments(utCtxt, sourceID)
 		assert.Nil(err)
 		assert.Len(segments, 1)
@@ -972,7 +972,7 @@ func TestDBManagerRecordingSegments(t *testing.T) {
 	// Case 5: purge the segments not associated with any recordings
 	{
 		uut := conns.NewPersistanceManager()
-		deleted, err := uut.PurgeUnassociatedRecordingSegments(utCtxt)
+		deleted, err := uut.DeleteUnassociatedRecordingSegments(utCtxt)
 		assert.Nil(err)
 		segByID := map[string]common.VideoSegment{}
 		for _, segment := range deleted {

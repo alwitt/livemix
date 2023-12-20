@@ -207,7 +207,7 @@ func (m *liveStreamSegmentManagerImpl) purgeOldSegments() error {
 	timeLimit := time.Now().UTC().Add(-m.trackingWindow)
 	dbClient := m.dbConns.NewPersistanceManager()
 	defer dbClient.Close()
-	return dbClient.PurgeOldLiveStreamSegments(m.workerCtxt, timeLimit)
+	return dbClient.DeleteOldLiveStreamSegments(m.workerCtxt, timeLimit)
 }
 
 func (m *liveStreamSegmentManagerImpl) Stop(ctxt context.Context) error {

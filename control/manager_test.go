@@ -43,7 +43,7 @@ func TestSystemManagerProcessSourceStatusBroadcast(t *testing.T) {
 
 	// Setup mock
 	mockDB.On(
-		"RefreshVideoSourceStats",
+		"UpdateVideoSourceStats",
 		mock.AnythingOfType("*context.emptyCtx"),
 		testMessage.SourceID,
 		testMessage.RequestResponseTargetID,
@@ -702,11 +702,11 @@ func TestSystemManagerPurgeUnassociatedRecordingSegments(t *testing.T) {
 	{
 		// Prepare mock
 		mockDB.On(
-			"PurgeUnassociatedRecordingSegments",
+			"DeleteUnassociatedRecordingSegments",
 			mock.AnythingOfType("*context.cancelCtx"),
 		).Return([]common.VideoSegment{}, nil).Once()
 
-		assert.Nil(uut.PurgeUnassociatedRecordingSegments())
+		assert.Nil(uut.DeleteUnassociatedRecordingSegments())
 	}
 
 	// ------------------------------------------------------------------------------------
@@ -746,7 +746,7 @@ func TestSystemManagerPurgeUnassociatedRecordingSegments(t *testing.T) {
 
 		// Prepare mock
 		mockDB.On(
-			"PurgeUnassociatedRecordingSegments",
+			"DeleteUnassociatedRecordingSegments",
 			mock.AnythingOfType("*context.cancelCtx"),
 		).Return(testSegments, nil).Once()
 		mockS3.On(
@@ -762,6 +762,6 @@ func TestSystemManagerPurgeUnassociatedRecordingSegments(t *testing.T) {
 			objectsByBucket[testBucket1],
 		).Return(nil).Once()
 
-		assert.Nil(uut.PurgeUnassociatedRecordingSegments())
+		assert.Nil(uut.DeleteUnassociatedRecordingSegments())
 	}
 }

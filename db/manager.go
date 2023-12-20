@@ -132,7 +132,7 @@ type PersistenceManager interface {
 	ChangeVideoSourceStreamState(ctxt context.Context, id string, streaming int) error
 
 	/*
-		RefreshVideoSourceStats update video source status fields
+		UpdateVideoSourceStats update video source status fields
 
 			@param ctxt context.Context - execution context
 			@param id string - source ID
@@ -140,7 +140,7 @@ type PersistenceManager interface {
 			    over request-response network.
 			@param sourceLocalTime time.Time - video source local time
 	*/
-	RefreshVideoSourceStats(
+	UpdateVideoSourceStats(
 		ctxt context.Context, id string, reqRespTargetID string, sourceLocalTime time.Time,
 	) error
 
@@ -261,7 +261,7 @@ type PersistenceManager interface {
 			@param ctxt context.Context - execution context
 			@param timeLimit time.Time - video segment older than this point will be purged
 	*/
-	PurgeOldLiveStreamSegments(
+	DeleteOldLiveStreamSegments(
 		ctxt context.Context, timeLimit time.Time,
 	) error
 
@@ -409,13 +409,13 @@ type PersistenceManager interface {
 	) ([]common.VideoSegment, error)
 
 	/*
-		PurgeUnassociatedRecordingSegments delete recording segments not attached to any
+		DeleteUnassociatedRecordingSegments delete recording segments not attached to any
 		video recording sessions
 
 			@param ctxt context.Context - execution context
 			@returns set of segments deleted
 	*/
-	PurgeUnassociatedRecordingSegments(ctxt context.Context) ([]common.VideoSegment, error)
+	DeleteUnassociatedRecordingSegments(ctxt context.Context) ([]common.VideoSegment, error)
 }
 
 // persistenceManagerImpl implements PersistenceManager
@@ -665,7 +665,7 @@ func (m *persistenceManagerImpl) ChangeVideoSourceStreamState(
 	return nil
 }
 
-func (m *persistenceManagerImpl) RefreshVideoSourceStats(
+func (m *persistenceManagerImpl) UpdateVideoSourceStats(
 	ctxt context.Context, id string, reqRespTargetID string, sourceLocalTime time.Time,
 ) error {
 	// Do not continue if class instance already logged an error
@@ -947,7 +947,7 @@ func (m *persistenceManagerImpl) BulkDeleteLiveStreamSegment(
 	return nil
 }
 
-func (m *persistenceManagerImpl) PurgeOldLiveStreamSegments(
+func (m *persistenceManagerImpl) DeleteOldLiveStreamSegments(
 	ctxt context.Context, timeLimit time.Time,
 ) error {
 	// Do not continue if class instance already logged an error
@@ -1408,7 +1408,7 @@ func (m *persistenceManagerImpl) ListAllSegmentsOfRecording(
 	return result, nil
 }
 
-func (m *persistenceManagerImpl) PurgeUnassociatedRecordingSegments(
+func (m *persistenceManagerImpl) DeleteUnassociatedRecordingSegments(
 	ctxt context.Context,
 ) ([]common.VideoSegment, error) {
 	// Do not continue if class instance already logged an error

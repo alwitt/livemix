@@ -140,7 +140,7 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 			testSource.ID,
 		).Return(defineSegmentList(currentTime, segmentIDs0, segmentNames0), nil).Once()
 		mockDB.On(
-			"PurgeOldLiveStreamSegments",
+			"DeleteOldLiveStreamSegments",
 			mock.AnythingOfType("*context.emptyCtx"),
 			mock.AnythingOfType("time.Time"),
 		).Return(nil).Once()
@@ -194,7 +194,7 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 			testSource.ID,
 		).Return(defineSegmentList(currentTime, segmentIDs1, segmentNames1), nil).Once()
 		mockDB.On(
-			"PurgeOldLiveStreamSegments",
+			"DeleteOldLiveStreamSegments",
 			mock.AnythingOfType("*context.emptyCtx"),
 			mock.AnythingOfType("time.Time"),
 		).Return(nil).Once()
@@ -248,7 +248,7 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 			testSource.ID,
 		).Return(defineSegmentList(currentTime, segmentIDs2, segmentNames2), nil).Once()
 		mockDB.On(
-			"PurgeOldLiveStreamSegments",
+			"DeleteOldLiveStreamSegments",
 			mock.AnythingOfType("*context.emptyCtx"),
 			mock.AnythingOfType("time.Time"),
 		).Return(nil).Once()

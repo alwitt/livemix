@@ -57,6 +57,13 @@ func TestVideoSourceOperatorStartRecording(t *testing.T) {
 		assert.Equal(testSource.ID, report.SourceID)
 		assert.Equal(uutConfig.SelfReqRespTargetID, report.RequestResponseTargetID)
 	}).Return(nil)
+	mockDB.On(
+		"UpdateVideoSourceStats",
+		mock.AnythingOfType("*context.cancelCtx"),
+		testSource.ID,
+		uutConfig.SelfReqRespTargetID,
+		mock.AnythingOfType("time.Time"),
+	).Return(nil)
 
 	uut, err := edge.NewManager(utCtxt, uutConfig, nil)
 	assert.Nil(err)
@@ -238,6 +245,13 @@ func TestVideoSourceOperatorStopRecording(t *testing.T) {
 		assert.Equal(testSource.ID, report.SourceID)
 		assert.Equal(uutConfig.SelfReqRespTargetID, report.RequestResponseTargetID)
 	}).Return(nil)
+	mockDB.On(
+		"UpdateVideoSourceStats",
+		mock.AnythingOfType("*context.cancelCtx"),
+		testSource.ID,
+		uutConfig.SelfReqRespTargetID,
+		mock.AnythingOfType("time.Time"),
+	).Return(nil)
 
 	uut, err := edge.NewManager(utCtxt, uutConfig, nil)
 	assert.Nil(err)
@@ -326,6 +340,13 @@ func TestVideoSourceOperatorNewSegmentFromSource(t *testing.T) {
 		assert.Equal(testSource.ID, report.SourceID)
 		assert.Equal(uutConfig.SelfReqRespTargetID, report.RequestResponseTargetID)
 	}).Return(nil)
+	mockDB.On(
+		"UpdateVideoSourceStats",
+		mock.AnythingOfType("*context.cancelCtx"),
+		testSource.ID,
+		uutConfig.SelfReqRespTargetID,
+		mock.AnythingOfType("time.Time"),
+	).Return(nil)
 
 	uut, err := edge.NewManager(utCtxt, uutConfig, nil)
 	assert.Nil(err)
