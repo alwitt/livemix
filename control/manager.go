@@ -248,6 +248,7 @@ type systemManagerImpl struct {
 	maxAgeForSourceStatusReport time.Duration
 	segmentCleanupTimer         goutils.IntervalTimer
 	metricsLogTimer             goutils.IntervalTimer
+	sourceHealthCheckTimer      goutils.IntervalTimer
 	wg                          sync.WaitGroup
 	workerCtxt                  context.Context
 	workerCtxtCancel            context.CancelFunc
@@ -328,6 +329,23 @@ func NewManager(
 	}
 	instance.metricsLogTimer = metricsTimer
 
+	// Define periodic timer to run health check on video sources
+	healthTimerLogTags := log.Fields{"sub-module": "video-source-health-check-timer"}
+	for lKey, lVal := range logTags {
+		healthTimerLogTags[lKey] = lVal
+	}
+	healthTimer, err := goutils.GetIntervalTimerInstance(
+		instance.workerCtxt, &instance.wg, healthTimerLogTags,
+	)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Failed to define video source health checker timer")
+		return nil, err
+	}
+	instance.sourceHealthCheckTimer = healthTimer
+
 	// -----------------------------------------------------------------------------
 	// Start timer to periodically cleanup recording segments not related to any recordings
 	err = cleanupTimer.Start(segmentCleanupInt, instance.DeleteUnassociatedRecordingSegments, false)
@@ -338,6 +356,11 @@ func NewManager(
 	err = metricsTimer.Start(time.Second*30, instance.writeMetrics, false)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to start metrics logging timer")
+		return nil, err
+	}
+	err = healthTimer.Start(time.Second*30, instance.videoSourceHealthCheck, false)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to start video source health check timer")
 		return nil, err
 	}
 
@@ -425,6 +448,9 @@ func (m *systemManagerImpl) Stop(ctxt context.Context) error {
 		return err
 	}
 	if err := m.segmentCleanupTimer.Stop(); err != nil {
+		return err
+	}
+	if err := m.sourceHealthCheckTimer.Stop(); err != nil {
 		return err
 	}
 	return goutils.TimeBoundedWaitGroupWait(ctxt, &m.wg, time.Second*5)
@@ -1037,6 +1063,77 @@ func (m *systemManagerImpl) writeMetrics() error {
 		m.activeRecordingsMetrics.
 			With(prometheus.Labels{"controller": "true"}).
 			Set(float64(activeRecordings))
+	}
+
+	return nil
+}
+
+func (m *systemManagerImpl) videoSourceHealthCheck() error {
+	logTags := m.GetLogTagsForContext(m.workerCtxt)
+
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+
+	allSources, err := dbClient.ListVideoSources(m.workerCtxt)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to fetch all video sources")
+		return err
+	}
+
+	stopSources := []common.VideoSource{}
+
+	for _, oneSource := range allSources {
+		if m.canRequestVideoSource(oneSource) != nil {
+			// Disable streaming and any recording for this source
+			stopSources = append(stopSources, oneSource)
+		}
+	}
+
+	timestamp := time.Now().UTC()
+
+	for _, oneSource := range stopSources {
+		if err := dbClient.ChangeVideoSourceStreamState(m.workerCtxt, oneSource.ID, -1); err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				WithField("source-id", oneSource.ID).
+				Error("Failed to disable video source streaming")
+			return err
+		}
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", oneSource.ID).
+			Debug("Disabled streaming for dead video source")
+
+		records, err := dbClient.ListRecordingSessionsOfSource(m.workerCtxt, oneSource.ID, true)
+		if err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				WithField("source-id", oneSource.ID).
+				Error("Failed to list video source recordings")
+			return err
+		}
+		if len(records) > 0 {
+			for _, recording := range records {
+				err := dbClient.MarkEndOfRecordingSession(m.workerCtxt, recording.ID, timestamp)
+				if err != nil {
+					log.
+						WithError(err).
+						WithFields(logTags).
+						WithField("source-id", oneSource.ID).
+						WithField("recording", recording.ID).
+						Error("Failed to mark recording session complete")
+					return err
+				}
+			}
+			log.
+				WithError(err).
+				WithFields(logTags).
+				WithField("source-id", oneSource.ID).
+				Debug("Stopped all recordings of dead video source")
+		}
 	}
 
 	return nil
