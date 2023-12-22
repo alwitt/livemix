@@ -20,7 +20,7 @@ GetSqliteDialector define Sqlite GORM dialector
 	@return GORM sqlite dialector
 */
 func GetSqliteDialector(dbFile string) gorm.Dialector {
-	return sqlite.Open(fmt.Sprintf("%s?_foreign_keys=on", dbFile))
+	return sqlite.Open(fmt.Sprintf("%s?cache=shared&_foreign_keys=on", dbFile))
 }
 
 /*
