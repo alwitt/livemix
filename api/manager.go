@@ -182,7 +182,7 @@ func (h SystemManagerHandler) DefineNewVideoSourceHandler() http.HandlerFunc {
 type VideoSourceInfoListResponse struct {
 	goutils.RestAPIBaseResponse
 	// Sources list of video source infos
-	Sources []common.VideoSource `json:"sources" validate:"required,gte=1,dive"`
+	Sources []common.VideoSource `json:"sources"`
 }
 
 // ListVideoSources godoc
