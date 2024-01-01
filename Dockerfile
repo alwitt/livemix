@@ -1,7 +1,6 @@
 # build environment
-FROM golang:1.20-bullseye as build
-RUN apt-get update && \
-    apt-get install -y gcc && \
+FROM golang:1.20-alpine as build
+RUN apk add --update gcc musl-dev && \
     mkdir -vp /app
 COPY ./go.mod /app/go.mod
 COPY ./go.sum /app/go.sum
@@ -23,7 +22,7 @@ RUN cd /app && \
     cp -v ./livemix.bin ./livemix-util.bin /usr/bin/
 
 # deploy environment
-FROM debian:bullseye
+FROM alpine
 COPY --from=build /usr/bin/livemix.bin /usr/bin/
 COPY --from=build /usr/bin/livemix-util.bin /usr/bin/
 ENTRYPOINT ["/usr/bin/livemix.bin"]
