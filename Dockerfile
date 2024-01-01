@@ -1,6 +1,8 @@
 # build environment
-FROM golang:1.20-alpine as build
-RUN mkdir -vp /app
+FROM golang:1.20-bullseye as build
+RUN apt-get update && \
+    apt-get install -y gcc && \
+    mkdir -vp /app
 COPY ./go.mod /app/go.mod
 COPY ./go.sum /app/go.sum
 COPY ./api /app/api
@@ -16,12 +18,12 @@ COPY ./utils /app/utils
 COPY ./vod /app/vod
 COPY ./main.go /app/main.go
 RUN cd /app && \
-    go build -o livemix.bin . && \
+    CGO_ENABLED=1 go build -o livemix.bin . && \
     go build -o livemix-util.bin ./bin/util/... && \
     cp -v ./livemix.bin ./livemix-util.bin /usr/bin/
 
 # deploy environment
-FROM alpine
+FROM debian:bullseye
 COPY --from=build /usr/bin/livemix.bin /usr/bin/
 COPY --from=build /usr/bin/livemix-util.bin /usr/bin/
 ENTRYPOINT ["/usr/bin/livemix.bin"]
