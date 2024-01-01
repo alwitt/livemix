@@ -29,9 +29,11 @@ type PlaylistForwardCB func(context.Context, hls.Playlist, time.Time) error
 // This is only meant to be used by the edge node
 type PlaylistReceiveHandler struct {
 	goutils.RestAPIHandler
-	parentCtxt      context.Context
-	parser          hls.PlaylistParser
-	forwardPlaylist PlaylistForwardCB
+	parentCtxt              context.Context
+	parser                  hls.PlaylistParser
+	forwardPlaylist         PlaylistForwardCB
+	defaultSourceName       string
+	defaultSegmentURIPrefix *string
 }
 
 /*
@@ -40,7 +42,11 @@ NewPlaylistReceiveHandler define a new HLS playlist receiver
 	@param parentCtxt context.Context - REST handler parent context
 	@param playlistParser hls.PlaylistParser - playlist parser object
 	@param forwardPlaylist - callback function for sending newly received HLS playlist
-		onward for processing
+	    onward for processing
+	@param defaultSourceName string - if video source name not provided, use this as the default
+	    name for the playlist.
+	@param defaultSegmentURIPrefix *string - if video segment URI prefix is not provided, use this
+	    as the default prefix.
 	@param logConfig common.HTTPRequestLogging - handler log settings
 	@param metrics goutils.HTTPRequestMetricHelper - metric collection agent
 	@returns new PlaylistReceiveHandler
@@ -49,6 +55,8 @@ func NewPlaylistReceiveHandler(
 	parentCtxt context.Context,
 	playlistParser hls.PlaylistParser,
 	forwardPlaylist PlaylistForwardCB,
+	defaultSourceName string,
+	defaultSegmentURIPrefix *string,
 	logConfig common.HTTPRequestLogging,
 	metrics goutils.HTTPRequestMetricHelper,
 ) (PlaylistReceiveHandler, error) {
@@ -70,21 +78,26 @@ func NewPlaylistReceiveHandler(
 			}(),
 			LogLevel:      logConfig.LogLevel,
 			MetricsHelper: metrics,
-		}, parentCtxt: parentCtxt, parser: playlistParser, forwardPlaylist: forwardPlaylist,
+		},
+		parentCtxt:              parentCtxt,
+		parser:                  playlistParser,
+		forwardPlaylist:         forwardPlaylist,
+		defaultSourceName:       defaultSourceName,
+		defaultSegmentURIPrefix: defaultSegmentURIPrefix,
 	}, nil
 }
 
 // NewPlaylist godoc
 // @Summary Process new HLS playlist
-// @Description Receives new HLS playlist for processing. The sender must also provide the
+// @Description Receives new HLS playlist for processing. The sender should provide the
 // location where the MPEG-TS segment are stored as a URI prefix. The HLS playlist monitor
-// will use that prefix to pull the segments into the system.
+// will use that prefix to pull the segments into the system. A default is used if none provided.
 // @tags edge
 // @Accept plain
 // @Produce json
 // @Param X-Request-ID header string false "Request ID"
-// @Param Video-Source-Name header string true "Video source name this playlist belongs to"
-// @Param MPEG-TS-URI-Prefix header string true "URI prefix for the MPEG-TS segments. The assumption is that all segments listed in the playlist are relative to this prefix."
+// @Param Video-Source-Name header string false "Video source name this playlist belongs to"
+// @Param MPEG-TS-URI-Prefix header string false "URI prefix for the MPEG-TS segments. The assumption is that all segments listed in the playlist are relative to this prefix."
 // @Param playlist body string true "Playlist list content"
 // @Success 200 {object} goutils.RestAPIBaseResponse "success"
 // @Failure 400 {object} goutils.RestAPIBaseResponse "error"
@@ -105,21 +118,20 @@ func (h PlaylistReceiveHandler) NewPlaylist(w http.ResponseWriter, r *http.Reque
 	// Get video source name
 	videoSourceName := r.Header.Get("Video-Source-Name")
 	if videoSourceName == "" {
-		msg := "request missing Video-Source-Name"
-		log.WithFields(logTags).Error(msg)
-		respCode = http.StatusBadRequest
-		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
-		return
+		videoSourceName = h.defaultSourceName
 	}
 
 	// Get the MPEG-TS prefix
 	tsFileURIPrefix := r.Header.Get("MPEG-TS-URI-Prefix")
 	if tsFileURIPrefix == "" {
-		msg := "request missing MPEG-TS-URI-Prefix"
-		log.WithFields(logTags).Error(msg)
-		respCode = http.StatusBadRequest
-		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
-		return
+		if h.defaultSegmentURIPrefix == nil {
+			msg := "request missing MPEG-TS-URI-Prefix"
+			log.WithFields(logTags).Error(msg)
+			respCode = http.StatusBadRequest
+			response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
+			return
+		}
+		tsFileURIPrefix = *h.defaultSegmentURIPrefix
 	}
 
 	// Parse the body for the playlist

@@ -184,6 +184,8 @@ BuildPlaylistReceiverServer create edge node playlist receive server
 
 	@param parentCtxt context.Context - REST handler parent context
 	@param self common.VideoSourceConfig - video source entity parameter
+	@param defaultSegmentURIPrefix *string - if video segment URI prefix is not provided
+	    when submitting a new playlist, use this default prefix instead.
 	@param dbConns db.ConnectionManager - DB connection manager
 	@param httpCfg common.APIServerConfig - HTTP server configuration
 	@param forwardCB PlaylistForwardCB - callback to forward newly received playlists
@@ -193,13 +195,20 @@ BuildPlaylistReceiverServer create edge node playlist receive server
 func BuildPlaylistReceiverServer(
 	parentCtxt context.Context,
 	sourceCfg common.VideoSourceConfig,
+	defaultSegmentURIPrefix *string,
 	dbConns db.ConnectionManager,
 	httpCfg common.APIServerConfig,
 	forwardCB PlaylistForwardCB,
 	metrics goutils.HTTPRequestMetricHelper,
 ) (*http.Server, error) {
 	httpHandler, err := NewPlaylistReceiveHandler(
-		parentCtxt, hls.NewPlaylistParser(), forwardCB, httpCfg.APIs.RequestLogging, metrics,
+		parentCtxt,
+		hls.NewPlaylistParser(),
+		forwardCB,
+		sourceCfg.Name,
+		defaultSegmentURIPrefix,
+		httpCfg.APIs.RequestLogging,
+		metrics,
 	)
 	if err != nil {
 		return nil, err

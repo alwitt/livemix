@@ -364,6 +364,8 @@ type SystemManagementConfig struct {
 type HLSMonitorConfig struct {
 	// APIServer HLS playlist receiver REST API server config
 	APIServer APIServerConfig `mapstructure:"api" json:"api" validate:"required,dive"`
+	// DefaultSegmentURIPrefix optionally set default video segment URI prefix
+	DefaultSegmentURIPrefix *string `mapstructure:"defaultSegmentURIPrefix,omitempty" json:"defaultSegmentURIPrefix,omitempty" validate:"omitempty,uri"`
 	// TrackingWindowInSec tracking window is the duration in time a video segment is tracked.
 	// After observing a new segment, that segment is remembered for the duration of a
 	// tracking window, and forgotten after that.

@@ -37,10 +37,18 @@ func TestPlaylistReceiver(t *testing.T) {
 		return nil
 	}
 
+	defaultSegURIPrefix := "file:///vid"
+
 	uut, err := api.NewPlaylistReceiveHandler(
-		utCtxt, parser, receivePlaylist, common.HTTPRequestLogging{
+		utCtxt,
+		parser,
+		receivePlaylist,
+		"unit-testing",
+		nil,
+		common.HTTPRequestLogging{
 			RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
-		}, nil,
+		},
+		nil,
 	)
 	assert.Nil(err)
 
@@ -62,6 +70,19 @@ func TestPlaylistReceiver(t *testing.T) {
 		assert.Equal(http.StatusBadRequest, respRecorder.Code)
 	}
 
+	uut, err = api.NewPlaylistReceiveHandler(
+		utCtxt,
+		parser,
+		receivePlaylist,
+		"unit-testing",
+		&defaultSegURIPrefix,
+		common.HTTPRequestLogging{
+			RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
+		},
+		nil,
+	)
+	assert.Nil(err)
+
 	// Case 1: correct request
 	{
 		payload := strings.Join(
@@ -81,7 +102,6 @@ func TestPlaylistReceiver(t *testing.T) {
 		req, err := http.NewRequest("POST", "/v1/playlist", bytes.NewBufferString(payload))
 		assert.Nil(err)
 		req.Header.Add("Video-Source-Name", "testing")
-		req.Header.Add("MPEG-TS-URI-Prefix", "file:///vid")
 
 		// Setup HTTP handling
 		router := mux.NewRouter()

@@ -523,6 +523,7 @@ func DefineEdgeNode(
 	theNode.PlaylistReceiveServer, err = api.BuildPlaylistReceiverServer(
 		theNode.nodeRuntimeCtxt,
 		config.VideoSource,
+		config.MonitorConfig.DefaultSegmentURIPrefix,
 		dbConns,
 		config.MonitorConfig.APIServer,
 		theNode.monitor.Update,

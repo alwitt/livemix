@@ -100,6 +100,14 @@ monitor:
           - "Proxy-Authenticate"
           - "Proxy-Authorization"
 
+  # User can optionally set video segment URI prefix to read segments from.
+  #
+  # If this is set, that information does not need to be provided when calling
+  #   POST /v1/playlist
+  #
+  # NOTE: This is required on certain versions of ffmpeg (i.e. when -headers does not work)
+  #defaultSegmentURIPrefix: /path/to/segment/storage/dir
+
   # Tracking window is the duration in time a video segment is tracked. After observing
   # a new segment, that segment is remembered for the duration of a tracking window, and
   # forgotten after that.
