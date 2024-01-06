@@ -995,4 +995,23 @@ func TestDBManagerRecordingSegments(t *testing.T) {
 		assert.Contains(segByID, testSegments0[2].ID)
 		uut.Close()
 	}
+
+	// Case 6: clear out all recordings
+	{
+		uut := conns.NewPersistanceManager()
+		assert.Nil(uut.DeleteRecordingSession(utCtxt, sessionIDs[2]))
+		uut.Close()
+	}
+	// Purge all remaining segments
+	{
+		uut := conns.NewPersistanceManager()
+		deleted, err := uut.DeleteUnassociatedRecordingSegments(utCtxt)
+		assert.Nil(err)
+		segByID := map[string]common.VideoSegment{}
+		for _, segment := range deleted {
+			segByID[segment.ID] = segment
+		}
+		assert.Contains(segByID, testSegments0[2].ID)
+		uut.Close()
+	}
 }

@@ -89,4 +89,4 @@ docker:
     - docker buildx create --use
 
   script:
-    - docker buildx build --push --platform linux/amd64,linux/arm/v7 -t "$CI_REGISTRY_IMAGE:0.1.0-rc4-$CI_COMMIT_SHORT_SHA-$CI_JOB_ID" -t "$CI_REGISTRY_IMAGE:0.1.0-rc4-$CI_COMMIT_SHORT_SHA" -t "$CI_REGISTRY_IMAGE:0.1.0-rc4" -f Dockerfile .
+    - docker buildx build --push --platform linux/amd64,linux/arm/v7 -t "$CI_REGISTRY_IMAGE:0.1.0-rc5-$CI_COMMIT_SHORT_SHA-$CI_JOB_ID" -t "$CI_REGISTRY_IMAGE:0.1.0-rc5-$CI_COMMIT_SHORT_SHA" -t "$CI_REGISTRY_IMAGE:0.1.0-rc5" -f Dockerfile .
