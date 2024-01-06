@@ -1464,18 +1464,20 @@ func (m *persistenceManagerImpl) DeleteUnassociatedRecordingSegments(
 			m.err = tmp.Error
 			return nil, tmp.Error
 		}
-		tmp = m.db.Delete(&entries)
-		if tmp.Error != nil {
-			log.
-				WithError(tmp.Error).
-				WithFields(logTags).
-				Error("Failed to delete all recording segments")
-			m.err = tmp.Error
-			return nil, tmp.Error
-		}
+		if len(entries) > 0 {
+			tmp = m.db.Delete(&entries)
+			if tmp.Error != nil {
+				log.
+					WithError(tmp.Error).
+					WithFields(logTags).
+					Error("Failed to delete all recording segments")
+				m.err = tmp.Error
+				return nil, tmp.Error
+			}
 
-		for _, entry := range entries {
-			result = append(result, entry.VideoSegment)
+			for _, entry := range entries {
+				result = append(result, entry.VideoSegment)
+			}
 		}
 	}
 	return result, nil
