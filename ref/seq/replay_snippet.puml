@@ -1,0 +1,37 @@
+@startuml
+group Fetch playlist
+"User" -> "System Control Node": Get playlist for ### recording
+
+"System Control Node" -> "System Control Node": List segments of ### recording
+
+"System Control Node" -> "User": New playlist for ### recording\nwith associated segments
+
+group Pre-fetch first X associated segments
+loop each segment
+"System Control Node" -> "Object Store": Get N-th segment of ### recording
+
+"Object Store" -> "System Control Node": N-th segment
+
+"System Control Node" -> "memcached": Cache N-th segment
+end
+end
+end
+
+loop each segment of playlist
+"User" -> "System Control Node": Get N-th segment of ### stream
+
+alt segment already in cache
+"System Control Node" -> "memcached": Get N-th segment
+
+"memcached" -> "System Control Node": N-th segment
+else
+"System Control Node" -> "Object Store": Get N-th segment of ### recording
+
+"Object Store" -> "System Control Node": N-th segment
+
+"System Control Node" -> "memcached": Cache N-th segment
+end
+
+"System Control Node" -> "User": N-th segment
+end
+@enduml

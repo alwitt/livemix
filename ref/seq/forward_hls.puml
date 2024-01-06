@@ -1,0 +1,11 @@
+@startuml
+
+"System Control Node" -> "Edge Node": Begin stream forwarding
+
+loop
+"Edge Node" -> "System Control Node": Local video segment
+
+"System Control Node" -> "memcached": Cache segment for HLS stream
+end
+
+@enduml

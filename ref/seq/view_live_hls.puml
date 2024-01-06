@@ -1,0 +1,21 @@
+@startuml
+
+group Fetch playlist
+"User" -> "System Control Node": Get playlist for ### HLS stream
+
+"System Control Node" -> "System Control Node": List N most recent segments of ### stream
+
+"System Control Node" -> "User": New playlist for ### HLS stream\nwith N most recent segments
+end
+
+loop each segment of playlist
+"User" -> "System Control Node": Get N-th segment of ### stream
+
+"System Control Node" -> "memcached": Get N-th segment
+
+"memcached" -> "System Control Node": N-th segment
+
+"System Control Node" -> "User": N-th segment
+end
+
+@enduml

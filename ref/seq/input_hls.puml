@@ -1,0 +1,11 @@
+@startuml
+
+Source -> "Edge Node": Submit new playlist
+
+"Edge Node" -> "Edge Node": Parse playlist for segments
+
+loop each segment in playlist
+"Edge Node" -> : Fetch segment via URI
+end
+
+@enduml

@@ -1,0 +1,17 @@
+@startuml
+group Start recording snippet
+"User" -> "System Control Node": Start recording ### stream
+
+"System Control Node" -> "Edge Node of ### Stream": Start recording
+
+"Edge Node of ### Stream" -> "System Control Node": Started recording
+
+"System Control Node" -> "User": Started recording
+end
+
+loop each new segment of ### stream
+"Edge Node of ### Stream" -> "Object Store": Record segment
+
+"Edge Node of ### Stream" -> "System Control Node": Associate segment with recording
+end
+@enduml

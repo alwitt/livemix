@@ -216,9 +216,6 @@ vod:
   # Number of video segments to include when building a live VOD playlist.
   liveVODSegmentCount: 2
 
-  # when a segment is read from cold storage, store it in local cache with this TTL in secs.
-  segmentCacheTTLInSec: 300
-
 #########################################################################################
 # Edge Node PubSub request-response client configuration
 requestResponse:
