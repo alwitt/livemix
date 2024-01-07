@@ -265,3 +265,7 @@ To view the recording, user calls
 ```
 ffplay http://127.0.0.1:8081/v1/vod/recording/01HKH0STT34SSRFG6EPS458X0T/vid.m3u8
 ```
+
+# License
+
+* `LiveMix` source is licensed under the [MIT License](./LICENSE)
