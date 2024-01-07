@@ -129,7 +129,7 @@ forwarder:
       # S3 object store config
       s3:
         # S3 server endpoint
-        endpoint: localhost:9000
+        endpoint: minio:9000
         # Whether to TLS when connecting
         useTLS: false
 
@@ -141,21 +141,12 @@ forwarder:
     # HTTP forwarder target config
     remote:
       # URL to send new segments to
-      targetURL: http://system-control-node/v1/new-segment
+      targetURL: http://livemix-ctrl-node:8081/v1/new-segment
 
       # HTTP Client configuration
       #
       # The actual client is [resty](https://github.com/go-resty/resty)
       client:
-        # OAuth middleware integration configuration
-        #
-        # Currently only support client-credential OAuth flow configuration
-        oauth:
-          # OpenID provider issuer URL
-          issuerURL: https://idenity.provider.com
-          # Get a token from IDP with this target audience
-          targetAudience:
-
         # Client retry configuration. See https://github.com/go-resty/resty#retries for details
         retry:
           # Max number of retry attempts.

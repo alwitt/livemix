@@ -3,7 +3,7 @@ version: '3'
 services:
   livemix-ctrl-db:
     container_name: livemix-ctrl-db
-    restart: always
+    restart: unless-stopped
     hostname: "postgres"
     image: "postgres:15"
     ports:
@@ -12,10 +12,12 @@ services:
       - POSTGRES_DB=postgres
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
+    networks:
+      - backend
 
   livemix-memcached:
     container_name: livemix-ctrl-memcached
-    restart: always
+    restart: unless-stopped
     hostname: memcached
     image: memcached:1.6.20-alpine
     ports:
@@ -29,10 +31,12 @@ services:
       - 10m
       - -p
       - '18080'
+    networks:
+      - backend
 
   livemix-minio:
     container_name: livemix-ctrl-minio
-    restart: always
+    restart: unless-stopped
     hostname: minio
     image: quay.io/minio/minio:RELEASE.2023-07-07T07-13-57Z
     command:
@@ -50,3 +54,60 @@ services:
     ports:
       - 127.0.0.1:9000:9000
       - 127.0.0.1:9090:9090
+    networks:
+      - backend
+
+  livemix-ctrl-node:
+    container_name: livemix-system-ctrl-node
+    restart: unless-stopped
+    hostname: livemix-ctrl-node
+    image: alwitt/livemix:latest
+    command:
+      - control
+    environment:
+      LOG_AS_JSON: "false"
+      LOG_LEVEL: info
+      GOOGLE_APPLICATION_CREDENTIALS: /opt/livemix/gcp-creds.json
+      AWS_ACCESS_KEY_ID: root
+      AWS_SECRET_ACCESS_KEY: password
+      CONFIG_FILE: /opt/livemix/system-control-node-cfg.yaml
+      DB_USER_PASSWORD: postgres
+    volumes:
+      - ./tmp:/opt/livemix
+    ports:
+      - 127.0.0.1:8080:8080
+      - 127.0.0.1:8081:8081
+    networks:
+      - backend
+    depends_on:
+      - livemix-minio
+      - livemix-memcached
+      - livemix-ctrl-db
+
+  livemix-edge-node:
+    container_name: livemix-edge-node
+    restart: unless-stopped
+    hostname: livemix-edge-node
+    image: alwitt/livemix:latest
+    command:
+      - edge
+    environment:
+      LOG_AS_JSON: "false"
+      LOG_LEVEL: info
+      GOOGLE_APPLICATION_CREDENTIALS: /opt/livemix/gcp-creds.json
+      AWS_ACCESS_KEY_ID: root
+      AWS_SECRET_ACCESS_KEY: password
+      CONFIG_FILE: /opt/livemix/edge-node-cfg.yaml
+    volumes:
+      - ./tmp:/opt/livemix
+    ports:
+      - 127.0.0.1:9080:9080
+      - 127.0.0.1:9081:9081
+    networks:
+      - backend
+    depends_on:
+      - livemix-ctrl-node
+
+networks:
+  backend:
+    name: livemix_dev_backend

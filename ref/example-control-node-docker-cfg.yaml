@@ -7,7 +7,7 @@ metrics:
     # HTTP server binding interface
     listenOn: 0.0.0.0
     # HTTP server binding port
-    appPort: 4001
+    appPort: 3001
     # Connection timeout configurations in seconds
     timeoutSecs:
       # Maximum duration for reading the entire request, including the body in seconds.
@@ -39,30 +39,34 @@ metrics:
     enablePubSubMetrics: true
 
 #########################################################################################
-# Video source being monitored
-videoSource:
-  # video source system entry name (as recorded by the system control node)
-  name: "test-video"
-  # interval in secs between video source status report to system controller
-  statusReportIntInSec: 60
+# Postgres persistence configuration
+postgres:
+  # Postgres listening host
+  host: postgres
+  # Postgres listening port
+  port: 5432
+  # Postgres DB name
+  db: postgres
+  # Postgres user name. Password is provided separately
+  user: postgres
+  # Configures the SSL setting for connecting to Postgres
+  ssl:
+    # Whether to enable SSL when connecting to Postgres
+    enabled: false
+    # If using SSL when connecting to Postgres, this is the CA trust chain to verify.
+    #caFile: server-ca-chain.crt
 
 #########################################################################################
-# Local video cache configuration
-cache:
-  # Cache entry retention check interval in secs
-  retentionCheckIntInSec: 60
-
-#########################################################################################
-# Video source monitor configuration
-monitor:
-  # Playlist receiver REST API configuration
+# System management sub-module configuration
+management:
+  # Module REST API configuration
   api:
     # HTTP hosting server configuration
     service:
       # HTTP server binding interface
       listenOn: 0.0.0.0
       # HTTP server binding port
-      appPort: 9080
+      appPort: 8080
       # Connection timeout configurations in seconds
       timeoutSecs:
         # Maximum duration for reading the entire request, including the body in seconds.
@@ -84,7 +88,9 @@ monitor:
       # Request logging parameters
       requestLogging:
         # Output request logs at this level
-        logLevel: debug
+        logLevel: warn
+        # Output health check logs at this level
+        healthLogLevel: debug
         # HTTP header containing the API request ID
         requestIDHeader: X-Request-ID
         # List of headers to not include in logging metadata
@@ -94,88 +100,44 @@ monitor:
           - "Proxy-Authenticate"
           - "Proxy-Authorization"
 
-  # User can optionally set video segment URI prefix to read segments from.
-  #
-  # If this is set, that information does not need to be provided when calling
-  #   POST /v1/playlist
-  #
-  # NOTE: This is required on certain versions of ffmpeg (i.e. when -headers does not work)
-  #defaultSegmentURIPrefix: /path/to/segment/storage/dir
+  # System management PubSub request-response client configuration
+  requestResponse:
+    # GCP project to operate in
+    gcpProject: development
+    # Number of support workers to spawn to process inbound requests
+    supportWorkerCount: 2
+    # Outbound request timeout enforcement check interval in secs
+    requestTimeoutEnforceIntInSec: 60
+    # PubSub topic this client listen on for inbound request
+    self:
+      # Pubsub topic to subscribe to
+      topic: local-dev-ctrl-node
+      # Message retention within the subscription in secs
+      msgTTL: 600
 
-  # Tracking window is the duration in time a video segment is tracked. After observing
-  # a new segment, that segment is remembered for the duration of a tracking window, and
-  # forgotten after that.
-  trackingWindow: 60
+  # Video source management settings
+  videoSourceManagement:
+    # The maximum delay a source status report can be before the control node marks
+    # source as no longer connected
+    statusReportMaxDelayInSec: 60
 
-  # Number of worker threads in the video segment reader
-  segmentReaderWorkerCount: 4
-
-#########################################################################################
-# Video Segment Forwarding - supports
-#  * Live stream proxy
-#  * Video recording
-forwarder:
-  # Support video recording video segment forwarding to object store
-  recording:
-    # Max number of segments to forward in parallel
-    maxInFlightSegments: 4
-
-    # Recording storage config
-    storage:
-      # Storage bucket to place all the recording video segments in
-      bucket: livemix
-      # Prefix used when defining the object key to store a segment with
-      objectPrefix: recording-sessions
-      # S3 object store config
-      s3:
-        # S3 server endpoint
-        endpoint: localhost:9000
-        # Whether to TLS when connecting
-        useTLS: false
-
-  # Support live stream video proxy through the system control node
-  live:
-    # Max number of segments to forward in parallel
-    maxInFlightSegments: 4
-
-    # HTTP forwarder target config
-    remote:
-      # URL to send new segments to
-      targetURL: http://system-control-node/v1/new-segment
-
-      # HTTP Client configuration
-      #
-      # The actual client is [resty](https://github.com/go-resty/resty)
-      client:
-        # OAuth middleware integration configuration
-        #
-        # Currently only support client-credential OAuth flow configuration
-        oauth:
-          # OpenID provider issuer URL
-          issuerURL: https://idenity.provider.com
-          # Get a token from IDP with this target audience
-          targetAudience:
-
-        # Client retry configuration. See https://github.com/go-resty/resty#retries for details
-        retry:
-          # Max number of retry attempts.
-          maxAttempts: 5
-          # Wait time before the first wait retry
-          initialWaitTimeInSec: 5
-          # Max wait time
-          maxWaitTimeInSec: 30
+  # Recording session management settings
+  recordingManagement:
+    # The number of seconds between recording segment cleanup runs. During each run,
+    # recording segments not associated with any recordings are purged.
+    segmentCleanupIntInSec: 300
 
 #########################################################################################
-# Local Live VOD server configuration
+# Central VOD server configurations
 vod:
-  # REST API configuration
+  # Module REST API configuration
   api:
     # HTTP hosting server configuration
     service:
       # HTTP server binding interface
       listenOn: 0.0.0.0
       # HTTP server binding port
-      appPort: 9081
+      appPort: 8081
       # Connection timeout configurations in seconds
       timeoutSecs:
         # Maximum duration for reading the entire request, including the body in seconds.
@@ -206,31 +168,44 @@ vod:
           - "Authorization"
           - "Proxy-Authenticate"
           - "Proxy-Authorization"
+
+  # Memcached based video segment cache
+  cache:
+    # List of memcached servers
+    servers:
+      - memcached:18080
 
   # Number of video segments to include when building a live VOD playlist.
   liveVODSegmentCount: 2
 
-#########################################################################################
-# Edge Node PubSub request-response client configuration
-requestResponse:
-  # GCP project to operate in
-  gcpProject: development
-  # Number of support workers to spawn to process inbound requests
-  supportWorkerCount: 2
-  # Outbound request timeout enforcement check interval in secs
-  requestTimeoutEnforceIntInSec: 60
-  # PubSub topic this client listen on for inbound request
-  self:
-    # Pubsub topic to subscribe to
-    topic: local-dev-edge-node
-    # Message retention within the subscription in secs
-    msgTTL: 600
+  # when a segment is read from cold storage, store it in local cache with this TTL in secs.
+  segmentCacheTTLInSec: 300
 
-  # PubSub topic for reaching system control
-  systemControlTopic: local-dev-ctrl-node
+  # Supports live streaming, the receiver accepts video segments from sources
+  # to be proxied to through the system control node.
+  #
+  # Tracking window is the duration in time a video segment is tracked. Segments
+  # are forgotten after this tracking window.
+  #
+  # The minimum value is (Segment Length x liveVODSegmentCount). Less than that, and
+  # segments will be missing during live streaming.
+  segmentReceiverTrackingWindow: 60
 
-  # Max duration for outbound request in secs
-  outboundRequestDurationInSec: 30
+  # Video recording storage config
+  recordingStorage:
+    # Storage bucket to place all the recording video segments in
+    bucket: livemix
+    # Prefix used when defining the object key to store a segment with
+    objectPrefix: recording-sessions
+    # S3 object store config
+    s3:
+      # S3 server endpoint
+      endpoint: minio:9000
+      # Whether to TLS when connecting
+      useTLS: false
+
+  # Number of worker threads in the video segment reader
+  segmentReaderWorkerCount: 4
 
 #########################################################################################
 # System broadcast channel configuration

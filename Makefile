@@ -64,13 +64,21 @@ ts-sdk: .prepare ## Generate Javascript client
 	@echo '!!! IMPORTANT: The generated Typescript SDK at $(BASE_DIR)/tmp/sdk/ts-axios is owned by root !!!'
 	@echo
 
-.PHONY: compose
-compose: ## Prepare the development docker stack
-	@docker-compose -f docker/docker-compose.yaml up -d
+.PHONY: up
+up: ## Prepare the docker stack
+	@docker-compose -f docker/docker-compose.yaml --project-directory $(BASE_DIR) up -d livemix-ctrl-node
 
-.PHONY: clean
-clean: ## Clean up development environment
-	@docker-compose -f docker/docker-compose.yaml down
+.PHONY: up-edge
+up-edge: ## Prepare the test edge node in the docker stack
+	@docker-compose -f docker/docker-compose.yaml --project-directory $(BASE_DIR) up -d livemix-edge-node
+
+.PHONY: up-dev
+up-dev: ## Prepare the development docker stack
+	@docker-compose -f docker/docker-compose.yaml --project-directory $(BASE_DIR) up -d livemix-ctrl-db livemix-memcached livemix-minio
+
+.PHONY: down
+down: ## Take down docker stack
+	@docker-compose -f docker/docker-compose.yaml --project-directory $(BASE_DIR) down
 
 .PHONY: ctrl
 ctrl: build ## Run local development system control node application

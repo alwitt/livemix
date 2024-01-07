@@ -21,7 +21,7 @@ metrics:
       # are zero, there is no timeout.
       idle: 300
 
-  # Path to host the Prometheus metrics endpoint
+  # Prometheus metrics endpoint
   metricsEndpoint: /metrics
 
   # Max number of metrics requests in parallel to support
@@ -32,10 +32,10 @@ metrics:
     # Whether to enable Golang application metrics
     enableAppMetrics: false
 
-    # Whether to enable HTTP request tracking metrics
+    # Whether to enable HTTP request metrics
     enableHTTPMetrics: true
 
-    # Whether to enable PubSub operational metrics
+    # Whether to enable PubSub metrics
     enablePubSubMetrics: true
 
 #########################################################################################
@@ -184,8 +184,11 @@ vod:
   # Supports live streaming, the receiver accepts video segments from sources
   # to be proxied to through the system control node.
   #
-  # Tracking window is the duration in time a video segment is tracked. Recorded segments
+  # Tracking window is the duration in time a video segment is tracked. Segments
   # are forgotten after this tracking window.
+  #
+  # The minimum value is (Segment Length x liveVODSegmentCount). Less than that, and
+  # segments will be missing during live streaming.
   segmentReceiverTrackingWindow: 60
 
   # Video recording storage config
@@ -210,6 +213,6 @@ broadcast:
   # Broadcast PubSub settings
   pubsub:
     # Broadcast channel PubSub topic
-    topic: system-events
+    topic: local-dev-system-events
     # Message retention within the subscription in secs
     msgTTL: 600
