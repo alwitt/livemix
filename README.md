@@ -1,6 +1,6 @@
 # LiveMix - A Minimalist HLS Proxy
 
-`LiveMix` is a streamlined HLS proxy created to facilitate HLS broadcasting from disparate edge devices over the web. Employing a client-server architecture, a `LiveMix` edge node receives an HLS stream and forwards it to the system control node, functioning as a caching proxy. Users can directly view HLS streams from the system control node, and if desired, record snippets of any stream for future replay.
+`LiveMix` is a minimalist HLS proxy created to facilitate HLS broadcasting from disparate edge devices over the web. Employing a client-server architecture, a `LiveMix` edge node receives an HLS stream and forwards it to the system control node, functioning as a caching proxy. Users can directly view HLS streams from the system control node, and if desired, record snippets of any stream for future replay.
 
 **References:**
 * [HTTP Live Streaming](https://en.wikipedia.org/wiki/HTTP_Live_Streaming)
