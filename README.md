@@ -1,5 +1,12 @@
 # LiveMix - A Minimalist HLS Proxy
 
+[![MIT][License-Image]][License-Url] [![Go Report Card][ReportCard-Image]][ReportCard-Url] [![CICD](https://github.com/alwitt/livemix/actions/workflows/cicd.yaml/badge.svg?branch=main)](https://github.com/alwitt/livemix/actions/workflows/cicd.yaml)
+
+[License-Url]: https://mit-license.org/
+[License-Image]: https://img.shields.io/badge/License-MIT-blue.svg
+[ReportCard-Url]: https://goreportcard.com/report/github.com/alwitt/livemix
+[ReportCard-Image]: https://goreportcard.com/badge/github.com/alwitt/livemix
+
 `LiveMix` is a minimalist HLS proxy created to facilitate HLS broadcasting from disparate edge devices over the web. Employing a client-server architecture, a `LiveMix` edge node receives an HLS stream and forwards it to the system control node, functioning as a caching proxy. Users can directly view HLS streams from the system control node, and if desired, record snippets of any stream for future replay.
 
 **References:**
