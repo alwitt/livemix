@@ -147,7 +147,7 @@ cd tmp/video && \
 ffmpeg \
   -stream_loop -1 \
   -re \
-  -i tmp/video/{{ video file name }} \
+  -i {{ video file name }} \
   -c:v libx264 \
   -crf 21 \
   -preset veryfast \
