@@ -1,0 +1,47 @@
+name: CICD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  golint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.20"
+
+      - name: Prepare UT mocks
+        run: |
+          go install github.com/vektra/mockery/v2@v2.38.0
+          mockery --dir db --name PersistenceManager
+          mockery --dir db --name ConnectionManager
+          mockery --dir utils --name SegmentReader
+          mockery --dir utils --name VideoSegmentCache
+          mockery --dir utils --name S3Client
+          mockery --dir utils --name Broadcaster
+          mockery --dir vod --name PlaylistBuilder
+          mockery --dir vod --name SegmentManager
+          mockery --dir vod --name PlaylistManager
+          mockery --dir api --name RequestResponseClient
+          mockery --dir control --name SystemManager
+          mockery --dir control --name EdgeRequestClient
+          mockery --dir edge --name VideoSourceOperator
+          mockery --dir forwarder --name SegmentSender
+          mockery --dir forwarder --name RecordingSegmentForwarder
+          mockery --dir forwarder --name LiveStreamSegmentForwarder
+
+      - name: golint
+        uses: Jerome1337/golint-action@v1.0.3
+        with:
+          golint-path: "./..."
