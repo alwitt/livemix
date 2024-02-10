@@ -12,6 +12,7 @@ import (
 	"github.com/alwitt/livemix/mocks"
 	"github.com/apex/log"
 	"github.com/google/uuid"
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -29,6 +30,7 @@ func TestVideoSourceOperatorStartRecording(t *testing.T) {
 	mockBroadcast := mocks.NewBroadcaster(t)
 	mockRecordForwarder := mocks.NewRecordingSegmentForwarder(t)
 	mockLiveForwarder := mocks.NewLiveStreamSegmentForwarder(t)
+	mockRR := mocks.NewControlRequestClient(t)
 
 	testSource := common.VideoSource{ID: uuid.NewString()}
 
@@ -65,7 +67,7 @@ func TestVideoSourceOperatorStartRecording(t *testing.T) {
 		mock.AnythingOfType("time.Time"),
 	).Return(nil)
 
-	uut, err := edge.NewManager(utCtxt, uutConfig, nil)
+	uut, err := edge.NewManager(utCtxt, uutConfig, mockRR, nil)
 	assert.Nil(err)
 
 	// ====================================================================================
@@ -217,6 +219,7 @@ func TestVideoSourceOperatorStopRecording(t *testing.T) {
 	mockBroadcast := mocks.NewBroadcaster(t)
 	mockRecordForwarder := mocks.NewRecordingSegmentForwarder(t)
 	mockLiveForwarder := mocks.NewLiveStreamSegmentForwarder(t)
+	mockRR := mocks.NewControlRequestClient(t)
 
 	testSource := common.VideoSource{ID: uuid.NewString()}
 
@@ -253,7 +256,7 @@ func TestVideoSourceOperatorStopRecording(t *testing.T) {
 		mock.AnythingOfType("time.Time"),
 	).Return(nil)
 
-	uut, err := edge.NewManager(utCtxt, uutConfig, nil)
+	uut, err := edge.NewManager(utCtxt, uutConfig, mockRR, nil)
 	assert.Nil(err)
 
 	// ====================================================================================
@@ -312,6 +315,7 @@ func TestVideoSourceOperatorNewSegmentFromSource(t *testing.T) {
 	mockBroadcast := mocks.NewBroadcaster(t)
 	mockRecordForwarder := mocks.NewRecordingSegmentForwarder(t)
 	mockLiveForwarder := mocks.NewLiveStreamSegmentForwarder(t)
+	mockRR := mocks.NewControlRequestClient(t)
 
 	testSource := common.VideoSource{ID: uuid.NewString()}
 
@@ -348,7 +352,7 @@ func TestVideoSourceOperatorNewSegmentFromSource(t *testing.T) {
 		mock.AnythingOfType("time.Time"),
 	).Return(nil)
 
-	uut, err := edge.NewManager(utCtxt, uutConfig, nil)
+	uut, err := edge.NewManager(utCtxt, uutConfig, mockRR, nil)
 	assert.Nil(err)
 
 	// ====================================================================================
@@ -370,6 +374,7 @@ func TestVideoSourceOperatorNewSegmentFromSource(t *testing.T) {
 			"ForwardSegment",
 			mock.AnythingOfType("*context.cancelCtx"),
 			testSegment,
+			false,
 		).Return(nil).Once()
 		mockDB.On(
 			"ListRecordingSessionsOfSource",
@@ -416,6 +421,7 @@ func TestVideoSourceOperatorNewSegmentFromSource(t *testing.T) {
 			"ForwardSegment",
 			mock.AnythingOfType("*context.cancelCtx"),
 			testSegment,
+			false,
 		).Return(nil).Once()
 		mockDB.On(
 			"ListRecordingSessionsOfSource",
@@ -455,4 +461,224 @@ func TestVideoSourceOperatorNewSegmentFromSource(t *testing.T) {
 		mock.AnythingOfType("*context.emptyCtx"),
 	).Return(nil).Once()
 	assert.Nil(uut.Stop(utCtxt))
+}
+
+func TestVideoSourceOperatorSyncActiveRecordingState(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+	utCtxt := context.Background()
+
+	mockSQL := mocks.NewConnectionManager(t)
+	mockDB := mocks.NewPersistenceManager(t)
+	mockSQL.On("NewPersistanceManager").Return(mockDB)
+	mockDB.On("Close").Return()
+	mockCache := mocks.NewVideoSegmentCache(t)
+	mockBroadcast := mocks.NewBroadcaster(t)
+	mockRecordForwarder := mocks.NewRecordingSegmentForwarder(t)
+	mockLiveForwarder := mocks.NewLiveStreamSegmentForwarder(t)
+	mockRR := mocks.NewControlRequestClient(t)
+
+	mockDB.On(
+		"ListAllLiveStreamSegmentsAfterTime",
+		mock.AnythingOfType("*context.cancelCtx"),
+		mock.AnythingOfType("string"),
+		mock.AnythingOfType("time.Time"),
+	).Return([]common.VideoSegment{}, nil).Maybe()
+
+	testSource := common.VideoSource{ID: uuid.NewString()}
+
+	uutConfig := edge.VideoSourceOperatorConfig{
+		Self:                       testSource,
+		SelfReqRespTargetID:        uuid.NewString(),
+		DBConns:                    mockSQL,
+		VideoCache:                 mockCache,
+		BroadcastClient:            mockBroadcast,
+		RecordingSegmentForwarder:  mockRecordForwarder,
+		LiveStreamSegmentForwarder: mockLiveForwarder,
+		StatusReportInterval:       time.Minute * 5,
+	}
+
+	// ====================================================================================
+	// Prepare mock for initialization
+
+	mockBroadcast.On(
+		"Broadcast",
+		mock.AnythingOfType("*context.cancelCtx"),
+		mock.Anything,
+	).Run(func(args mock.Arguments) {
+		report, ok := args.Get(1).(*ipc.VideoSourceStatusReport)
+		assert.True(ok)
+
+		assert.Equal(testSource.ID, report.SourceID)
+		assert.Equal(uutConfig.SelfReqRespTargetID, report.RequestResponseTargetID)
+	}).Return(nil)
+	mockDB.On(
+		"UpdateVideoSourceStats",
+		mock.AnythingOfType("*context.cancelCtx"),
+		testSource.ID,
+		uutConfig.SelfReqRespTargetID,
+		mock.AnythingOfType("time.Time"),
+	).Return(nil)
+
+	uut, err := edge.NewManager(utCtxt, uutConfig, mockRR, nil)
+	assert.Nil(err)
+
+	timestamp := time.Now().UTC()
+
+	// ====================================================================================
+	// Case 0: no recording at local or control node
+
+	{
+		mockRR.On(
+			"ListActiveRecordingsOfSource",
+			mock.AnythingOfType("*context.cancelCtx"),
+			testSource.ID,
+		).Return([]common.Recording{}, nil).Once()
+
+		mockDB.On(
+			"ListRecordingSessionsOfSource",
+			mock.AnythingOfType("*context.cancelCtx"),
+			testSource.ID,
+			true,
+		).Return([]common.Recording{}, nil).Once()
+
+		assert.Nil(uut.SyncActiveRecordingState(timestamp))
+	}
+
+	// ====================================================================================
+	// Case 1: no local recordings, control node has recordings
+
+	{
+		complete := make(chan bool, 1)
+
+		remoteRecords := []common.Recording{{ID: ulid.Make().String()}}
+		mockRR.On(
+			"ListActiveRecordingsOfSource",
+			mock.AnythingOfType("*context.cancelCtx"),
+			testSource.ID,
+		).Return(remoteRecords, nil).Once()
+
+		mockDB.On(
+			"ListRecordingSessionsOfSource",
+			mock.AnythingOfType("*context.cancelCtx"),
+			testSource.ID,
+			true,
+		).Return([]common.Recording{}, nil).Once()
+		mockDB.On(
+			"RecordKnownRecordingSession",
+			mock.AnythingOfType("*context.cancelCtx"),
+			remoteRecords[0],
+		).Run(func(args mock.Arguments) {
+			complete <- true
+		}).Return(nil).Once()
+
+		assert.Nil(uut.SyncActiveRecordingState(timestamp))
+
+		{
+			lclCtxt, lclCancel := context.WithTimeout(utCtxt, time.Millisecond*100)
+			select {
+			case <-lclCtxt.Done():
+				assert.False(true, "request timed out")
+			case <-complete:
+				break
+			}
+			lclCancel()
+		}
+	}
+
+	// ====================================================================================
+	// Case 2: local recordings, control node no recordings
+
+	{
+		mockRR.On(
+			"ListActiveRecordingsOfSource",
+			mock.AnythingOfType("*context.cancelCtx"),
+			testSource.ID,
+		).Return([]common.Recording{}, nil).Once()
+
+		localRecords := []common.Recording{{ID: ulid.Make().String()}}
+		mockDB.On(
+			"ListRecordingSessionsOfSource",
+			mock.AnythingOfType("*context.cancelCtx"),
+			testSource.ID,
+			true,
+		).Return(localRecords, nil).Once()
+		mockDB.On(
+			"MarkEndOfRecordingSession",
+			mock.AnythingOfType("*context.cancelCtx"),
+			localRecords[0].ID,
+			timestamp,
+		).Return(nil).Once()
+
+		assert.Nil(uut.SyncActiveRecordingState(timestamp))
+	}
+
+	// ====================================================================================
+	// Case 3: local recording matches control node recordings
+
+	{
+		remoteRecords := []common.Recording{{ID: ulid.Make().String()}}
+
+		mockRR.On(
+			"ListActiveRecordingsOfSource",
+			mock.AnythingOfType("*context.cancelCtx"),
+			testSource.ID,
+		).Return(remoteRecords, nil).Once()
+		mockDB.On(
+			"ListRecordingSessionsOfSource",
+			mock.AnythingOfType("*context.cancelCtx"),
+			testSource.ID,
+			true,
+		).Return(remoteRecords, nil).Once()
+
+		assert.Nil(uut.SyncActiveRecordingState(timestamp))
+	}
+
+	// ====================================================================================
+	// Case 4: local recording does not match control node recordings
+
+	{
+		complete := make(chan bool, 1)
+
+		remoteRecords := []common.Recording{{ID: ulid.Make().String()}}
+		localRecords := []common.Recording{{ID: ulid.Make().String()}}
+
+		mockRR.On(
+			"ListActiveRecordingsOfSource",
+			mock.AnythingOfType("*context.cancelCtx"),
+			testSource.ID,
+		).Return(remoteRecords, nil).Once()
+		mockDB.On(
+			"ListRecordingSessionsOfSource",
+			mock.AnythingOfType("*context.cancelCtx"),
+			testSource.ID,
+			true,
+		).Return(localRecords, nil).Once()
+		mockDB.On(
+			"MarkEndOfRecordingSession",
+			mock.AnythingOfType("*context.cancelCtx"),
+			localRecords[0].ID,
+			timestamp,
+		).Return(nil).Once()
+		mockDB.On(
+			"RecordKnownRecordingSession",
+			mock.AnythingOfType("*context.cancelCtx"),
+			remoteRecords[0],
+		).Run(func(args mock.Arguments) {
+			complete <- true
+		}).Return(nil).Once()
+
+		assert.Nil(uut.SyncActiveRecordingState(timestamp))
+
+		{
+			lclCtxt, lclCancel := context.WithTimeout(utCtxt, time.Millisecond*100)
+			select {
+			case <-lclCtxt.Done():
+				assert.False(true, "request timed out")
+			case <-complete:
+				break
+			}
+			lclCancel()
+		}
+	}
 }

@@ -2,6 +2,7 @@ package edge
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -95,6 +96,16 @@ type VideoSourceOperator interface {
 			@param segment common.VideoSegmentWithData - the new video segment
 	*/
 	NewSegmentFromSource(ctxt context.Context, segment common.VideoSegmentWithData) error
+
+	// =====================================================================================
+	// Utilities
+
+	/*
+		SyncActiveRecordingState sync the local recording states with that of system control node
+
+			@param timestamp time.Time - current timestamp
+	*/
+	SyncActiveRecordingState(timestamp time.Time) error
 }
 
 // VideoSourceOperatorConfig video source operations manager configuration
@@ -121,11 +132,15 @@ type VideoSourceOperatorConfig struct {
 type videoSourceOperatorImpl struct {
 	goutils.Component
 	VideoSourceOperatorConfig
-	reportTriggerTimer goutils.IntervalTimer
-	worker             goutils.TaskProcessor
-	wg                 sync.WaitGroup
-	workerCtxt         context.Context
-	workerCtxtCancel   context.CancelFunc
+	worker           goutils.TaskProcessor
+	wg               sync.WaitGroup
+	workerCtxt       context.Context
+	workerCtxtCancel context.CancelFunc
+	rrClient         ControlRequestClient
+
+	/* Support timers */
+	reportTriggerTimer   goutils.IntervalTimer
+	recordStateSyncTimer goutils.IntervalTimer
 
 	/* Metrics Collection Agents */
 	segmentReadMetrics     utils.SegmentMetricsAgent
@@ -137,11 +152,15 @@ NewManager define a new video source operator
 
 	@param parentCtxt context.Context - parent execution context
 	@param params VideoSourceOperatorConfig - operator configuration
+	@param params rrClient ControlRequestClient - request-response client for edge to call control
 	@param metrics goutils.MetricsCollector - metrics framework client
 	@return new operator
 */
 func NewManager(
-	parentCtxt context.Context, params VideoSourceOperatorConfig, metrics goutils.MetricsCollector,
+	parentCtxt context.Context,
+	params VideoSourceOperatorConfig,
+	rrClient ControlRequestClient,
+	metrics goutils.MetricsCollector,
 ) (VideoSourceOperator, error) {
 	logTags := log.Fields{
 		"module": "edge", "component": "video-source-operator", "source-id": params.Self.ID,
@@ -156,18 +175,36 @@ func NewManager(
 		},
 		VideoSourceOperatorConfig: params,
 		wg:                        sync.WaitGroup{},
+		rrClient:                  rrClient,
 		segmentReadMetrics:        nil,
 		activeRecordingMetrics:    nil,
 	}
 	instance.workerCtxt, instance.workerCtxtCancel = context.WithCancel(parentCtxt)
 
-	// Define periodic timer for sending video source status reports to system control node
-	timerLogTags := log.Fields{"sub-module": "status-report-timer"}
+	// -----------------------------------------------------------------------------
+	// Prepare support timers
+
+	// Define periodic timer for retrieving the current active recordings for video source
+	recordingStateSyncLogTags := log.Fields{"sub-module": "recording-status-check-timer"}
 	for lKey, lVal := range logTags {
-		timerLogTags[lKey] = lVal
+		recordingStateSyncLogTags[lKey] = lVal
+	}
+	recordSyncTimer, err := goutils.GetIntervalTimerInstance(
+		instance.workerCtxt, &instance.wg, recordingStateSyncLogTags,
+	)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Unable to define status report trigger timer")
+		return nil, err
+	}
+	instance.recordStateSyncTimer = recordSyncTimer
+
+	// Define periodic timer for sending video source status reports to system control node
+	statusReportTimerLogTags := log.Fields{"sub-module": "status-report-timer"}
+	for lKey, lVal := range logTags {
+		statusReportTimerLogTags[lKey] = lVal
 	}
 	reportTriggerTimer, err := goutils.GetIntervalTimerInstance(
-		instance.workerCtxt, &instance.wg, timerLogTags,
+		instance.workerCtxt, &instance.wg, statusReportTimerLogTags,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Unable to define status report trigger timer")
@@ -223,7 +260,6 @@ func NewManager(
 		return nil, err
 	}
 
-	// TODO FIXME: Tie a ready signal to this
 	// Start timer to periodically send video source status reports to the system control node
 	err = reportTriggerTimer.Start(
 		params.StatusReportInterval, instance.sendSourceStatusReport, false,
@@ -231,6 +267,17 @@ func NewManager(
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to start status report trigger timer")
 		return nil, err
+	}
+
+	// Start timer to periodically sync active recording sessions
+	if rrClient != nil {
+		err = recordSyncTimer.Start(params.StatusReportInterval, func() error {
+			return instance.SyncActiveRecordingState(time.Now().UTC())
+		}, false)
+		if err != nil {
+			log.WithError(err).WithFields(logTags).Error("Failed to start recording state sync timer")
+			return nil, err
+		}
 	}
 
 	// -----------------------------------------------------------------------------
@@ -278,6 +325,9 @@ func (o *videoSourceOperatorImpl) Ready(ctxt context.Context) error {
 func (o *videoSourceOperatorImpl) Stop(ctxt context.Context) error {
 	o.workerCtxtCancel()
 	if err := o.reportTriggerTimer.Stop(); err != nil {
+		return err
+	}
+	if err := o.recordStateSyncTimer.Stop(); err != nil {
 		return err
 	}
 	if err := o.worker.StopEventLoop(); err != nil {
@@ -644,7 +694,7 @@ func (o *videoSourceOperatorImpl) handleNewSegmentFromSource(
 		Debug("Submitting segment to live stream forwarder")
 
 	// Forward to live stream segment forwarder
-	if err := o.LiveStreamSegmentForwarder.ForwardSegment(o.workerCtxt, segment); err != nil {
+	if err := o.LiveStreamSegmentForwarder.ForwardSegment(o.workerCtxt, segment, false); err != nil {
 		// even with errors proceed anyway
 		log.
 			WithError(err).
@@ -713,6 +763,88 @@ func (o *videoSourceOperatorImpl) handleNewSegmentFromSource(
 		WithField("recordings", len(recordingIDs)).
 		WithField("segment", segment.Name).
 		Debug("Segment submitted to recording forwarder")
+
+	return nil
+}
+
+// =====================================================================================
+// Utilities
+
+func (o *videoSourceOperatorImpl) SyncActiveRecordingState(timestamp time.Time) error {
+	logTags := o.GetLogTagsForContext(o.workerCtxt)
+
+	// List currently active recordings
+	activeRecordings, err := o.rrClient.ListActiveRecordingsOfSource(o.workerCtxt, o.Self.ID)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Failed to fetch list of active recordings from system control node")
+		return err
+	}
+
+	{
+		t, _ := json.Marshal(activeRecordings)
+		log.
+			WithFields(logTags).
+			WithField("currently-active-recordings", string(t)).
+			Debug("Associated active recordings reported by system control node")
+	}
+
+	// Get list of active recordings known locally
+	dbClient := o.DBConns.NewPersistanceManager()
+	defer dbClient.Close()
+
+	knownActiveRecordings, err := dbClient.ListRecordingSessionsOfSource(o.workerCtxt, o.Self.ID, true)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Failed to list of locally known active recordings")
+		return err
+	}
+
+	activeRecordingByID := map[string]common.Recording{}
+	for _, recording := range activeRecordings {
+		activeRecordingByID[recording.ID] = recording
+	}
+
+	knownActiveRecordingByID := map[string]common.Recording{}
+	for _, recording := range knownActiveRecordings {
+		knownActiveRecordingByID[recording.ID] = recording
+	}
+
+	// ------------------------------------------------------------------------------------
+	// Stop recording if system control node did not report recording as active
+
+	for _, recording := range knownActiveRecordings {
+		if _, ok := activeRecordingByID[recording.ID]; !ok {
+			err := dbClient.MarkEndOfRecordingSession(o.workerCtxt, recording.ID, timestamp)
+			if err != nil {
+				log.
+					WithError(err).
+					WithFields(logTags).
+					WithField("recording-id", recording.ID).
+					Error("Failed to mark recording as complete")
+				return err
+			}
+		}
+	}
+
+	// ------------------------------------------------------------------------------------
+	// Start recording if active recording is not known locally
+
+	for _, recording := range activeRecordings {
+		if _, ok := knownActiveRecordingByID[recording.ID]; !ok {
+			if err := o.StartRecording(o.workerCtxt, recording); err != nil {
+				log.
+					WithError(err).
+					WithFields(logTags).
+					WithField("recording-id", recording.ID).
+					Error("Failed to install ongoing recording")
+			}
+		}
+	}
 
 	return nil
 }

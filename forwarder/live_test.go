@@ -1,10 +1,11 @@
-package forwarder
+package forwarder_test
 
 import (
 	"context"
 	"testing"
 
 	"github.com/alwitt/livemix/common"
+	"github.com/alwitt/livemix/forwarder"
 	"github.com/alwitt/livemix/hls"
 	"github.com/alwitt/livemix/mocks"
 	"github.com/apex/log"
@@ -25,11 +26,8 @@ func TestHTTPLiveStreamForwarder(t *testing.T) {
 	mockDB.On("Close").Return()
 	mockSender := mocks.NewSegmentSender(t)
 
-	uut, err := NewHTTPLiveStreamSegmentForwarder(utCtxt, mockSQL, mockSender, 2)
+	uut, err := forwarder.NewHTTPLiveStreamSegmentForwarder(utCtxt, mockSQL, mockSender, 2)
 	assert.Nil(err)
-
-	uutCast, ok := uut.(*httpLiveStreamSegmentForwarder)
-	assert.True(ok)
 
 	// ------------------------------------------------------------------------------------
 	// Case 0: source not streaming
@@ -50,7 +48,7 @@ func TestHTTPLiveStreamForwarder(t *testing.T) {
 			testSource.ID,
 		).Return(testSource, nil).Once()
 
-		assert.Nil(uutCast.handleForwardSegment(newSegment))
+		assert.Nil(uut.ForwardSegment(utCtxt, newSegment, true))
 	}
 
 	// ------------------------------------------------------------------------------------
@@ -83,7 +81,7 @@ func TestHTTPLiveStreamForwarder(t *testing.T) {
 			assert.Equal(newSegment.Content, segment.Content)
 		}).Return(nil).Once()
 
-		assert.Nil(uutCast.handleForwardSegment(newSegment))
+		assert.Nil(uut.ForwardSegment(utCtxt, newSegment, true))
 	}
 
 	// Clean up

@@ -450,7 +450,9 @@ func DefineEdgeNode(
 	log.WithFields(logTags).WithField("initialize", initStep).Info("Initializing node operator")
 
 	// Define video source operator
-	theNode.operator, err = edge.NewManager(parentCtxt, edgeOperatorConfig, metrics)
+	theNode.operator, err = edge.NewManager(
+		parentCtxt, edgeOperatorConfig, edgeToCtrlRRClient, metrics,
+	)
 	if err != nil {
 		log.
 			WithError(err).

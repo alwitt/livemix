@@ -28,8 +28,9 @@ type LiveStreamSegmentForwarder interface {
 
 			@param ctxt context.Context - execution context
 			@param segment common.VideoSegmentWithData - segment to process
+			@param blocking bool - block call until the forwarding complete
 	*/
-	ForwardSegment(ctxt context.Context, segment common.VideoSegmentWithData) error
+	ForwardSegment(ctxt context.Context, segment common.VideoSegmentWithData, blocking bool) error
 }
 
 // httpLiveStreamSegmentForwarder HTTP version of LiveStreamSegmentForwarder
@@ -101,7 +102,7 @@ func NewHTTPLiveStreamSegmentForwarder(
 	// Define support tasks
 
 	if err := workers.AddToTaskExecutionMap(
-		reflect.TypeOf(common.VideoSegmentWithData{}), instance.forwardSegment,
+		reflect.TypeOf(liveSegFwdForwardReq{}), instance.forwardSegment,
 	); err != nil {
 		log.WithError(err).WithFields(logTags).Error("Unable to install task definition")
 		return nil, err
@@ -129,10 +130,17 @@ func (f *httpLiveStreamSegmentForwarder) Stop(ctxt context.Context) error {
 // ======================================================================================
 // Segment Processing
 
+type liveSegFwdForwardReq struct {
+	Segment  common.VideoSegmentWithData
+	Feedback chan error
+}
+
 func (f *httpLiveStreamSegmentForwarder) ForwardSegment(
-	ctxt context.Context, segment common.VideoSegmentWithData,
+	ctxt context.Context, segment common.VideoSegmentWithData, blocking bool,
 ) error {
 	logTags := f.GetLogTagsForContext(ctxt)
+
+	feedback := make(chan error, 1)
 
 	log.
 		WithFields(logTags).
@@ -140,7 +148,8 @@ func (f *httpLiveStreamSegmentForwarder) ForwardSegment(
 		WithField("segment-name", segment.Name).
 		Debug("Submitting new segment for processing")
 
-	if err := f.workers.Submit(ctxt, segment); err != nil {
+	err := f.workers.Submit(ctxt, liveSegFwdForwardReq{Segment: segment, Feedback: feedback})
+	if err != nil {
 		log.
 			WithError(err).
 			WithFields(logTags).
@@ -156,12 +165,24 @@ func (f *httpLiveStreamSegmentForwarder) ForwardSegment(
 		WithField("segment-name", segment.Name).
 		Debug("New segment submitted for processing")
 
+	if blocking {
+		select {
+		case <-ctxt.Done():
+			return fmt.Errorf("context timed out before 'ForwardSegment' completed")
+		case fwdErr, ok := <-feedback:
+			if !ok {
+				return fmt.Errorf("failed to receive segment forward status feedback")
+			}
+			return fwdErr
+		}
+	}
+
 	return nil
 }
 
 func (f *httpLiveStreamSegmentForwarder) forwardSegment(params interface{}) error {
 	// Convert params into expected data type
-	if segment, ok := params.(common.VideoSegmentWithData); ok {
+	if segment, ok := params.(liveSegFwdForwardReq); ok {
 		return f.handleForwardSegment(segment)
 	}
 	err := fmt.Errorf("received unexpected call parameters: %s", reflect.TypeOf(params))
@@ -171,7 +192,7 @@ func (f *httpLiveStreamSegmentForwarder) forwardSegment(params interface{}) erro
 }
 
 func (f *httpLiveStreamSegmentForwarder) handleForwardSegment(
-	segment common.VideoSegmentWithData,
+	segmentWrapper liveSegFwdForwardReq,
 ) error {
 	logTags := f.GetLogTagsForContext(f.workerCtxt)
 
@@ -179,46 +200,49 @@ func (f *httpLiveStreamSegmentForwarder) handleForwardSegment(
 	defer dbClient.Close()
 
 	// Verify forwarding is enabled first
-	source, err := dbClient.GetVideoSource(f.workerCtxt, segment.SourceID)
+	source, err := dbClient.GetVideoSource(f.workerCtxt, segmentWrapper.Segment.SourceID)
 	if err != nil {
 		log.
 			WithError(err).
 			WithFields(logTags).
-			WithField("source-id", segment.SourceID).
-			WithField("segment-name", segment.Name).
+			WithField("source-id", segmentWrapper.Segment.SourceID).
+			WithField("segment-name", segmentWrapper.Segment.Name).
 			Error("Unable to find the video source entry in persistence")
+		segmentWrapper.Feedback <- err
 		return err
 	}
 	if source.Streaming != 1 {
 		log.
 			WithFields(logTags).
-			WithField("source-id", segment.SourceID).
-			WithField("segment-name", segment.Name).
+			WithField("source-id", segmentWrapper.Segment.SourceID).
+			WithField("segment-name", segmentWrapper.Segment.Name).
 			Debug("Video source is not instructed to forward video segments")
+		segmentWrapper.Feedback <- nil
 		return nil
 	}
 
 	// Forward the segment
 	log.
 		WithFields(logTags).
-		WithField("source-id", segment.SourceID).
-		WithField("segment-name", segment.Name).
+		WithField("source-id", segmentWrapper.Segment.SourceID).
+		WithField("segment-name", segmentWrapper.Segment.Name).
 		Debug("Sending out segment")
-	err = f.client.ForwardSegment(f.workerCtxt, segment)
+	err = f.client.ForwardSegment(f.workerCtxt, segmentWrapper.Segment)
 	if err != nil {
 		log.
 			WithError(err).
 			WithFields(logTags).
-			WithField("source-id", segment.SourceID).
-			WithField("segment-name", segment.Name).
+			WithField("source-id", segmentWrapper.Segment.SourceID).
+			WithField("segment-name", segmentWrapper.Segment.Name).
 			Error("Failed to send out video segment")
+		segmentWrapper.Feedback <- err
 		return err
 	}
 	log.
 		WithFields(logTags).
-		WithField("source-id", segment.SourceID).
-		WithField("segment-name", segment.Name).
+		WithField("source-id", segmentWrapper.Segment.SourceID).
+		WithField("segment-name", segmentWrapper.Segment.Name).
 		Debug("Video segment forwarded")
-
+	segmentWrapper.Feedback <- nil
 	return nil
 }
