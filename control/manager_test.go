@@ -44,7 +44,7 @@ func TestSystemManagerProcessSourceStatusBroadcast(t *testing.T) {
 	// Setup mock
 	mockDB.On(
 		"UpdateVideoSourceStats",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		testMessage.SourceID,
 		testMessage.RequestResponseTargetID,
 		currentTime,
@@ -87,7 +87,7 @@ func TestSystemManagerProcessNewRecordingSegmentsBroadcast(t *testing.T) {
 	// Setup mock
 	mockDB.On(
 		"RegisterRecordingSegments",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		testMessage.RecordingIDs,
 		testMessage.Segments,
 	).Return(nil).Once()
@@ -120,7 +120,7 @@ func TestSystemManagerRequestStreamingStateChange(t *testing.T) {
 		// Prepare mock
 		mockDB.On(
 			"GetVideoSource",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 		).Return(testSource, nil).Once()
 
@@ -139,7 +139,7 @@ func TestSystemManagerRequestStreamingStateChange(t *testing.T) {
 		// Prepare mock
 		mockDB.On(
 			"GetVideoSource",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 		).Return(testSource, nil).Once()
 
@@ -158,12 +158,12 @@ func TestSystemManagerRequestStreamingStateChange(t *testing.T) {
 		// Prepare mock
 		mockDB.On(
 			"GetVideoSource",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 		).Return(testSource, nil).Once()
 		mockDB.On(
 			"ChangeVideoSourceStreamState",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 			1,
 		).Return(fmt.Errorf("dummy error")).Once()
@@ -183,18 +183,18 @@ func TestSystemManagerRequestStreamingStateChange(t *testing.T) {
 		// Prepare mock
 		mockDB.On(
 			"GetVideoSource",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 		).Return(testSource, nil).Once()
 		mockRR.On(
 			"ChangeVideoStreamingState",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource,
 			1,
 		).Return(nil).Once()
 		mockDB.On(
 			"ChangeVideoSourceStreamState",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 			1,
 		).Return(nil).Once()
@@ -227,7 +227,7 @@ func TestSystemManagerDefineRecordingSession(t *testing.T) {
 		// Prepare mock
 		mockDB.On(
 			"GetVideoSource",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSourceID,
 		).Return(common.VideoSource{}, fmt.Errorf("dummy error")).Once()
 
@@ -246,12 +246,12 @@ func TestSystemManagerDefineRecordingSession(t *testing.T) {
 		// Prepare mock
 		mockDB.On(
 			"GetVideoSource",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 		).Return(testSource, nil).Once()
 		mockDB.On(
 			"DefineRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 			mock.AnythingOfType("*string"),
 			mock.AnythingOfType("*string"),
@@ -274,12 +274,12 @@ func TestSystemManagerDefineRecordingSession(t *testing.T) {
 		// Prepare mock
 		mockDB.On(
 			"GetVideoSource",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 		).Return(testSource, nil).Once()
 		mockDB.On(
 			"DefineRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 			mock.AnythingOfType("*string"),
 			mock.AnythingOfType("*string"),
@@ -287,12 +287,12 @@ func TestSystemManagerDefineRecordingSession(t *testing.T) {
 		).Return(testRecording.ID, nil).Once()
 		mockDB.On(
 			"GetRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testRecording.ID,
 		).Return(testRecording, nil).Once()
 		mockRR.On(
 			"StartRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource,
 			testRecording,
 		).Return(fmt.Errorf("dummy error")).Once()
@@ -317,12 +317,12 @@ func TestSystemManagerDefineRecordingSession(t *testing.T) {
 		// Prepare mock
 		mockDB.On(
 			"GetVideoSource",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 		).Return(testSource, nil).Once()
 		mockDB.On(
 			"DefineRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 			mock.AnythingOfType("*string"),
 			mock.AnythingOfType("*string"),
@@ -330,12 +330,12 @@ func TestSystemManagerDefineRecordingSession(t *testing.T) {
 		).Return(testRecording.ID, nil).Once()
 		mockDB.On(
 			"GetRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testRecording.ID,
 		).Return(testRecording, nil).Once()
 		mockRR.On(
 			"StartRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource,
 			testRecording,
 		).Return(nil).Once()
@@ -369,7 +369,7 @@ func TestSystemManagerMarkEndOfRecordingSession(t *testing.T) {
 		// Prepare mock
 		mockDB.On(
 			"GetRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testRecordingID,
 		).Return(common.Recording{}, fmt.Errorf("dummy error")).Once()
 
@@ -386,12 +386,12 @@ func TestSystemManagerMarkEndOfRecordingSession(t *testing.T) {
 		// Prepare mock
 		mockDB.On(
 			"GetRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testRecording.ID,
 		).Return(testRecording, nil).Once()
 		mockDB.On(
 			"GetVideoSource",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSourceID,
 		).Return(common.VideoSource{}, fmt.Errorf("dummy error")).Once()
 
@@ -411,17 +411,17 @@ func TestSystemManagerMarkEndOfRecordingSession(t *testing.T) {
 		// Prepare mock
 		mockDB.On(
 			"GetRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testRecording.ID,
 		).Return(testRecording, nil).Once()
 		mockDB.On(
 			"GetVideoSource",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 		).Return(testSource, nil).Once()
 		mockDB.On(
 			"MarkEndOfRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testRecording.ID,
 			currentTime,
 		).Return(fmt.Errorf("dummy error")).Once()
@@ -442,23 +442,23 @@ func TestSystemManagerMarkEndOfRecordingSession(t *testing.T) {
 		// Prepare mock
 		mockDB.On(
 			"GetRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testRecording.ID,
 		).Return(testRecording, nil).Once()
 		mockDB.On(
 			"GetVideoSource",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 		).Return(testSource, nil).Once()
 		mockDB.On(
 			"MarkEndOfRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testRecording.ID,
 			currentTime,
 		).Return(nil).Once()
 		mockRR.On(
 			"StopRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource,
 			testRecording.ID,
 			currentTime,
@@ -484,23 +484,23 @@ func TestSystemManagerMarkEndOfRecordingSession(t *testing.T) {
 		// Prepare mock
 		mockDB.On(
 			"GetRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testRecording.ID,
 		).Return(testRecording, nil).Once()
 		mockDB.On(
 			"GetVideoSource",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 		).Return(testSource, nil).Once()
 		mockDB.On(
 			"MarkEndOfRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testRecording.ID,
 			currentTime,
 		).Return(nil).Once()
 		mockRR.On(
 			"StopRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource,
 			testRecording.ID,
 			currentTime,
@@ -521,23 +521,23 @@ func TestSystemManagerMarkEndOfRecordingSession(t *testing.T) {
 		// Prepare mock
 		mockDB.On(
 			"GetRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testRecording.ID,
 		).Return(testRecording, nil).Once()
 		mockDB.On(
 			"GetVideoSource",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 		).Return(testSource, nil).Once()
 		mockDB.On(
 			"MarkEndOfRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testRecording.ID,
 			currentTime,
 		).Return(nil).Once()
 		mockRR.On(
 			"StopRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource,
 			testRecording.ID,
 			currentTime,
@@ -572,7 +572,7 @@ func TestSystemManagerStopAllActiveRecordingsOfSource(t *testing.T) {
 		// Prepare mock
 		mockDB.On(
 			"GetVideoSource",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSourceID,
 		).Return(common.VideoSource{}, fmt.Errorf("dummy error")).Once()
 
@@ -591,12 +591,12 @@ func TestSystemManagerStopAllActiveRecordingsOfSource(t *testing.T) {
 		// Prepare mock
 		mockDB.On(
 			"GetVideoSource",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 		).Return(testSource, nil).Once()
 		mockDB.On(
 			"ListRecordingSessionsOfSource",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 			true,
 		).Return(nil, fmt.Errorf("dummy error")).Once()
@@ -616,12 +616,12 @@ func TestSystemManagerStopAllActiveRecordingsOfSource(t *testing.T) {
 		// Prepare mock
 		mockDB.On(
 			"GetVideoSource",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 		).Return(testSource, nil).Once()
 		mockDB.On(
 			"ListRecordingSessionsOfSource",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 			true,
 		).Return([]common.Recording{}, nil).Once()
@@ -641,37 +641,37 @@ func TestSystemManagerStopAllActiveRecordingsOfSource(t *testing.T) {
 		// Prepare mock
 		mockDB.On(
 			"GetVideoSource",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 		).Return(testSource, nil).Once()
 		mockDB.On(
 			"ListRecordingSessionsOfSource",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 			true,
 		).Return(testSessions, nil).Once()
 		mockDB.On(
 			"MarkEndOfRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSessions[0].ID,
 			currentTime,
 		).Return(nil).Once()
 		mockDB.On(
 			"MarkEndOfRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSessions[1].ID,
 			currentTime,
 		).Return(nil).Once()
 		mockRR.On(
 			"StopRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource,
 			testSessions[0].ID,
 			currentTime,
 		).Return(nil).Once()
 		mockRR.On(
 			"StopRecordingSession",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource,
 			testSessions[1].ID,
 			currentTime,

@@ -1,4 +1,4 @@
-image: golang:1.20.1
+image: golang:1.22.1
 
 stages:
   - test
@@ -53,7 +53,7 @@ cicd:
     UNITTEST_S3_ENDPOINT: minio:9000
 
   script:
-    - go install github.com/vektra/mockery/v2@v2.38.0
+    - go install github.com/vektra/mockery/v2@v2.43.0
     - mockery --dir db --name PersistenceManager
     - mockery --dir db --name ConnectionManager
     - mockery --dir utils --name SegmentReader

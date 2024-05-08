@@ -31,7 +31,7 @@ func TestEdgeToControlGetVideoSourceInfoRequest(t *testing.T) {
 
 	mockRRClient.On(
 		"SetInboundRequestHandler",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		mock.AnythingOfType("goutils.ReqRespMessageHandler"),
 	).Return(nil).Once()
 
@@ -55,7 +55,7 @@ func TestEdgeToControlGetVideoSourceInfoRequest(t *testing.T) {
 
 	mockRRClient.On(
 		"Request",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		controlName,
 		mock.AnythingOfType("[]uint8"),
 		mock.AnythingOfType("map[string]string"),
@@ -98,7 +98,7 @@ func TestEdgeToControlGetVideoSourceInfoErrorResponse(t *testing.T) {
 
 	mockRRClient.On(
 		"SetInboundRequestHandler",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		mock.AnythingOfType("goutils.ReqRespMessageHandler"),
 	).Return(nil).Once()
 
@@ -116,7 +116,7 @@ func TestEdgeToControlGetVideoSourceInfoErrorResponse(t *testing.T) {
 
 	mockRRClient.On(
 		"Request",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		controlName,
 		mock.AnythingOfType("[]uint8"),
 		mock.AnythingOfType("map[string]string"),
@@ -158,7 +158,7 @@ func TestEdgeToControlGetVideoSourceInfoRequestTimeout(t *testing.T) {
 
 	mockRRClient.On(
 		"SetInboundRequestHandler",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		mock.AnythingOfType("goutils.ReqRespMessageHandler"),
 	).Return(nil).Once()
 
@@ -174,7 +174,7 @@ func TestEdgeToControlGetVideoSourceInfoRequestTimeout(t *testing.T) {
 
 	mockRRClient.On(
 		"Request",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		controlName,
 		mock.AnythingOfType("[]uint8"),
 		mock.AnythingOfType("map[string]string"),
@@ -216,7 +216,7 @@ func TestEdgeToControlChangeStreamingState(t *testing.T) {
 	var requestInject goutils.ReqRespMessageHandler
 	mockRRClient.On(
 		"SetInboundRequestHandler",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		mock.AnythingOfType("goutils.ReqRespMessageHandler"),
 	).Run(func(args mock.Arguments) {
 		requestInject = args.Get(1).(goutils.ReqRespMessageHandler)
@@ -262,13 +262,13 @@ func TestEdgeToControlChangeStreamingState(t *testing.T) {
 
 	mockEdge.On(
 		"ChangeVideoSourceStreamState",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		sourceID,
 		1,
 	).Return(nil).Once()
 	mockRRClient.On(
 		"Respond",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		mock.AnythingOfType("goutils.ReqRespMessage"),
 		mock.AnythingOfType("[]uint8"),
 		mock.AnythingOfType("map[string]string"),
@@ -296,13 +296,13 @@ func TestEdgeToControlChangeStreamingState(t *testing.T) {
 
 	mockEdge.On(
 		"ChangeVideoSourceStreamState",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		sourceID,
 		1,
 	).Return(fmt.Errorf("dummy error")).Once()
 	mockRRClient.On(
 		"Respond",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		mock.AnythingOfType("goutils.ReqRespMessage"),
 		mock.AnythingOfType("[]uint8"),
 		mock.AnythingOfType("map[string]string"),
@@ -341,7 +341,7 @@ func TestEdgeToControlStartRecording(t *testing.T) {
 	var requestInject goutils.ReqRespMessageHandler
 	mockRRClient.On(
 		"SetInboundRequestHandler",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		mock.AnythingOfType("goutils.ReqRespMessageHandler"),
 	).Run(func(args mock.Arguments) {
 		requestInject = args.Get(1).(goutils.ReqRespMessageHandler)
@@ -386,12 +386,12 @@ func TestEdgeToControlStartRecording(t *testing.T) {
 		// Prepare mocks
 		mockEdge.On(
 			"StartRecording",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			requestCore.Session,
 		).Return(nil).Once()
 		mockRRClient.On(
 			"Respond",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			mock.AnythingOfType("goutils.ReqRespMessage"),
 			mock.AnythingOfType("[]uint8"),
 			mock.AnythingOfType("map[string]string"),
@@ -422,12 +422,12 @@ func TestEdgeToControlStartRecording(t *testing.T) {
 		// Prepare mocks
 		mockEdge.On(
 			"StartRecording",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			requestCore.Session,
 		).Return(fmt.Errorf("dummy error")).Once()
 		mockRRClient.On(
 			"Respond",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			mock.AnythingOfType("goutils.ReqRespMessage"),
 			mock.AnythingOfType("[]uint8"),
 			mock.AnythingOfType("map[string]string"),
@@ -467,7 +467,7 @@ func TestEdgeToControlStopRecording(t *testing.T) {
 	var requestInject goutils.ReqRespMessageHandler
 	mockRRClient.On(
 		"SetInboundRequestHandler",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		mock.AnythingOfType("goutils.ReqRespMessageHandler"),
 	).Run(func(args mock.Arguments) {
 		requestInject = args.Get(1).(goutils.ReqRespMessageHandler)
@@ -510,13 +510,13 @@ func TestEdgeToControlStopRecording(t *testing.T) {
 		// Prepare mocks
 		mockEdge.On(
 			"StopRecording",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			requestCore.RecordingID,
 			requestCore.EndTime,
 		).Return(nil).Once()
 		mockRRClient.On(
 			"Respond",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			mock.AnythingOfType("goutils.ReqRespMessage"),
 			mock.AnythingOfType("[]uint8"),
 			mock.AnythingOfType("map[string]string"),
@@ -547,13 +547,13 @@ func TestEdgeToControlStopRecording(t *testing.T) {
 		// Prepare mocks
 		mockEdge.On(
 			"StopRecording",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			requestCore.RecordingID,
 			requestCore.EndTime,
 		).Return(fmt.Errorf("dummy error")).Once()
 		mockRRClient.On(
 			"Respond",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			mock.AnythingOfType("goutils.ReqRespMessage"),
 			mock.AnythingOfType("[]uint8"),
 			mock.AnythingOfType("map[string]string"),
@@ -592,7 +592,7 @@ func TestEdgeToControlStopAllRecordings(t *testing.T) {
 	// var requestInject goutils.ReqRespMessageHandler
 	mockRRClient.On(
 		"SetInboundRequestHandler",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		mock.AnythingOfType("goutils.ReqRespMessageHandler"),
 	).Return(nil).Once()
 
@@ -610,7 +610,7 @@ func TestEdgeToControlStopAllRecordings(t *testing.T) {
 	// Prepare mocks for the request
 	mockRRClient.On(
 		"Request",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		controlName,
 		mock.AnythingOfType("[]uint8"),
 		mock.AnythingOfType("map[string]string"),
@@ -646,7 +646,7 @@ func TestEdgeToControlStopAllRecordings(t *testing.T) {
 	// Prepare mocks for the request
 	mockRRClient.On(
 		"Request",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		controlName,
 		mock.AnythingOfType("[]uint8"),
 		mock.AnythingOfType("map[string]string"),
@@ -688,7 +688,7 @@ func TestEdgeToControlListActiveRecordingsOfSource(t *testing.T) {
 	// var requestInject goutils.ReqRespMessageHandler
 	mockRRClient.On(
 		"SetInboundRequestHandler",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		mock.AnythingOfType("goutils.ReqRespMessageHandler"),
 	).Return(nil).Once()
 
@@ -712,7 +712,7 @@ func TestEdgeToControlListActiveRecordingsOfSource(t *testing.T) {
 	// Prepare mocks for the request
 	mockRRClient.On(
 		"Request",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		controlName,
 		mock.AnythingOfType("[]uint8"),
 		mock.AnythingOfType("map[string]string"),
@@ -752,7 +752,7 @@ func TestEdgeToControlListActiveRecordingsOfSource(t *testing.T) {
 	// Prepare mocks for the request
 	mockRRClient.On(
 		"Request",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		controlName,
 		mock.AnythingOfType("[]uint8"),
 		mock.AnythingOfType("map[string]string"),

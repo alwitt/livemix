@@ -38,7 +38,7 @@ func TestSegmentManager(t *testing.T) {
 		// Prepare mock
 		mockCache.On(
 			"GetSegment",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			mock.AnythingOfType("common.VideoSegment"),
 		).Run(func(args mock.Arguments) {
 			querySegment := args.Get(1).(common.VideoSegment)
@@ -58,7 +58,7 @@ func TestSegmentManager(t *testing.T) {
 		// Prepare mock
 		mockCache.On(
 			"GetSegment",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			mock.AnythingOfType("common.VideoSegment"),
 		).Run(func(args mock.Arguments) {
 			querySegment := args.Get(1).(common.VideoSegment)

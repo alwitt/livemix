@@ -41,7 +41,7 @@ func TestVideoManagerPrefetch(t *testing.T) {
 		// Prepare mock
 		mockBuilder.On(
 			"GetRecordingStreamPlaylist",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testRecording,
 		).Return(testPlaylist, nil).Once()
 
@@ -82,7 +82,7 @@ func TestVideoManagerPrefetch(t *testing.T) {
 		// Prepare mock
 		mockBuilder.On(
 			"GetRecordingStreamPlaylist",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testRecording,
 		).Return(testPlaylist, nil).Once()
 		for idx, oneSeg := range testSegments {
@@ -91,7 +91,7 @@ func TestVideoManagerPrefetch(t *testing.T) {
 			}
 			mockDB.On(
 				"GetRecordingSegmentByName",
-				mock.AnythingOfType("*context.emptyCtx"),
+				mock.AnythingOfType("context.backgroundCtx"),
 				oneSeg.Name,
 			).Return(oneSeg, nil).Once()
 			mockSegMgmt.On(

@@ -67,19 +67,19 @@ ts-sdk: .prepare ## Generate Javascript client
 
 .PHONY: up
 up: ## Prepare the docker stack
-	@docker-compose -f docker/docker-compose.yaml --project-directory $(BASE_DIR) up -d livemix-ctrl-node
+	@docker compose -f docker/docker-compose.yaml --project-directory $(BASE_DIR) up -d livemix-ctrl-node
 
 .PHONY: up-edge
 up-edge: ## Prepare the test edge node in the docker stack
-	@docker-compose -f docker/docker-compose.yaml --project-directory $(BASE_DIR) up -d livemix-edge-node
+	@docker compose -f docker/docker-compose.yaml --project-directory $(BASE_DIR) up -d livemix-edge-node
 
 .PHONY: up-dev
 up-dev: ## Prepare the development docker stack
-	@docker-compose -f docker/docker-compose.yaml --project-directory $(BASE_DIR) up -d livemix-ctrl-db livemix-memcached livemix-minio
+	@docker compose -f docker/docker-compose.yaml --project-directory $(BASE_DIR) up -d livemix-ctrl-db livemix-memcached livemix-minio
 
 .PHONY: down
 down: ## Take down docker stack
-	@docker-compose -f docker/docker-compose.yaml --project-directory $(BASE_DIR) down
+	@docker compose -f docker/docker-compose.yaml --project-directory $(BASE_DIR) down
 
 .PHONY: ctrl
 ctrl: build ## Run local development system control node application

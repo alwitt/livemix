@@ -82,7 +82,7 @@ func TestBuildLiveStreamPlaylist(t *testing.T) {
 	// Setup mocks
 	mockDB.On(
 		"GetLatestLiveStreamSegments",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		testSource.ID,
 		segmentPerPlaylist,
 	).Return(testSegments, nil).Once()
@@ -148,7 +148,7 @@ func TestBuildRecordingPlaylist(t *testing.T) {
 		// Prepare mock
 		mockDB.On(
 			"ListAllSegmentsOfRecording",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testRecording.ID,
 		).Return([]common.VideoSegment{}, fmt.Errorf("dummy error")).Once()
 
@@ -162,12 +162,12 @@ func TestBuildRecordingPlaylist(t *testing.T) {
 		// Prepare mock
 		mockDB.On(
 			"ListAllSegmentsOfRecording",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testRecording.ID,
 		).Return(testSegments, nil).Once()
 		mockDB.On(
 			"GetVideoSource",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 		).Return(common.VideoSource{}, fmt.Errorf("dummy error")).Once()
 

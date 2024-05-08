@@ -141,12 +141,12 @@ func TestS3SegmentSender(t *testing.T) {
 	// Prepare mock
 	mockDB.On(
 		"MarkLiveStreamSegmentsUploaded",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		[]string{testSegmentID},
 	).Return(nil).Once()
 	mockS3.On(
 		"PutObject",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		testBucket,
 		testObjectKey,
 		testSegment.Content,

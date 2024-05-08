@@ -37,18 +37,18 @@ func TestLiveSteamSegmentManagerRecordSegment(t *testing.T) {
 	// Setup mock
 	mockDB.On(
 		"RegisterLiveStreamSegment",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		testSourceID,
 		testSegment,
 	).Return(testSegmentID, nil).Once()
 	mockDB.On(
 		"GetLiveStreamSegment",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		testSegmentID,
 	).Return(common.VideoSegment{ID: testSegmentID, SourceID: testSourceID}, nil).Once()
 	mockCache.On(
 		"CacheSegment",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 		mock.AnythingOfType("common.VideoSegmentWithData"),
 		time.Minute,
 	).Run(func(args mock.Arguments) {

@@ -197,11 +197,11 @@ func TestVideoSourceOperatorStartRecording(t *testing.T) {
 	// Cleanup
 	mockRecordForwarder.On(
 		"Stop",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 	).Return(nil).Once()
 	mockLiveForwarder.On(
 		"Stop",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 	).Return(nil).Once()
 	assert.Nil(uut.Stop(utCtxt))
 }
@@ -293,11 +293,11 @@ func TestVideoSourceOperatorStopRecording(t *testing.T) {
 	// Cleanup
 	mockRecordForwarder.On(
 		"Stop",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 	).Return(nil).Once()
 	mockLiveForwarder.On(
 		"Stop",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 	).Return(nil).Once()
 	assert.Nil(uut.Stop(utCtxt))
 }
@@ -454,11 +454,11 @@ func TestVideoSourceOperatorNewSegmentFromSource(t *testing.T) {
 	// Cleanup
 	mockRecordForwarder.On(
 		"Stop",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 	).Return(nil).Once()
 	mockLiveForwarder.On(
 		"Stop",
-		mock.AnythingOfType("*context.emptyCtx"),
+		mock.AnythingOfType("context.backgroundCtx"),
 	).Return(nil).Once()
 	assert.Nil(uut.Stop(utCtxt))
 }

@@ -121,12 +121,12 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 		// Setup mocks
 		mockDB.On(
 			"ListAllLiveStreamSegments",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 		).Return([]common.VideoSegment{}, nil).Once()
 		mockDB.On(
 			"BulkRegisterLiveStreamSegments",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 			mock.AnythingOfType("[]hls.Segment"),
 		).Run(func(args mock.Arguments) {
@@ -136,12 +136,12 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 		}).Return(segmentIDs0, nil).Once()
 		mockDB.On(
 			"ListAllLiveStreamSegments",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 		).Return(defineSegmentList(currentTime, segmentIDs0, segmentNames0), nil).Once()
 		mockDB.On(
 			"DeleteOldLiveStreamSegments",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			mock.AnythingOfType("time.Time"),
 		).Return(nil).Once()
 
@@ -175,12 +175,12 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 		// Setup mocks
 		mockDB.On(
 			"ListAllLiveStreamSegments",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 		).Return(defineSegmentList(currentTime, segmentIDs0, segmentNames0), nil).Once()
 		mockDB.On(
 			"BulkRegisterLiveStreamSegments",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 			mock.AnythingOfType("[]hls.Segment"),
 		).Run(func(args mock.Arguments) {
@@ -190,12 +190,12 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 		}).Return(map[string]string{segmentName: segmentIDs1[segmentName]}, nil).Once()
 		mockDB.On(
 			"ListAllLiveStreamSegments",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 		).Return(defineSegmentList(currentTime, segmentIDs1, segmentNames1), nil).Once()
 		mockDB.On(
 			"DeleteOldLiveStreamSegments",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			mock.AnythingOfType("time.Time"),
 		).Return(nil).Once()
 
@@ -229,12 +229,12 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 		// Setup mocks
 		mockDB.On(
 			"ListAllLiveStreamSegments",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 		).Return(defineSegmentList(currentTime, segmentIDs1, segmentNames1), nil).Once()
 		mockDB.On(
 			"BulkRegisterLiveStreamSegments",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 			mock.AnythingOfType("[]hls.Segment"),
 		).Run(func(args mock.Arguments) {
@@ -244,12 +244,12 @@ func TestSourceHLSTrackerUpdate(t *testing.T) {
 		}).Return(map[string]string{segmentName: segmentIDs2[segmentName]}, nil).Once()
 		mockDB.On(
 			"ListAllLiveStreamSegments",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			testSource.ID,
 		).Return(defineSegmentList(currentTime, segmentIDs2, segmentNames2), nil).Once()
 		mockDB.On(
 			"DeleteOldLiveStreamSegments",
-			mock.AnythingOfType("*context.emptyCtx"),
+			mock.AnythingOfType("context.backgroundCtx"),
 			mock.AnythingOfType("time.Time"),
 		).Return(nil).Once()
 
