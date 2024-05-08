@@ -24,6 +24,16 @@ type S3Client interface {
 	ListBuckets(ctxt context.Context) ([]string, error)
 
 	/*
+		ListObjects get a list of objects in a bucket
+
+			@param ctxt context.Context - execution context
+			@param bucket string - the bucket name
+			@param prefix *string - optionally, specify the object prefix to filter on
+			@return list of bucket objects
+	*/
+	ListObjects(ctxt context.Context, bucket string, prefix *string) ([]string, error)
+
+	/*
 		CreateBucket create a bucket
 
 			@param ctxt context.Context - execution context
@@ -128,6 +138,29 @@ func (s *s3ClientImpl) ListBuckets(ctxt context.Context) ([]string, error) {
 	for _, bucket := range buckets {
 		result = append(result, bucket.Name)
 	}
+	return result, nil
+}
+
+func (s *s3ClientImpl) ListObjects(
+	ctxt context.Context, bucket string, prefix *string,
+) ([]string, error) {
+	options := minio.ListObjectsOptions{
+		Recursive: true,
+	}
+	if prefix != nil {
+		options.Prefix = *prefix
+	}
+
+	objReadCh := s.s3.ListObjects(ctxt, bucket, options)
+
+	result := []string{}
+	for objInfo := range objReadCh {
+		if objInfo.Err != nil {
+			return nil, objInfo.Err
+		}
+		result = append(result, objInfo.Key)
+	}
+
 	return result, nil
 }
 

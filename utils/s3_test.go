@@ -113,15 +113,31 @@ func TestS3ClientBulkDelete(t *testing.T) {
 		Content []byte
 	}
 
+	testPrefix := fmt.Sprintf("ut-%s", uuid.NewString())
+
 	testObjects := []testObject{
-		{Key: uuid.NewString(), Content: []byte(uuid.NewString())},
-		{Key: uuid.NewString(), Content: []byte(uuid.NewString())},
-		{Key: uuid.NewString(), Content: []byte(uuid.NewString())},
+		{Key: fmt.Sprintf("%s/%s", testPrefix, uuid.NewString()), Content: []byte(uuid.NewString())},
+		{Key: fmt.Sprintf("%s/%s", testPrefix, uuid.NewString()), Content: []byte(uuid.NewString())},
+		{Key: fmt.Sprintf("%s/%s", testPrefix, uuid.NewString()), Content: []byte(uuid.NewString())},
+	}
+	testObjKeyMap := map[string]bool{}
+	for _, obj := range testObjects {
+		testObjKeyMap[obj.Key] = true
 	}
 
 	// Create test objects
 	for _, object := range testObjects {
 		assert.Nil(uut.PutObject(utCtxt, testBucket, object.Key, object.Content))
+	}
+	{
+		objects, err := uut.ListObjects(utCtxt, testBucket, &testPrefix)
+		assert.Nil(err)
+		assert.Len(objects, len(testObjects))
+		objKeyMap := map[string]bool{}
+		for _, obj := range objects {
+			objKeyMap[obj] = true
+		}
+		assert.EqualValues(testObjKeyMap, objKeyMap)
 	}
 	for _, object := range testObjects {
 		content, err := uut.GetObject(utCtxt, testBucket, object.Key)
