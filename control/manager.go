@@ -698,6 +698,16 @@ func (m *systemManagerImpl) MarkEndOfRecordingSession(
 		return err
 	}
 
+	if recording.Active != 1 {
+		// recording session already complete
+		log.
+			WithFields(logTags).
+			WithField("source-id", recording.SourceID).
+			WithField("recording", id).
+			Info("Recording session already complete.")
+		return nil
+	}
+
 	// Stop the recording entry
 	if err := dbClient.MarkEndOfRecordingSession(ctxt, id, endTime); err != nil {
 		log.

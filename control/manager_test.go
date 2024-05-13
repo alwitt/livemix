@@ -406,7 +406,7 @@ func TestSystemManagerMarkEndOfRecordingSession(t *testing.T) {
 		testSource := common.VideoSource{
 			ID: uuid.NewString(), ReqRespTargetID: &testRRTargetID, SourceLocalTime: currentTime,
 		}
-		testRecording := common.Recording{ID: uuid.NewString(), SourceID: testSource.ID}
+		testRecording := common.Recording{ID: uuid.NewString(), SourceID: testSource.ID, Active: 1}
 
 		// Prepare mock
 		mockDB.On(
@@ -437,7 +437,7 @@ func TestSystemManagerMarkEndOfRecordingSession(t *testing.T) {
 		testSource := common.VideoSource{
 			ID: uuid.NewString(), ReqRespTargetID: &testRRTargetID, SourceLocalTime: currentTime,
 		}
-		testRecording := common.Recording{ID: uuid.NewString(), SourceID: testSource.ID}
+		testRecording := common.Recording{ID: uuid.NewString(), SourceID: testSource.ID, Active: 1}
 
 		// Prepare mock
 		mockDB.On(
@@ -479,7 +479,7 @@ func TestSystemManagerMarkEndOfRecordingSession(t *testing.T) {
 		testSource := common.VideoSource{
 			ID: uuid.NewString(), ReqRespTargetID: &testRRTargetID, SourceLocalTime: currentTime,
 		}
-		testRecording := common.Recording{ID: uuid.NewString(), SourceID: testSource.ID}
+		testRecording := common.Recording{ID: uuid.NewString(), SourceID: testSource.ID, Active: 1}
 
 		// Prepare mock
 		mockDB.On(
@@ -516,7 +516,7 @@ func TestSystemManagerMarkEndOfRecordingSession(t *testing.T) {
 		testSource := common.VideoSource{
 			ID: uuid.NewString(), ReqRespTargetID: &testRRTargetID, SourceLocalTime: currentTime,
 		}
-		testRecording := common.Recording{ID: uuid.NewString(), SourceID: testSource.ID}
+		testRecording := common.Recording{ID: uuid.NewString(), SourceID: testSource.ID, Active: 1}
 
 		// Prepare mock
 		mockDB.On(
@@ -542,6 +542,30 @@ func TestSystemManagerMarkEndOfRecordingSession(t *testing.T) {
 			testRecording.ID,
 			currentTime,
 		).Return(fmt.Errorf("dummy error")).Once()
+
+		err := uut.MarkEndOfRecordingSession(utCtxt, testRecording.ID, currentTime, true)
+		assert.Nil(err)
+	}
+
+	// Case 6: DB operation passed, recording already complete, so no changes
+	{
+		testRRTargetID := uuid.NewString()
+		testSource := common.VideoSource{
+			ID: uuid.NewString(), ReqRespTargetID: &testRRTargetID, SourceLocalTime: currentTime,
+		}
+		testRecording := common.Recording{ID: uuid.NewString(), SourceID: testSource.ID, Active: -1}
+
+		// Prepare mock
+		mockDB.On(
+			"GetRecordingSession",
+			mock.AnythingOfType("context.backgroundCtx"),
+			testRecording.ID,
+		).Return(testRecording, nil).Once()
+		mockDB.On(
+			"GetVideoSource",
+			mock.AnythingOfType("context.backgroundCtx"),
+			testSource.ID,
+		).Return(testSource, nil).Once()
 
 		err := uut.MarkEndOfRecordingSession(utCtxt, testRecording.ID, currentTime, true)
 		assert.Nil(err)
