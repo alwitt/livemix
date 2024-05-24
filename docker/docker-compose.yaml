@@ -103,6 +103,7 @@ services:
     ports:
       - 127.0.0.1:9080:9080
       - 127.0.0.1:9081:9081
+      - 127.0.0.1:9082:9082
     networks:
       - backend
     depends_on:

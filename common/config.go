@@ -448,6 +448,8 @@ type EdgeNodeConfig struct {
 	Forwarder VideoForwarderConfig `mapstructure:"forwarder" json:"forwarder" validate:"required,dive"`
 	// VODConfig HLS VOD server config
 	VODConfig VODServerConfig `mapstructure:"vod" json:"vod" validate:"required,dive"`
+	// QueryAPIServer basic information retrieval REST API config
+	QueryAPIServer APIServerConfig `mapstructure:"api" json:"api" validate:"required,dive"`
 	// RRClient PubSub request-response client config
 	RRClient EdgeReqRespClientConfig `mapstructure:"requestResponse" json:"requestResponse" validate:"required,dive"`
 	// BroadcastSystem system broadcast channel configuration
@@ -603,6 +605,21 @@ func InstallDefaultEdgeNodeConfigValues() {
 	viper.SetDefault("vod.liveVODSegmentCount", 2)
 	// Default TTL for storing segment fetched from cold storage in local cache
 	viper.SetDefault("vod.segmentCacheTTLInSec", 300)
+
+	// Default query API server config
+	viper.SetDefault("api.enabled", true)
+	viper.SetDefault("api.service.listenOn", "0.0.0.0")
+	viper.SetDefault("api.service.appPort", 8082)
+	viper.SetDefault("api.service.timeoutSecs.read", 60)
+	viper.SetDefault("api.service.timeoutSecs.write", 60)
+	viper.SetDefault("api.service.timeoutSecs.idle", 60)
+	viper.SetDefault("api.apis.endPoint.pathPrefix", "/")
+	viper.SetDefault("api.apis.requestLogging.logLevel", "warn")
+	viper.SetDefault("api.apis.requestLogging.healthLogLevel", "debug")
+	viper.SetDefault("api.apis.requestLogging.requestIDHeader", "X-Request-ID")
+	viper.SetDefault("api.apis.requestLogging.skipHeaders", []string{
+		"WWW-Authenticate", "Authorization", "Proxy-Authenticate", "Proxy-Authorization",
+	})
 
 	// Default edge node request-response client config
 	viper.SetDefault("requestResponse.self.msgTTL", 600)

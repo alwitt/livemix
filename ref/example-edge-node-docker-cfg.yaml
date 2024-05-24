@@ -202,6 +202,46 @@ vod:
   liveVODSegmentCount: 2
 
 #########################################################################################
+# Local REST API configuration for basic information retrieval
+api:
+  # HTTP hosting server configuration
+  service:
+    # HTTP server binding interface
+    listenOn: 0.0.0.0
+    # HTTP server binding port
+    appPort: 9082
+    # Connection timeout configurations in seconds
+    timeoutSecs:
+      # Maximum duration for reading the entire request, including the body in seconds.
+      # A zero or negative value means there will be no timeout.
+      read: 60
+      # Maximum duration before timing out writes of the response in seconds. A zero
+      # or negative value means there will be no timeout.
+      write: 60
+      # Maximum amount of time to wait for the next request when keep-alives are enabled
+      # in seconds. If IdleTimeout is zero, the value of ReadTimeout is used. If both
+      # are zero, there is no timeout.
+      idle: 300
+  # API endpoint settings
+  apis:
+    # Endpoint parameters
+    endPoint:
+      # Endpoint path prefix for the APIs
+      pathPrefix: /
+    # Request logging parameters
+    requestLogging:
+      # Output request logs at this level
+      logLevel: warn
+      # HTTP header containing the API request ID
+      requestIDHeader: X-Request-ID
+      # List of headers to not include in logging metadata
+      skipHeaders:
+        - "WWW-Authenticate"
+        - "Authorization"
+        - "Proxy-Authenticate"
+        - "Proxy-Authorization"
+
+#########################################################################################
 # Edge Node PubSub request-response client configuration
 requestResponse:
   # GCP project to operate in

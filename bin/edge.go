@@ -31,6 +31,7 @@ type EdgeNode struct {
 	PlaylistReceiveServer *http.Server
 	VODServer             *http.Server
 	MetricsServer         *http.Server
+	QueryAPIServer        *http.Server
 }
 
 /*
@@ -465,6 +466,28 @@ func DefineEdgeNode(
 	edgeToCtrlRRClient.InstallReferenceToManager(theNode.operator)
 
 	log.WithFields(logTags).WithField("initialize", initStep).Info("Initialized node operator")
+	initStep++
+
+	// ====================================================================================
+	// Prepare local query API
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing local query API HTTP server")
+
+	theNode.QueryAPIServer, err = api.BuildEdgeAPIServer(
+		config.QueryAPIServer, dbConns, httpMetricsAgent,
+	)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to create local query API HTTP server")
+		return theNode, err
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized local query API HTTP server")
 	initStep++
 
 	// ====================================================================================

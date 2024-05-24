@@ -423,3 +423,59 @@ func BuildVODServer(
 
 	return httpSrv, nil
 }
+
+// ====================================================================================
+// Edge API Server
+
+/*
+BuildEdgeAPIServer create edge API server. This server is for general information
+retrieval on the edge.
+
+	@param httpCfg common.APIServerConfig - HTTP server configuration
+	@param dbConns db.ConnectionManager - DB connection manager
+	@param metrics goutils.HTTPRequestMetricHelper - metric collection agent
+	@returns HTTP server instance
+*/
+func BuildEdgeAPIServer(
+	httpCfg common.APIServerConfig,
+	dbConns db.ConnectionManager,
+	metrics goutils.HTTPRequestMetricHelper,
+) (*http.Server, error) {
+	httpHandler, err := NewEdgeAPIHandler(dbConns, httpCfg.APIs.RequestLogging, metrics)
+	if err != nil {
+		return nil, err
+	}
+
+	router := mux.NewRouter()
+	mainRouter := registerPathPrefix(router, httpCfg.APIs.Endpoint.PathPrefix, nil)
+	v1Router := registerPathPrefix(mainRouter, "/v1", nil)
+
+	// --------------------------------------------------------------------------------
+	// Source endpoint
+	_ = registerPathPrefix(v1Router, "/source", map[string]http.HandlerFunc{
+		"get": httpHandler.ListVideoSourcesHandler(),
+	})
+
+	// --------------------------------------------------------------------------------
+	// Middleware
+
+	router.Use(func(next http.Handler) http.Handler {
+		return httpHandler.LoggingMiddleware(next.ServeHTTP)
+	})
+
+	// --------------------------------------------------------------------------------
+	// HTTP Server
+
+	serverListen := fmt.Sprintf(
+		"%s:%d", httpCfg.Server.ListenOn, httpCfg.Server.Port,
+	)
+	httpSrv := &http.Server{
+		Addr:         serverListen,
+		WriteTimeout: time.Second * time.Duration(httpCfg.Server.Timeouts.WriteTimeout),
+		ReadTimeout:  time.Second * time.Duration(httpCfg.Server.Timeouts.ReadTimeout),
+		IdleTimeout:  time.Second * time.Duration(httpCfg.Server.Timeouts.IdleTimeout),
+		Handler:      h2c.NewHandler(router, &http2.Server{}),
+	}
+
+	return httpSrv, nil
+}
