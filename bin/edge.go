@@ -20,18 +20,16 @@ import (
 
 // EdgeNode edge node monitoring one video source
 type EdgeNode struct {
-	nodeRuntimeCtxt       context.Context
-	ctxtCancel            context.CancelFunc
-	psClient              goutils.PubSubClient
-	rrClient              goutils.RequestResponseClient
-	segmentReader         utils.SegmentReader
-	monitor               tracker.SourceHLSMonitor
-	operator              edge.VideoSourceOperator
-	playlistManager       vod.PlaylistManager
-	PlaylistReceiveServer *http.Server
-	VODServer             *http.Server
-	MetricsServer         *http.Server
-	QueryAPIServer        *http.Server
+	nodeRuntimeCtxt context.Context
+	ctxtCancel      context.CancelFunc
+	psClient        goutils.PubSubClient
+	rrClient        goutils.RequestResponseClient
+	segmentReader   utils.SegmentReader
+	monitor         tracker.SourceHLSMonitor
+	operator        edge.VideoSourceOperator
+	playlistManager vod.PlaylistManager
+	MetricsServer   *http.Server
+	APIServer       *http.Server
 }
 
 /*
@@ -469,28 +467,6 @@ func DefineEdgeNode(
 	initStep++
 
 	// ====================================================================================
-	// Prepare local query API
-
-	log.
-		WithFields(logTags).
-		WithField("initialize", initStep).
-		Info("Initializing local query API HTTP server")
-
-	theNode.QueryAPIServer, err = api.BuildEdgeAPIServer(
-		config.QueryAPIServer, dbConns, httpMetricsAgent,
-	)
-	if err != nil {
-		log.WithError(err).WithFields(logTags).Error("Failed to create local query API HTTP server")
-		return theNode, err
-	}
-
-	log.
-		WithFields(logTags).
-		WithField("initialize", initStep).
-		Info("Initialized local query API HTTP server")
-	initStep++
-
-	// ====================================================================================
 	// Prepare input - HLS source playlist monitor
 
 	log.
@@ -538,34 +514,6 @@ func DefineEdgeNode(
 	initStep++
 
 	// ====================================================================================
-	// Prepare input - HTTP HLS playlist receiver
-
-	log.
-		WithFields(logTags).
-		WithField("initialize", initStep).
-		Info("Initializing HLS playlist HTTP receiver")
-
-	theNode.PlaylistReceiveServer, err = api.BuildPlaylistReceiverServer(
-		theNode.nodeRuntimeCtxt,
-		config.VideoSource,
-		config.MonitorConfig.DefaultSegmentURIPrefix,
-		dbConns,
-		config.MonitorConfig.APIServer,
-		theNode.monitor.Update,
-		httpMetricsAgent,
-	)
-	if err != nil {
-		log.WithError(err).WithFields(logTags).Error("Failed to create playlist receiver HTTP server")
-		return theNode, err
-	}
-
-	log.
-		WithFields(logTags).
-		WithField("initialize", initStep).
-		Info("Initialized HLS playlist HTTP receiver")
-	initStep++
-
-	// ====================================================================================
 	// Prepare output - Local HTTP VOD server
 
 	log.
@@ -610,19 +558,33 @@ func DefineEdgeNode(
 		WithField("initialize", initStep).
 		Info("Initializing HTTP VOD server")
 
-	// Define live VOD HTTP server
-	theNode.VODServer, err = api.BuildVODServer(
-		config.VODConfig.APIServer, dbConns, theNode.playlistManager, httpMetricsAgent,
+	// ====================================================================================
+	// Prepare REST API server
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing HLS playlist HTTP receiver")
+
+	theNode.APIServer, err = api.BuildEdgeAPIServer(
+		theNode.nodeRuntimeCtxt,
+		config.VideoSource,
+		config.MonitorConfig.DefaultSegmentURIPrefix,
+		dbConns,
+		config.APIServer,
+		theNode.monitor.Update,
+		theNode.playlistManager,
+		httpMetricsAgent,
 	)
 	if err != nil {
-		log.WithError(err).WithFields(logTags).Error("Failed to create live VOD HTTP server")
+		log.WithError(err).WithFields(logTags).Error("Failed to create playlist receiver HTTP server")
 		return theNode, err
 	}
 
 	log.
 		WithFields(logTags).
 		WithField("initialize", initStep).
-		Info("Initialized HTTP VOD server")
+		Info("Initialized HLS playlist HTTP receiver")
 	initStep++
 
 	// ====================================================================================

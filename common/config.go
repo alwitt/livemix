@@ -362,8 +362,6 @@ type SystemManagementConfig struct {
 
 // HLSMonitorConfig HLS video source monitoring config
 type HLSMonitorConfig struct {
-	// APIServer HLS playlist receiver REST API server config
-	APIServer APIServerConfig `mapstructure:"api" json:"api" validate:"required,dive"`
 	// DefaultSegmentURIPrefix optionally set default video segment URI prefix
 	DefaultSegmentURIPrefix *string `mapstructure:"defaultSegmentURIPrefix,omitempty" json:"defaultSegmentURIPrefix,omitempty" validate:"omitempty,uri"`
 	// TrackingWindowInSec tracking window is the duration in time a video segment is tracked.
@@ -381,8 +379,6 @@ func (c HLSMonitorConfig) TrackingWindow() time.Duration {
 
 // VODServerConfig HLS VOD server config
 type VODServerConfig struct {
-	// APIServer HLS VOD REST API server config
-	APIServer APIServerConfig `mapstructure:"api" json:"api" validate:"required,dive"`
 	// LiveVODSegmentCount number of video segments to include when building a live
 	// VOD playlist.
 	LiveVODSegmentCount int `mapstructure:"liveVODSegmentCount" json:"liveVODSegmentCount" validate:"gte=1"`
@@ -399,6 +395,8 @@ func (c VODServerConfig) SegmentCacheTTL() time.Duration {
 // CentralVODServerConfig VOD server running on the control node
 type CentralVODServerConfig struct {
 	VODServerConfig `mapstructure:",squash"`
+	// APIServer HLS VOD REST API server config
+	APIServer APIServerConfig `mapstructure:"api" json:"api" validate:"required,dive"`
 	// Cache memcached based video segment cache
 	Cache MemcachedSegementCacheConfig `mapstructure:"cache" json:"cache" validate:"required,dive"`
 	// SegReceiverTrackingWindowInSec Tracking window is the duration in time a video segment is
@@ -448,8 +446,8 @@ type EdgeNodeConfig struct {
 	Forwarder VideoForwarderConfig `mapstructure:"forwarder" json:"forwarder" validate:"required,dive"`
 	// VODConfig HLS VOD server config
 	VODConfig VODServerConfig `mapstructure:"vod" json:"vod" validate:"required,dive"`
-	// QueryAPIServer basic information retrieval REST API config
-	QueryAPIServer APIServerConfig `mapstructure:"api" json:"api" validate:"required,dive"`
+	// APIServer local REST API config
+	APIServer APIServerConfig `mapstructure:"api" json:"api" validate:"required,dive"`
 	// RRClient PubSub request-response client config
 	RRClient EdgeReqRespClientConfig `mapstructure:"requestResponse" json:"requestResponse" validate:"required,dive"`
 	// BroadcastSystem system broadcast channel configuration
@@ -560,20 +558,6 @@ func InstallDefaultEdgeNodeConfigValues() {
 
 	// Default video source monitor config
 	viper.SetDefault("monitor.segmentReaderWorkerCount", 4)
-	// Default playlist receiver REST API server config
-	viper.SetDefault("monitor.api.enabled", true)
-	viper.SetDefault("monitor.api.service.listenOn", "0.0.0.0")
-	viper.SetDefault("monitor.api.service.appPort", 8080)
-	viper.SetDefault("monitor.api.service.timeoutSecs.read", 60)
-	viper.SetDefault("monitor.api.service.timeoutSecs.write", 60)
-	viper.SetDefault("monitor.api.service.timeoutSecs.idle", 60)
-	viper.SetDefault("monitor.api.apis.endPoint.pathPrefix", "/")
-	viper.SetDefault("monitor.api.apis.requestLogging.logLevel", "debug")
-	viper.SetDefault("monitor.api.apis.requestLogging.healthLogLevel", "debug")
-	viper.SetDefault("monitor.api.apis.requestLogging.requestIDHeader", "X-Request-ID")
-	viper.SetDefault("monitor.api.apis.requestLogging.skipHeaders", []string{
-		"WWW-Authenticate", "Authorization", "Proxy-Authenticate", "Proxy-Authorization",
-	})
 
 	// Default forwarder config
 	// Default live video segment forwarder config
@@ -587,20 +571,6 @@ func InstallDefaultEdgeNodeConfigValues() {
 	viper.SetDefault("forwarder.live.remote.client.retry.maxWaitTimeInSec", 30)
 
 	// Default VOD server config
-	// Default REST API server config
-	viper.SetDefault("vod.api.enabled", true)
-	viper.SetDefault("vod.api.service.listenOn", "0.0.0.0")
-	viper.SetDefault("vod.api.service.appPort", 8081)
-	viper.SetDefault("vod.api.service.timeoutSecs.read", 60)
-	viper.SetDefault("vod.api.service.timeoutSecs.write", 60)
-	viper.SetDefault("vod.api.service.timeoutSecs.idle", 60)
-	viper.SetDefault("vod.api.apis.endPoint.pathPrefix", "/")
-	viper.SetDefault("vod.api.apis.requestLogging.logLevel", "debug")
-	viper.SetDefault("vod.api.apis.requestLogging.healthLogLevel", "debug")
-	viper.SetDefault("vod.api.apis.requestLogging.requestIDHeader", "X-Request-ID")
-	viper.SetDefault("vod.api.apis.requestLogging.skipHeaders", []string{
-		"WWW-Authenticate", "Authorization", "Proxy-Authenticate", "Proxy-Authorization",
-	})
 	// Default number of segments to include a live VOD playlist
 	viper.SetDefault("vod.liveVODSegmentCount", 2)
 	// Default TTL for storing segment fetched from cold storage in local cache
@@ -609,7 +579,7 @@ func InstallDefaultEdgeNodeConfigValues() {
 	// Default query API server config
 	viper.SetDefault("api.enabled", true)
 	viper.SetDefault("api.service.listenOn", "0.0.0.0")
-	viper.SetDefault("api.service.appPort", 8082)
+	viper.SetDefault("api.service.appPort", 8080)
 	viper.SetDefault("api.service.timeoutSecs.read", 60)
 	viper.SetDefault("api.service.timeoutSecs.write", 60)
 	viper.SetDefault("api.service.timeoutSecs.idle", 60)
