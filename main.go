@@ -456,42 +456,14 @@ func startEdgeNode(c *cli.Context) error {
 
 	// Start local query API HTTP server
 	{
-		svr := edgeNode.QueryAPIServer
-		apiServers["query-api"] = svr
+		svr := edgeNode.APIServer
+		apiServers["api"] = svr
 		// Start the server
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			if err := svr.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.WithError(err).Error("Local query API HTTP server failure")
-			}
-		}()
-	}
-
-	// Start playlist receiver HTTP server
-	{
-		svr := edgeNode.PlaylistReceiveServer
-		apiServers["playlist-rx"] = svr
-		// Start the server
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := svr.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.WithError(err).Error("Playlist receiver HTTP server failure")
-			}
-		}()
-	}
-
-	// Start local live VOD HTTP server
-	{
-		svr := edgeNode.VODServer
-		apiServers["local-live-vod"] = svr
-		// Start the server
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := svr.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.WithError(err).Error("Local live VOD HTTP server failure")
+				log.WithError(err).Error("Local API HTTP server failure")
 			}
 		}()
 	}

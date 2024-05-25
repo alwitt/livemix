@@ -177,10 +177,10 @@ func BuildSystemManagementServer(
 }
 
 // ====================================================================================
-// Playlist Receiver Server
+// Edge Node API Server
 
 /*
-BuildPlaylistReceiverServer create edge node playlist receive server
+BuildEdgeAPIServer create edge node API server
 
 	@param parentCtxt context.Context - REST handler parent context
 	@param self common.VideoSourceConfig - video source entity parameter
@@ -189,19 +189,21 @@ BuildPlaylistReceiverServer create edge node playlist receive server
 	@param dbConns db.ConnectionManager - DB connection manager
 	@param httpCfg common.APIServerConfig - HTTP server configuration
 	@param forwardCB PlaylistForwardCB - callback to forward newly received playlists
+	@param manager vod.PlaylistManager - video playlist manager
 	@param metrics goutils.HTTPRequestMetricHelper - metric collection agent
 	@returns HTTP server instance
 */
-func BuildPlaylistReceiverServer(
+func BuildEdgeAPIServer(
 	parentCtxt context.Context,
 	sourceCfg common.VideoSourceConfig,
 	defaultSegmentURIPrefix *string,
 	dbConns db.ConnectionManager,
 	httpCfg common.APIServerConfig,
 	forwardCB PlaylistForwardCB,
+	manager vod.PlaylistManager,
 	metrics goutils.HTTPRequestMetricHelper,
 ) (*http.Server, error) {
-	httpHandler, err := NewPlaylistReceiveHandler(
+	playlistHandler, err := NewPlaylistReceiveHandler(
 		parentCtxt,
 		hls.NewPlaylistParser(),
 		forwardCB,
@@ -210,6 +212,16 @@ func BuildPlaylistReceiverServer(
 		httpCfg.APIs.RequestLogging,
 		metrics,
 	)
+	if err != nil {
+		return nil, err
+	}
+	vodHandler, err := NewVODHandler(
+		dbConns, manager, httpCfg.APIs.RequestLogging, metrics,
+	)
+	if err != nil {
+		return nil, err
+	}
+	apiHandler, err := NewEdgeAPIHandler(dbConns, httpCfg.APIs.RequestLogging, metrics)
 	if err != nil {
 		return nil, err
 	}
@@ -238,14 +250,28 @@ func BuildPlaylistReceiverServer(
 	// --------------------------------------------------------------------------------
 	// Playlist input
 	_ = registerPathPrefix(v1Router, "/playlist", map[string]http.HandlerFunc{
-		"post": httpHandler.NewPlaylistHandler(),
+		"post": playlistHandler.NewPlaylistHandler(),
+	})
+
+	// --------------------------------------------------------------------------------
+	// VOD endpoint
+	_ = registerPathPrefix(
+		v1Router, "/vod/live/{videoSourceID}/{fileName}", map[string]http.HandlerFunc{
+			"get": vodHandler.GetLiveStreamVideoFilesHandler(),
+		},
+	)
+
+	// --------------------------------------------------------------------------------
+	// Source endpoint
+	_ = registerPathPrefix(v1Router, "/source", map[string]http.HandlerFunc{
+		"get": apiHandler.ListVideoSourcesHandler(),
 	})
 
 	// --------------------------------------------------------------------------------
 	// Middleware
 
-	router.Use(func(next http.Handler) http.Handler {
-		return httpHandler.LoggingMiddleware(next.ServeHTTP)
+	v1Router.Use(func(next http.Handler) http.Handler {
+		return playlistHandler.LoggingMiddleware(next.ServeHTTP)
 	})
 	livenessRouter.Use(func(next http.Handler) http.Handler {
 		return livenessHTTPHandler.LoggingMiddleware(next.ServeHTTP)
@@ -358,123 +384,6 @@ func BuildCentralVODServer(
 		ReadTimeout:  time.Second * time.Duration(httpCfg.Server.Timeouts.ReadTimeout),
 		IdleTimeout:  time.Second * time.Duration(httpCfg.Server.Timeouts.IdleTimeout),
 		Handler:      h2c.NewHandler(corsWrapper.Handler(router), &http2.Server{}),
-	}
-
-	return httpSrv, nil
-}
-
-// ====================================================================================
-// VOD Server
-
-/*
-BuildVODServer create HLS VOD server
-
-	@param httpCfg common.APIServerConfig - HTTP server configuration
-	@param dbConns db.ConnectionManager - DB connection manager
-	@param manager vod.PlaylistManager - video playlist manager
-	@param metrics goutils.HTTPRequestMetricHelper - metric collection agent
-	@returns HTTP server instance
-*/
-func BuildVODServer(
-	httpCfg common.APIServerConfig,
-	dbConns db.ConnectionManager,
-	manager vod.PlaylistManager,
-	metrics goutils.HTTPRequestMetricHelper,
-) (*http.Server, error) {
-	httpHandler, err := NewVODHandler(
-		dbConns, manager, httpCfg.APIs.RequestLogging, metrics,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	router := mux.NewRouter()
-	mainRouter := registerPathPrefix(router, httpCfg.APIs.Endpoint.PathPrefix, nil)
-	v1Router := registerPathPrefix(mainRouter, "/v1", nil)
-
-	// --------------------------------------------------------------------------------
-	// VOD endpoint
-	_ = registerPathPrefix(
-		v1Router, "/vod/live/{videoSourceID}/{fileName}", map[string]http.HandlerFunc{
-			"get": httpHandler.GetLiveStreamVideoFilesHandler(),
-		},
-	)
-
-	// --------------------------------------------------------------------------------
-	// Middleware
-
-	router.Use(func(next http.Handler) http.Handler {
-		return httpHandler.LoggingMiddleware(next.ServeHTTP)
-	})
-
-	// --------------------------------------------------------------------------------
-	// HTTP Server
-
-	serverListen := fmt.Sprintf(
-		"%s:%d", httpCfg.Server.ListenOn, httpCfg.Server.Port,
-	)
-	httpSrv := &http.Server{
-		Addr:         serverListen,
-		WriteTimeout: time.Second * time.Duration(httpCfg.Server.Timeouts.WriteTimeout),
-		ReadTimeout:  time.Second * time.Duration(httpCfg.Server.Timeouts.ReadTimeout),
-		IdleTimeout:  time.Second * time.Duration(httpCfg.Server.Timeouts.IdleTimeout),
-		Handler:      h2c.NewHandler(router, &http2.Server{}),
-	}
-
-	return httpSrv, nil
-}
-
-// ====================================================================================
-// Edge API Server
-
-/*
-BuildEdgeAPIServer create edge API server. This server is for general information
-retrieval on the edge.
-
-	@param httpCfg common.APIServerConfig - HTTP server configuration
-	@param dbConns db.ConnectionManager - DB connection manager
-	@param metrics goutils.HTTPRequestMetricHelper - metric collection agent
-	@returns HTTP server instance
-*/
-func BuildEdgeAPIServer(
-	httpCfg common.APIServerConfig,
-	dbConns db.ConnectionManager,
-	metrics goutils.HTTPRequestMetricHelper,
-) (*http.Server, error) {
-	httpHandler, err := NewEdgeAPIHandler(dbConns, httpCfg.APIs.RequestLogging, metrics)
-	if err != nil {
-		return nil, err
-	}
-
-	router := mux.NewRouter()
-	mainRouter := registerPathPrefix(router, httpCfg.APIs.Endpoint.PathPrefix, nil)
-	v1Router := registerPathPrefix(mainRouter, "/v1", nil)
-
-	// --------------------------------------------------------------------------------
-	// Source endpoint
-	_ = registerPathPrefix(v1Router, "/source", map[string]http.HandlerFunc{
-		"get": httpHandler.ListVideoSourcesHandler(),
-	})
-
-	// --------------------------------------------------------------------------------
-	// Middleware
-
-	router.Use(func(next http.Handler) http.Handler {
-		return httpHandler.LoggingMiddleware(next.ServeHTTP)
-	})
-
-	// --------------------------------------------------------------------------------
-	// HTTP Server
-
-	serverListen := fmt.Sprintf(
-		"%s:%d", httpCfg.Server.ListenOn, httpCfg.Server.Port,
-	)
-	httpSrv := &http.Server{
-		Addr:         serverListen,
-		WriteTimeout: time.Second * time.Duration(httpCfg.Server.Timeouts.WriteTimeout),
-		ReadTimeout:  time.Second * time.Duration(httpCfg.Server.Timeouts.ReadTimeout),
-		IdleTimeout:  time.Second * time.Duration(httpCfg.Server.Timeouts.IdleTimeout),
-		Handler:      h2c.NewHandler(router, &http2.Server{}),
 	}
 
 	return httpSrv, nil
