@@ -50,6 +50,14 @@ type VideoSegmentCache interface {
 			@returns set of MPEG-TS file content
 	*/
 	GetSegments(ctxt context.Context, segments []common.VideoSegment) (map[string][]byte, error)
+
+	/*
+		CacheEntryCount return the number of cached entries
+
+			@param ctxt context.Context - execution context
+			@returns the number of cached entries
+	*/
+	CacheEntryCount(ctxt context.Context) (int, error)
 }
 
 // =====================================================================================
@@ -273,6 +281,13 @@ func (c *inProcessSegmentCacheImpl) GetSegments(
 	}
 
 	return result, nil
+}
+
+func (c *inProcessSegmentCacheImpl) CacheEntryCount(ctxt context.Context) (int, error) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	return len(c.cache), nil
 }
 
 // purgeExpiredEntry purge expired cache entries
@@ -592,4 +607,8 @@ func (c *memcachedSegmentCacheImpl) GetSegments(
 			Add(float64(endTime.Sub(startTime).Seconds()))
 	}
 	return result, nil
+}
+
+func (c *memcachedSegmentCacheImpl) CacheEntryCount(ctxt context.Context) (int, error) {
+	return -1, fmt.Errorf("operation not supported")
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/control"
 	"github.com/alwitt/livemix/db"
+	"github.com/alwitt/livemix/edge"
 	"github.com/alwitt/livemix/hls"
 	"github.com/alwitt/livemix/vod"
 	"github.com/gorilla/mux"
@@ -187,9 +188,10 @@ BuildEdgeAPIServer create edge node API server
 	@param defaultSegmentURIPrefix *string - if video segment URI prefix is not provided
 	    when submitting a new playlist, use this default prefix instead.
 	@param dbConns db.ConnectionManager - DB connection manager
+	@param sourceManager edge.VideoSourceOperator - video source manager
 	@param httpCfg common.APIServerConfig - HTTP server configuration
 	@param forwardCB PlaylistForwardCB - callback to forward newly received playlists
-	@param manager vod.PlaylistManager - video playlist manager
+	@param playlistManager vod.PlaylistManager - video playlist manager
 	@param metrics goutils.HTTPRequestMetricHelper - metric collection agent
 	@returns HTTP server instance
 */
@@ -198,9 +200,10 @@ func BuildEdgeAPIServer(
 	sourceCfg common.VideoSourceConfig,
 	defaultSegmentURIPrefix *string,
 	dbConns db.ConnectionManager,
+	sourceManager edge.VideoSourceOperator,
 	httpCfg common.APIServerConfig,
 	forwardCB PlaylistForwardCB,
-	manager vod.PlaylistManager,
+	playlistManager vod.PlaylistManager,
 	metrics goutils.HTTPRequestMetricHelper,
 ) (*http.Server, error) {
 	playlistHandler, err := NewPlaylistReceiveHandler(
@@ -216,7 +219,7 @@ func BuildEdgeAPIServer(
 		return nil, err
 	}
 	vodHandler, err := NewVODHandler(
-		dbConns, manager, httpCfg.APIs.RequestLogging, metrics,
+		dbConns, playlistManager, httpCfg.APIs.RequestLogging, metrics,
 	)
 	if err != nil {
 		return nil, err
@@ -226,7 +229,7 @@ func BuildEdgeAPIServer(
 		return nil, err
 	}
 	livenessHTTPHandler, err := NewEdgeNodeLivenessHandler(
-		sourceCfg, dbConns, httpCfg.APIs.RequestLogging,
+		sourceCfg, dbConns, sourceManager, httpCfg.APIs.RequestLogging,
 	)
 	if err != nil {
 		return nil, err

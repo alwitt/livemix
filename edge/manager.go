@@ -106,6 +106,14 @@ type VideoSourceOperator interface {
 			@param timestamp time.Time - current timestamp
 	*/
 	SyncActiveRecordingState(timestamp time.Time) error
+
+	/*
+		CacheEntryCount return the number of cached entries
+
+			@param ctxt context.Context - execution context
+			@returns the number of cached entries
+	*/
+	CacheEntryCount(ctxt context.Context) (int, error)
 }
 
 // VideoSourceOperatorConfig video source operations manager configuration
@@ -847,4 +855,8 @@ func (o *videoSourceOperatorImpl) SyncActiveRecordingState(timestamp time.Time) 
 	}
 
 	return nil
+}
+
+func (o *videoSourceOperatorImpl) CacheEntryCount(ctxt context.Context) (int, error) {
+	return o.VideoCache.CacheEntryCount(ctxt)
 }

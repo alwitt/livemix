@@ -571,6 +571,7 @@ func DefineEdgeNode(
 		config.VideoSource,
 		config.MonitorConfig.DefaultSegmentURIPrefix,
 		dbConns,
+		theNode.operator,
 		config.APIServer,
 		theNode.monitor.Update,
 		theNode.playlistManager,

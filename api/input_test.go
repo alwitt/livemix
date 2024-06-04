@@ -222,6 +222,7 @@ func TestEdgeNodeReadiness(t *testing.T) {
 		"Ready",
 		mock.AnythingOfType("*context.valueCtx"),
 	).Return(nil)
+	mockMgmt := mocks.NewVideoSourceOperator(t)
 
 	timestamp := time.Now().UTC()
 
@@ -229,7 +230,7 @@ func TestEdgeNodeReadiness(t *testing.T) {
 	uut, err := api.NewEdgeNodeLivenessHandler(
 		common.VideoSourceConfig{
 			Name: sourceName, StatusReportIntInSec: 20,
-		}, mockSQL, common.HTTPRequestLogging{
+		}, mockSQL, mockMgmt, common.HTTPRequestLogging{
 			RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
 		},
 	)
@@ -262,7 +263,7 @@ func TestEdgeNodeReadiness(t *testing.T) {
 		assert.Equal(http.StatusInternalServerError, respRecorder.Code)
 	}
 
-	// Case 1: success
+	// Case 1: cache is empty
 	{
 		testSource := common.VideoSource{SourceLocalTime: timestamp.Add(-time.Second * 30)}
 
@@ -272,6 +273,41 @@ func TestEdgeNodeReadiness(t *testing.T) {
 			mock.AnythingOfType("*context.valueCtx"),
 			sourceName,
 		).Return(testSource, nil).Once()
+		mockMgmt.On(
+			"CacheEntryCount",
+			mock.AnythingOfType("*context.valueCtx"),
+		).Return(0, nil).Once()
+
+		req, err := http.NewRequest("GET", "/v1/ready", nil)
+		assert.Nil(err)
+
+		// Setup HTTP handling
+		router := mux.NewRouter()
+		respRecorder := httptest.NewRecorder()
+		router.HandleFunc(
+			"/v1/ready", uut.LoggingMiddleware(uut.ReadyHandler()),
+		)
+
+		// Request
+		router.ServeHTTP(respRecorder, req)
+
+		assert.Equal(http.StatusInternalServerError, respRecorder.Code)
+	}
+
+	// Case 2: success
+	{
+		testSource := common.VideoSource{SourceLocalTime: timestamp.Add(-time.Second * 30)}
+
+		// Prepare mock
+		mockDB.On(
+			"GetVideoSourceByName",
+			mock.AnythingOfType("*context.valueCtx"),
+			sourceName,
+		).Return(testSource, nil).Once()
+		mockMgmt.On(
+			"CacheEntryCount",
+			mock.AnythingOfType("*context.valueCtx"),
+		).Return(5, nil).Once()
 
 		req, err := http.NewRequest("GET", "/v1/ready", nil)
 		assert.Nil(err)

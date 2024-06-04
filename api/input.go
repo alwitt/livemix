@@ -13,6 +13,7 @@ import (
 	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/common/ipc"
 	"github.com/alwitt/livemix/db"
+	"github.com/alwitt/livemix/edge"
 	"github.com/alwitt/livemix/hls"
 	"github.com/apex/log"
 )
@@ -404,6 +405,7 @@ type EdgeNodeLivenessHandler struct {
 	goutils.RestAPIHandler
 	self    common.VideoSourceConfig
 	dbConns db.ConnectionManager
+	manager edge.VideoSourceOperator
 }
 
 /*
@@ -411,12 +413,14 @@ NewEdgeNodeLivenessHandler define a new edge node liveness REST API handler
 
 	@param self common.VideoSourceConfig - video source entity parameter
 	@param dbConns db.ConnectionManager - DB connection manager
+	@param manager edge.VideoSourceOperator - video source manager
 	@param logConfig common.HTTPRequestLogging - handler log settings
 	@return new EdgeNodeLivenessHandler
 */
 func NewEdgeNodeLivenessHandler(
 	self common.VideoSourceConfig,
 	dbConns db.ConnectionManager,
+	manager edge.VideoSourceOperator,
 	logConfig common.HTTPRequestLogging,
 ) (EdgeNodeLivenessHandler, error) {
 	return EdgeNodeLivenessHandler{
@@ -436,7 +440,7 @@ func NewEdgeNodeLivenessHandler(
 				return result
 			}(),
 			LogLevel: logConfig.HealthLogLevel,
-		}, self: self, dbConns: dbConns,
+		}, self: self, dbConns: dbConns, manager: manager,
 	}, nil
 }
 
@@ -516,6 +520,15 @@ func (h EdgeNodeLivenessHandler) Ready(w http.ResponseWriter, r *http.Request) {
 	timeToLastUpdate := timestamp.Sub(updatedEntity.SourceLocalTime)
 	if timeToLastUpdate > h.self.StatusReportInt()*2 {
 		err := fmt.Errorf("status report transmission passed deadline")
+		respCode = http.StatusInternalServerError
+		response = h.GetStdRESTErrorMsg(
+			r.Context(), http.StatusInternalServerError, "not ready", err.Error(),
+		)
+		return
+	}
+
+	if cacheCount, err := h.manager.CacheEntryCount(r.Context()); err != nil || cacheCount == 0 {
+		err := fmt.Errorf("video segment cache is empty or not functional")
 		respCode = http.StatusInternalServerError
 		response = h.GetStdRESTErrorMsg(
 			r.Context(), http.StatusInternalServerError, "not ready", err.Error(),
