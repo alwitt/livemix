@@ -189,6 +189,11 @@ func (m *playlistManagerImpl) GetRecordingStreamPlaylist(
 		if idx == 0 {
 			continue
 		}
+		if idx > m.segmentPrefetchCount {
+			// Limit number of prefetched segments.
+			// This is also the number of segment readers.
+			break
+		}
 		// Fetch the segment DB entry
 		segDBEntry, err := dbClient.GetRecordingSegmentByName(ctxt, oneSegment.Name)
 		if err != nil {
