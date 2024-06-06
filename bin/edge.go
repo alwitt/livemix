@@ -157,7 +157,7 @@ func DefineEdgeNode(
 
 	// Setup database connection manager
 	sqlDSN := db.GetSqliteDialector(config.Sqlite.DBFile)
-	dbConns, err := db.NewSQLConnection(sqlDSN, logger.Error)
+	dbConns, err := db.NewSQLConnection(sqlDSN, logger.Error, true)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to define SQL connection manager")
 		return theNode, err

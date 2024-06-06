@@ -24,7 +24,7 @@ func TestDBManagerVideoSource(t *testing.T) {
 
 	testInstance := fmt.Sprintf("ut-%s", uuid.NewString())
 	testDB := fmt.Sprintf("/tmp/%s.db", testInstance)
-	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB), logger.Info)
+	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB), logger.Info, true)
 	assert.Nil(err)
 
 	log.Debugf("Using %s", testDB)
@@ -212,7 +212,7 @@ func TestDBManagerVideoSegment(t *testing.T) {
 
 	testInstance := fmt.Sprintf("ut-%s", uuid.NewString())
 	testDB := fmt.Sprintf("/tmp/%s.db", testInstance)
-	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB), logger.Info)
+	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB), logger.Info, true)
 	assert.Nil(err)
 
 	log.Debugf("Using %s", testDB)
@@ -477,7 +477,7 @@ func TestDBManagerVideoSegmentPurgeOldSegments(t *testing.T) {
 
 	testInstance := fmt.Sprintf("ut-%s", uuid.NewString())
 	testDB := fmt.Sprintf("/tmp/%s.db", testInstance)
-	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB), logger.Info)
+	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB), logger.Info, true)
 	assert.Nil(err)
 
 	log.Debugf("Using %s", testDB)
@@ -569,7 +569,7 @@ func TestDBManagerVideoRecording(t *testing.T) {
 
 	testInstance := fmt.Sprintf("ut-%s", uuid.NewString())
 	testDB := fmt.Sprintf("/tmp/%s.db", testInstance)
-	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB), logger.Info)
+	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB), logger.Info, true)
 	assert.Nil(err)
 
 	log.Debugf("Using %s", testDB)
@@ -804,7 +804,7 @@ func TestDBManagerRecordingSegments(t *testing.T) {
 	sqlDialector, err := db.GetPostgresDialector(getUnitTestPSQLConfig(assert))
 	assert.Nil(err)
 
-	conns, err := db.NewSQLConnection(sqlDialector, logger.Info)
+	conns, err := db.NewSQLConnection(sqlDialector, logger.Info, false)
 	assert.Nil(err)
 
 	utCtxt := context.Background()

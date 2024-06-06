@@ -104,7 +104,8 @@ type ConnectionManager interface {
 
 type connectionManagerImpl struct {
 	goutils.Component
-	db *gorm.DB
+	db             *gorm.DB
+	noTransactions bool
 }
 
 /*
@@ -112,10 +113,11 @@ NewSQLConnection define a new DB connection and transactions manager
 
 	@param dbDialector gorm.Dialector - GORM SQL dialector
 	@param logLevel logger.LogLevel - SQL log level
+	@param noTransactions bool - optionally, do not use transactions.
 	@returns new manager
 */
 func NewSQLConnection(
-	dbDialector gorm.Dialector, logLevel logger.LogLevel,
+	dbDialector gorm.Dialector, logLevel logger.LogLevel, noTransactions bool,
 ) (ConnectionManager, error) {
 	db, err := gorm.Open(dbDialector, &gorm.Config{
 		Logger:                 logger.Default.LogMode(logLevel),
@@ -146,20 +148,27 @@ func NewSQLConnection(
 			LogTagModifiers: []goutils.LogMetadataModifier{
 				goutils.ModifyLogMetadataByRestRequestParam,
 			},
-		}, db: db,
+		}, db: db, noTransactions: noTransactions,
 	}, nil
 }
 
 func (c *connectionManagerImpl) NewTransaction() *gorm.DB {
-	return c.db.Begin()
+	if !c.noTransactions {
+		return c.db.Begin()
+	}
+	return c.db
 }
 
 func (c *connectionManagerImpl) Commit(session *gorm.DB) {
-	session.Commit()
+	if !c.noTransactions {
+		session.Commit()
+	}
 }
 
 func (c *connectionManagerImpl) Rollback(session *gorm.DB) {
-	session.Rollback()
+	if !c.noTransactions {
+		session.Rollback()
+	}
 }
 
 func (c *connectionManagerImpl) NewPersistanceManager() PersistenceManager {

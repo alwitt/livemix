@@ -402,7 +402,7 @@ func purgeUnknownSegmentsFromObjStore(c *cli.Context) error {
 		return err
 	}
 
-	dbConns, err := db.NewSQLConnection(sqlDSN, logger.Error)
+	dbConns, err := db.NewSQLConnection(sqlDSN, logger.Error, false)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to define SQL connection manager")
 		return err

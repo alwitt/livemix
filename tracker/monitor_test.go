@@ -26,7 +26,7 @@ func TestSourceHLSMonitor(t *testing.T) {
 
 	testInstance := fmt.Sprintf("ut-%s", uuid.NewString())
 	testDB := fmt.Sprintf("/tmp/%s.db", testInstance)
-	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB), logger.Info)
+	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB), logger.Info, true)
 	assert.Nil(err)
 
 	var testSource common.VideoSource
