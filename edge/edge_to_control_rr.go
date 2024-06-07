@@ -346,7 +346,7 @@ func (c *controlRequestClientImpl) ListActiveRecordingsOfSource(
 			WithError(err).
 			WithFields(logTags).
 			WithField("source-id", sourceID).
-			Error("Stop all recording session of source request failed")
+			Error("Get active recordings of video source request failed")
 		return nil, err
 	}
 
