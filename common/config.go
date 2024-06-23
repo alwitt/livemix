@@ -406,11 +406,18 @@ type CentralVODServerConfig struct {
 	RecordingStorage RecordingStorageConfig `mapstructure:"recordingStorage" json:"recordingStorage" validate:"required,dive"`
 	// SegmentReaderWorkerCount number of worker threads in the video segment reader
 	SegmentReaderWorkerCount int `mapstructure:"segmentReaderWorkerCount" json:"segmentReaderWorkerCount" validate:"gte=2,lte=64"`
+	// SegmentReadMaxWaitTimeInSec max time in second to complete a segment read
+	SegmentReadMaxWaitTimeInSec uint32 `mapstructure:"segmentReadMaxWaitTimeInSec" json:"segmentReadMaxWaitTimeInSec" validate:"gte=10,lte=300"`
 }
 
 // SegReceiverTrackingWindow convert SegReceiverTrackingWindowInSec to time.Duration
 func (c CentralVODServerConfig) SegReceiverTrackingWindow() time.Duration {
 	return time.Second * time.Duration(c.SegReceiverTrackingWindowInSec)
+}
+
+// SegmentReadMaxWaitTime convert SegmentReadMaxWaitTimeInSec to time.Duration
+func (c CentralVODServerConfig) SegmentReadMaxWaitTime() time.Duration {
+	return time.Second * time.Duration(c.SegmentReadMaxWaitTimeInSec)
 }
 
 // ===============================================================================
@@ -526,6 +533,8 @@ func InstallDefaultControlNodeConfigValues() {
 	viper.SetDefault("vod.segmentReceiverTrackingWindow", 60)
 	// Default segment reader worker threads
 	viper.SetDefault("vod.segmentReaderWorkerCount", 4)
+	// Default max time for segment read
+	viper.SetDefault("vod.segmentReadMaxWaitTimeInSec", 30)
 
 	// Default broadcast channel config
 	viper.SetDefault("broadcast.pubsub.msgTTL", 600)

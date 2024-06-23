@@ -226,7 +226,11 @@ func DefineControlNode(
 
 	// Define segment reader
 	vodSegmentReader, err := utils.NewSegmentReader(
-		parentCtxt, config.VODConfig.SegmentReaderWorkerCount, s3Client, metrics,
+		parentCtxt,
+		config.VODConfig.SegmentReaderWorkerCount,
+		config.VODConfig.SegmentReadMaxWaitTime(),
+		s3Client,
+		metrics,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create segment reader")

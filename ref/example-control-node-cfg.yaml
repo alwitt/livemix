@@ -207,6 +207,9 @@ vod:
   # Number of worker threads in the video segment reader
   segmentReaderWorkerCount: 4
 
+  # Max time in second to complete a segment read
+  segmentReadMaxWaitTimeInSec: 30
+
 #########################################################################################
 # System broadcast channel configuration
 broadcast:

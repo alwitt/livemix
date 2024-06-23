@@ -49,6 +49,7 @@ type segmentReader struct {
 	workerContext    context.Context
 	workerCtxtCancel context.CancelFunc
 	s3               S3Client
+	maxSegReadTime   time.Duration
 
 	/* Metrics Collection Agents */
 	segmentIOMetrics   SegmentMetricsAgent
@@ -60,19 +61,24 @@ NewSegmentReader define new SegmentReader
 
 	@param parentContext context.Context - context from which to define the worker context
 	@param workerCount int - number of parallel read worker to define
+	@param maxSegReadTime time.Duration - max time allowed to completed a segment read
 	@param s3 S3Client - S3 client for operating against the S3 server
 	@param metrics goutils.MetricsCollector - metrics framework client
 	@return new SegmentReader
 */
 func NewSegmentReader(
-	parentContext context.Context, workerCount int, s3 S3Client, metrics goutils.MetricsCollector,
+	parentContext context.Context,
+	workerCount int,
+	maxSegReadTime time.Duration,
+	s3 S3Client,
+	metrics goutils.MetricsCollector,
 ) (SegmentReader, error) {
 	logTags := log.Fields{
 		"module":    "utils",
 		"component": "hls-video-segment-reader",
 	}
 	workers, err := goutils.GetNewTaskDemuxProcessorInstance(
-		parentContext, "segment-readers", workerCount*2, workerCount, logTags,
+		parentContext, "segment-readers", workerCount, workerCount, logTags,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Unable to define worker thread pool")
@@ -93,6 +99,7 @@ func NewSegmentReader(
 		workerContext:    workerCtxt,
 		workerCtxtCancel: cancel,
 		s3:               s3,
+		maxSegReadTime:   maxSegReadTime,
 		segmentIOMetrics: nil,
 	}
 
@@ -306,6 +313,8 @@ func CleanupObjectKey(orig string) string {
 func (r *segmentReader) readSegmentFromS3(
 	segment common.VideoSegment, fetchURI *url.URL, returnCB SegmentReturnCallback,
 ) error {
+	readCtxt, readCtxtCancel := context.WithTimeout(r.workerContext, r.maxSegReadTime)
+	defer readCtxtCancel()
 	logTags := r.GetLogTagsForContext(r.workerContext)
 
 	if r.s3 == nil {
@@ -328,10 +337,10 @@ func (r *segmentReader) readSegmentFromS3(
 		WithField("source-id", segment.SourceID).
 		WithField("segemnt", segment.Name).
 		WithField("segment-uri", fetchURI.String()).
-		Debug("Fetching segment from S3")
+		Info("Fetching segment from S3")
 
 	startTime := time.Now().UTC()
-	content, err := r.s3.GetObject(r.workerContext, sourceBucket, segmentObjectKey)
+	content, err := r.s3.GetObject(readCtxt, sourceBucket, segmentObjectKey)
 	if err != nil {
 		log.
 			WithError(err).
@@ -350,7 +359,7 @@ func (r *segmentReader) readSegmentFromS3(
 		WithField("segemnt", segment.Name).
 		WithField("segment-uri", fetchURI.String()).
 		WithField("length", len(content)).
-		Debug("Read segment from S3")
+		Info("Read segment from S3")
 
 	if err := returnCB(r.workerContext, segment.ID, content); err != nil {
 		log.
