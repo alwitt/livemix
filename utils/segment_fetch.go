@@ -64,6 +64,7 @@ NewSegmentReader define new SegmentReader
 	@param maxSegReadTime time.Duration - max time allowed to completed a segment read
 	@param s3 S3Client - S3 client for operating against the S3 server
 	@param metrics goutils.MetricsCollector - metrics framework client
+	@param tpMetrics goutils.TaskProcessorMetricHelper - task processor metrics helper
 	@return new SegmentReader
 */
 func NewSegmentReader(
@@ -72,13 +73,14 @@ func NewSegmentReader(
 	maxSegReadTime time.Duration,
 	s3 S3Client,
 	metrics goutils.MetricsCollector,
+	tpMetrics goutils.TaskProcessorMetricHelper,
 ) (SegmentReader, error) {
 	logTags := log.Fields{
 		"module":    "utils",
 		"component": "hls-video-segment-reader",
 	}
 	workers, err := goutils.GetNewTaskDemuxProcessorInstance(
-		parentContext, "segment-readers", workerCount, workerCount, logTags,
+		parentContext, "segment-readers", workerCount, workerCount, logTags, tpMetrics,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Unable to define worker thread pool")

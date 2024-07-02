@@ -26,7 +26,7 @@ func TestHTTPLiveStreamForwarder(t *testing.T) {
 	mockDB.On("Close").Return()
 	mockSender := mocks.NewSegmentSender(t)
 
-	uut, err := forwarder.NewHTTPLiveStreamSegmentForwarder(utCtxt, mockSQL, mockSender, 2)
+	uut, err := forwarder.NewHTTPLiveStreamSegmentForwarder(utCtxt, mockSQL, mockSender, 2, nil)
 	assert.Nil(err)
 
 	// ------------------------------------------------------------------------------------

@@ -6,7 +6,7 @@ toolchain go1.22.1
 
 require (
 	cloud.google.com/go/pubsub v1.31.0
-	github.com/alwitt/goutils v0.6.4
+	github.com/alwitt/goutils v0.7.0
 	github.com/apex/log v1.9.0
 	github.com/bradfitz/gomemcache v0.0.0-20230611145640-acc696258285
 	github.com/fsnotify/fsnotify v1.6.0

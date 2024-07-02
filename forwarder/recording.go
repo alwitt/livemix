@@ -55,6 +55,7 @@ NewS3RecordingSegmentForwarder define new S3 version of RecordingSegmentForwarde
 	@param s3Client SegmentSender - S3 segment transport client
 	@param broadcastClient utils.Broadcaster - message broadcast client
 	@param maxInFlightSegments int - max number of segment being stored at any one time
+	@param tpMetrics goutils.TaskProcessorMetricHelper - task processor metrics helper
 	@returns new RecordingSegmentForwarder
 */
 func NewS3RecordingSegmentForwarder(
@@ -63,6 +64,7 @@ func NewS3RecordingSegmentForwarder(
 	s3Client SegmentSender,
 	broadcastClient utils.Broadcaster,
 	maxInFlightSegments int,
+	tpMetrics goutils.TaskProcessorMetricHelper,
 ) (RecordingSegmentForwarder, error) {
 	logTags := log.Fields{
 		"module":    "forwarder",
@@ -98,6 +100,7 @@ func NewS3RecordingSegmentForwarder(
 		maxInFlightSegments+1,
 		maxInFlightSegments+1,
 		txWorkerLogTags,
+		tpMetrics,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to define transmission worker")

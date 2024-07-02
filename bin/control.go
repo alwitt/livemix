@@ -123,6 +123,11 @@ func DefineControlNode(
 		pubsubMetricsAgent = metrics.InstallPubSubMetrics()
 	}
 
+	var taskProcessorMetricsAgent goutils.TaskProcessorMetricHelper
+	if config.Metrics.Features.EnableTaskProcessorMetrics {
+		taskProcessorMetricsAgent = metrics.InstallTaskProcessorMetrics()
+	}
+
 	// Create server to host metrics collection endpoint
 	theNode.MetricsServer, err = api.BuildMetricsCollectionServer(
 		config.Metrics.Server, metrics, config.Metrics.MetricsEndpoint, config.Metrics.MaxRequests,
@@ -231,6 +236,7 @@ func DefineControlNode(
 		config.VODConfig.SegmentReadMaxWaitTime(),
 		s3Client,
 		metrics,
+		taskProcessorMetricsAgent,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create segment reader")
@@ -447,7 +453,12 @@ func DefineControlNode(
 	}
 
 	theNode.playlistManager, err = vod.NewPlaylistManager(
-		parentCtxt, dbConns, config.VODConfig.SegmentReaderWorkerCount, plBuilder, vodSegmentMgnt,
+		parentCtxt,
+		dbConns,
+		config.VODConfig.SegmentReaderWorkerCount,
+		plBuilder,
+		vodSegmentMgnt,
+		taskProcessorMetricsAgent,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create video playlist manager")

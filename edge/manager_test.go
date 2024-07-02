@@ -67,7 +67,7 @@ func TestVideoSourceOperatorStartRecording(t *testing.T) {
 		mock.AnythingOfType("time.Time"),
 	).Return(nil)
 
-	uut, err := edge.NewManager(utCtxt, uutConfig, mockRR, nil)
+	uut, err := edge.NewManager(utCtxt, uutConfig, mockRR, nil, nil)
 	assert.Nil(err)
 
 	// ====================================================================================
@@ -256,7 +256,7 @@ func TestVideoSourceOperatorStopRecording(t *testing.T) {
 		mock.AnythingOfType("time.Time"),
 	).Return(nil)
 
-	uut, err := edge.NewManager(utCtxt, uutConfig, mockRR, nil)
+	uut, err := edge.NewManager(utCtxt, uutConfig, mockRR, nil, nil)
 	assert.Nil(err)
 
 	// ====================================================================================
@@ -352,7 +352,7 @@ func TestVideoSourceOperatorNewSegmentFromSource(t *testing.T) {
 		mock.AnythingOfType("time.Time"),
 	).Return(nil)
 
-	uut, err := edge.NewManager(utCtxt, uutConfig, mockRR, nil)
+	uut, err := edge.NewManager(utCtxt, uutConfig, mockRR, nil, nil)
 	assert.Nil(err)
 
 	// ====================================================================================
@@ -520,7 +520,7 @@ func TestVideoSourceOperatorSyncActiveRecordingState(t *testing.T) {
 		mock.AnythingOfType("time.Time"),
 	).Return(nil)
 
-	uut, err := edge.NewManager(utCtxt, uutConfig, mockRR, nil)
+	uut, err := edge.NewManager(utCtxt, uutConfig, mockRR, nil, nil)
 	assert.Nil(err)
 
 	timestamp := time.Now().UTC()

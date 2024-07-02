@@ -28,7 +28,7 @@ func TestVideoManagerPrefetch(t *testing.T) {
 	mockBuilder := mocks.NewPlaylistBuilder(t)
 	mockSegMgmt := mocks.NewSegmentManager(t)
 
-	uut, err := vod.NewPlaylistManager(utCtxt, mockSQL, 4, mockBuilder, mockSegMgmt)
+	uut, err := vod.NewPlaylistManager(utCtxt, mockSQL, 4, mockBuilder, mockSegMgmt, nil)
 	assert.Nil(err)
 
 	// ------------------------------------------------------------------------------------

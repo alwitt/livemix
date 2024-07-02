@@ -38,6 +38,9 @@ metrics:
     # Whether to enable PubSub metrics
     enablePubSubMetrics: true
 
+    # Whether to enable Task processor operational metrics
+    enableTaskProcessorMetrics: true
+
 #########################################################################################
 # Video source being monitored
 videoSource:

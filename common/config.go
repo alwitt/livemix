@@ -138,6 +138,8 @@ type MetricsFeatureConfig struct {
 	EnableHTTPMetrics bool `mapstructure:"enableHTTPMetrics" json:"enableHTTPMetrics"`
 	// EnablePubSubMetrics whether to enable PubSub operational metrics
 	EnablePubSubMetrics bool `mapstructure:"enablePubSubMetrics" json:"enablePubSubMetrics"`
+	// EnableTaskProcessorMetrics whether to enable Task processor operational metrics
+	EnableTaskProcessorMetrics bool `mapstructure:"enableTaskProcessorMetrics" json:"enableTaskProcessorMetrics"`
 }
 
 // MetricsConfig application metrics config
@@ -474,6 +476,7 @@ func InstallDefaultControlNodeConfigValues() {
 	viper.SetDefault("metrics.features.enableAppMetrics", false)
 	viper.SetDefault("metrics.features.enableHTTPMetrics", true)
 	viper.SetDefault("metrics.features.enablePubSubMetrics", true)
+	viper.SetDefault("metrics.features.enableTaskProcessorMetrics", true)
 	// Default metrics HTTP server config
 	viper.SetDefault("metrics.service.listenOn", "0.0.0.0")
 	viper.SetDefault("metrics.service.appPort", 3001)
@@ -549,6 +552,7 @@ func InstallDefaultEdgeNodeConfigValues() {
 	viper.SetDefault("metrics.features.enableAppMetrics", false)
 	viper.SetDefault("metrics.features.enableHTTPMetrics", true)
 	viper.SetDefault("metrics.features.enablePubSubMetrics", true)
+	viper.SetDefault("metrics.features.enableTaskProcessorMetrics", true)
 	// Default metrics HTTP server config
 	viper.SetDefault("metrics.service.listenOn", "0.0.0.0")
 	viper.SetDefault("metrics.service.appPort", 3001)

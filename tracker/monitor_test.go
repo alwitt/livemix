@@ -55,7 +55,7 @@ func TestSourceHLSMonitor(t *testing.T) {
 
 	// Define SourceHLSMonitor
 	uut, err := tracker.NewSourceHLSMonitor(
-		utCtxt, testSource, conns, trackingWindow, testCache, mockSegReader, receiveSegCB, nil,
+		utCtxt, testSource, conns, trackingWindow, testCache, mockSegReader, receiveSegCB, nil, nil,
 	)
 	assert.Nil(err)
 

@@ -104,6 +104,11 @@ func DefineEdgeNode(
 		pubsubMetricsAgent = metrics.InstallPubSubMetrics()
 	}
 
+	var taskProcessorMetricsAgent goutils.TaskProcessorMetricHelper
+	if config.Metrics.Features.EnableTaskProcessorMetrics {
+		taskProcessorMetricsAgent = metrics.InstallTaskProcessorMetrics()
+	}
+
 	// Create server to host metrics collection endpoint
 	theNode.MetricsServer, err = api.BuildMetricsCollectionServer(
 		config.Metrics.Server, metrics, config.Metrics.MetricsEndpoint, config.Metrics.MaxRequests,
@@ -358,7 +363,11 @@ func DefineEdgeNode(
 		return theNode, err
 	}
 	liveForwarder, err := forwarder.NewHTTPLiveStreamSegmentForwarder(
-		parentCtxt, dbConns, httpSegmentSender, config.Forwarder.Live.MaxInFlight,
+		parentCtxt,
+		dbConns,
+		httpSegmentSender,
+		config.Forwarder.Live.MaxInFlight,
+		taskProcessorMetricsAgent,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create live stream segment forwarder")
@@ -417,6 +426,7 @@ func DefineEdgeNode(
 		s3SegmentSender,
 		psBroadcast,
 		config.Forwarder.Recording.MaxInFlight,
+		taskProcessorMetricsAgent,
 	)
 	if err != nil {
 		log.
@@ -450,7 +460,7 @@ func DefineEdgeNode(
 
 	// Define video source operator
 	theNode.operator, err = edge.NewManager(
-		parentCtxt, edgeOperatorConfig, edgeToCtrlRRClient, metrics,
+		parentCtxt, edgeOperatorConfig, edgeToCtrlRRClient, metrics, taskProcessorMetricsAgent,
 	)
 	if err != nil {
 		log.
@@ -476,7 +486,12 @@ func DefineEdgeNode(
 
 	// Define video segment reader
 	theNode.segmentReader, err = utils.NewSegmentReader(
-		parentCtxt, config.MonitorConfig.SegmentReaderWorkerCount, 0, nil, metrics,
+		parentCtxt,
+		config.MonitorConfig.SegmentReaderWorkerCount,
+		0,
+		nil,
+		metrics,
+		taskProcessorMetricsAgent,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create video segment reader")
@@ -504,6 +519,7 @@ func DefineEdgeNode(
 		theNode.segmentReader,
 		theNode.operator.NewSegmentFromSource,
 		metrics,
+		taskProcessorMetricsAgent,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create HLS monitor")
@@ -540,7 +556,7 @@ func DefineEdgeNode(
 	}
 
 	theNode.playlistManager, err = vod.NewPlaylistManager(
-		parentCtxt, dbConns, 2, plBuilder, segmentMgnt,
+		parentCtxt, dbConns, 2, plBuilder, segmentMgnt, taskProcessorMetricsAgent,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to create video playlist manager")

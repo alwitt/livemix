@@ -51,6 +51,7 @@ NewHTTPLiveStreamSegmentForwarder define new HTTP version of LiveStreamSegmentFo
 	@param dbConns db.ConnectionManager - DB connection manager
 	@param sender SegmentSender - client for forwarding video segments to system control node
 	@param maxInFlightSegments int - max number of segment being forwarded at any one time
+	@param tpMetrics goutils.TaskProcessorMetricHelper - task processor metrics helper
 	@returns new LiveStreamSegmentForwarder
 */
 func NewHTTPLiveStreamSegmentForwarder(
@@ -58,6 +59,7 @@ func NewHTTPLiveStreamSegmentForwarder(
 	dbConns db.ConnectionManager,
 	sender SegmentSender,
 	maxInFlightSegments int,
+	tpMetrics goutils.TaskProcessorMetricHelper,
 ) (LiveStreamSegmentForwarder, error) {
 	logTags := log.Fields{
 		"module":    "forwarder",
@@ -91,6 +93,7 @@ func NewHTTPLiveStreamSegmentForwarder(
 		maxInFlightSegments+1,
 		maxInFlightSegments+1,
 		workerLogsTags,
+		tpMetrics,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to define support worker")

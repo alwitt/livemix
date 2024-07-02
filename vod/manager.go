@@ -81,6 +81,7 @@ NewPlaylistManager define new VOD controller
 	    requests a recording playback
 	@param builder PlaylistBuilder - playlist builder
 	@param segMgmt SegmentManager - segment manager
+	@param tpMetrics goutils.TaskProcessorMetricHelper - task processor metrics helper
 	@returns new PlaylistManager
 */
 func NewPlaylistManager(
@@ -89,6 +90,7 @@ func NewPlaylistManager(
 	segPrefetchCount int,
 	builder PlaylistBuilder,
 	segMgmt SegmentManager,
+	tpMetrics goutils.TaskProcessorMetricHelper,
 ) (PlaylistManager, error) {
 	logTags := log.Fields{"module": "vod", "component": "playlist-manager"}
 
@@ -118,6 +120,7 @@ func NewPlaylistManager(
 			"component":     "playlist-manager",
 			"sub-component": "prefetch-worker",
 		},
+		tpMetrics,
 	); err != nil {
 		log.WithError(err).WithFields(logTags).Error("Unable to define support worker")
 		return nil, err

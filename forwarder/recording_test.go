@@ -30,7 +30,7 @@ func TestS3RecordingSegmentForwarder(t *testing.T) {
 	}
 
 	uut, err := forwarder.NewS3RecordingSegmentForwarder(
-		utCtxt, storageCfg, mockS3, mockBroadcaster, 2,
+		utCtxt, storageCfg, mockS3, mockBroadcaster, 2, nil,
 	)
 	assert.Nil(err)
 

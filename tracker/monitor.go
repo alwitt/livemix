@@ -87,6 +87,7 @@ after that.
 	@param reader utils.SegmentReader - HLS video segment data reader
 	@param forwardSegment SegmentForwardCallback - callback to send out read video segments
 	@param metrics goutils.MetricsCollector - metrics framework client
+	@param tpMetrics goutils.TaskProcessorMetricHelper - task processor metrics helper
 	@returns new SourceHLSMonitor
 */
 func NewSourceHLSMonitor(
@@ -98,6 +99,7 @@ func NewSourceHLSMonitor(
 	reader utils.SegmentReader,
 	forwardSegment SegmentForwardCallback,
 	metrics goutils.MetricsCollector,
+	tpMetrics goutils.TaskProcessorMetricHelper,
 ) (SourceHLSMonitor, error) {
 	logTags := log.Fields{
 		"module":       "tracker",
@@ -117,7 +119,9 @@ func NewSourceHLSMonitor(
 	}
 
 	// Support worker
-	worker, err := goutils.GetNewTaskProcessorInstance(parentContext, "source-monitor", 4, logTags)
+	worker, err := goutils.GetNewTaskProcessorInstance(
+		parentContext, "source-monitor", 4, logTags, tpMetrics,
+	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Unable to define support worker")
 		return nil, err

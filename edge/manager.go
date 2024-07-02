@@ -169,6 +169,7 @@ func NewManager(
 	params VideoSourceOperatorConfig,
 	rrClient ControlRequestClient,
 	metrics goutils.MetricsCollector,
+	tpMetrics goutils.TaskProcessorMetricHelper,
 ) (VideoSourceOperator, error) {
 	logTags := log.Fields{
 		"module": "edge", "component": "video-source-operator", "source-id": params.Self.ID,
@@ -233,7 +234,7 @@ func NewManager(
 		workerLogTags[lKey] = lVal
 	}
 	worker, err := goutils.GetNewTaskProcessorInstance(
-		parentCtxt, "support-worker", 4, workerLogTags,
+		parentCtxt, "support-worker", 4, workerLogTags, tpMetrics,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to define support worker")
