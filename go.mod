@@ -1,8 +1,8 @@
 module github.com/alwitt/livemix
 
-go 1.22
+go 1.24
 
-toolchain go1.22.1
+toolchain go1.24.4
 
 require (
 	cloud.google.com/go/pubsub v1.31.0

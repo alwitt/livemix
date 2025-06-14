@@ -19,7 +19,7 @@ services:
     container_name: livemix-ctrl-memcached
     restart: unless-stopped
     hostname: memcached
-    image: memcached:1.6.20-alpine
+    image: memcached:1.6-alpine
     ports:
       - 127.0.0.1:18080:18080
     expose:

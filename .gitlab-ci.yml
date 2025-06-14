@@ -1,4 +1,4 @@
-image: golang:1.22.1
+image: golang:1.24.4
 
 stages:
   - test
@@ -16,7 +16,7 @@ cicd:
         POSTGRES_PASSWORD: postgres
 
     # Support memcached
-    - name: memcached:1.6.20-alpine
+    - name: memcached:1.6-alpine
       alias: memcached
       command:
         - -m

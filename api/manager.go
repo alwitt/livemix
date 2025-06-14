@@ -720,10 +720,7 @@ func (h SystemManagerHandler) ListRecordingsOfSource(w http.ResponseWriter, r *h
 
 	// Whether to list only active recordings
 	queryParams := r.URL.Query()
-	onlyActive := false
-	if queryParams.Get("only_active") != "" {
-		onlyActive = true
-	}
+	onlyActive := queryParams.Get("only_active") != ""
 
 	recordings, err := h.manager.ListRecordingSessionsOfSource(r.Context(), videoSourceID, onlyActive)
 	if err != nil {
@@ -912,10 +909,7 @@ func (h SystemManagerHandler) StopRecording(w http.ResponseWriter, r *http.Reque
 
 	// Whether to force request through
 	queryParams := r.URL.Query()
-	willForce := false
-	if queryParams.Get("force") != "" {
-		willForce = true
-	}
+	willForce := queryParams.Get("force") != ""
 
 	currentTime := time.Now().UTC()
 
@@ -978,10 +972,7 @@ func (h SystemManagerHandler) DeleteRecording(w http.ResponseWriter, r *http.Req
 
 	// Whether to force request through
 	queryParams := r.URL.Query()
-	willForce := false
-	if queryParams.Get("force") != "" {
-		willForce = true
-	}
+	willForce := queryParams.Get("force") != ""
 
 	if err := h.manager.DeleteRecordingSession(r.Context(), recordingID, willForce); err != nil {
 		msg := "failed to delete recording session"

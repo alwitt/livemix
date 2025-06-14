@@ -296,7 +296,7 @@ func (c *controlRequestClientImpl) GetVideoSourceInfo(
 
 	case reflect.TypeOf(ipc.GeneralResponse{}):
 		response := answer.(ipc.GeneralResponse)
-		return common.VideoSource{}, fmt.Errorf(response.ErrorMsg)
+		return common.VideoSource{}, fmt.Errorf("%s", response.ErrorMsg)
 
 	default:
 		err := fmt.Errorf("unknown supported response type '%s'", reflect.TypeOf(answer))
@@ -355,7 +355,7 @@ func (c *controlRequestClientImpl) ListActiveRecordingsOfSource(
 	switch reflect.TypeOf(answer) {
 	case reflect.TypeOf(ipc.GeneralResponse{}):
 		response := answer.(ipc.GeneralResponse)
-		return nil, fmt.Errorf(response.ErrorMsg)
+		return nil, fmt.Errorf("%s", response.ErrorMsg)
 
 	case reflect.TypeOf(ipc.ListActiveRecordingsResponse{}):
 		response := answer.(ipc.ListActiveRecordingsResponse)
@@ -419,7 +419,7 @@ func (c *controlRequestClientImpl) StopAllAssociatedRecordings(
 	case reflect.TypeOf(ipc.GeneralResponse{}):
 		response := answer.(ipc.GeneralResponse)
 		if !response.Success {
-			return fmt.Errorf(response.ErrorMsg)
+			return fmt.Errorf("%s", response.ErrorMsg)
 		}
 		return nil
 

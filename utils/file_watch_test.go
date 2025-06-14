@@ -57,7 +57,9 @@ func TestFileSystemWatcher(t *testing.T) {
 	{
 		fileHandle, err := os.Create(utFile1)
 		assert.Nil(err)
-		defer fileHandle.Close()
+		defer func() {
+			assert.Nil(fileHandle.Close())
+		}()
 		_, err = fileHandle.WriteString(uuid.NewString())
 		assert.Nil(err)
 

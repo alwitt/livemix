@@ -19,7 +19,7 @@ repos:
       - id: go-build
       - id: go-mod-tidy
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+    rev: v5.0.0
     hooks:
       - id: check-byte-order-marker
       - id: check-case-conflict

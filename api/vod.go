@@ -79,10 +79,7 @@ func (h VODHandler) getVideoFiles(w http.ResponseWriter, r *http.Request, opMode
 		}
 	}()
 
-	liveStream := true
-	if opMode == vodHandlerOpModeRecording {
-		liveStream = false
-	}
+	liveStream := opMode != vodHandlerOpModeRecording
 
 	dbClient := h.dbConns.NewPersistanceManager()
 	defer dbClient.Close()

@@ -238,7 +238,7 @@ func (c *edgeRequestClientImpl) basicRequestResponse(
 	case reflect.TypeOf(ipc.GeneralResponse{}):
 		response := answer.(ipc.GeneralResponse)
 		if !response.Success {
-			return fmt.Errorf(response.ErrorMsg)
+			return fmt.Errorf("%s", response.ErrorMsg)
 		}
 		return nil
 

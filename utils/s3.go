@@ -193,7 +193,9 @@ func (s *s3ClientImpl) GetObject(
 	if err != nil {
 		return nil, err
 	}
-	defer object.Close()
+	defer func() {
+		_ = object.Close()
+	}()
 	content, err := io.ReadAll(object)
 	if err != nil {
 		return nil, err

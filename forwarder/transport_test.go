@@ -72,7 +72,9 @@ func TestHTTPSegmentSender(t *testing.T) {
 			// Verify payload
 			payload, err := io.ReadAll(r.Body)
 			assert.Nil(err)
-			defer r.Body.Close()
+			defer func() {
+				assert.Nil(r.Body.Close())
+			}()
 			assert.Equal(testContent, payload)
 
 			// Send response
