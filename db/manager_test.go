@@ -3,11 +3,14 @@ package db_test
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/alwitt/goutils"
 	"github.com/alwitt/livemix/common"
 	"github.com/alwitt/livemix/db"
 	"github.com/alwitt/livemix/hls"
@@ -24,7 +27,7 @@ func TestDBManagerVideoSource(t *testing.T) {
 
 	testInstance := fmt.Sprintf("ut-%s", uuid.NewString())
 	testDB := fmt.Sprintf("/tmp/%s.db", testInstance)
-	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB), logger.Info, true)
+	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB, 20), logger.Info, false)
 	assert.Nil(err)
 
 	log.Debugf("Using %s", testDB)
@@ -212,7 +215,7 @@ func TestDBManagerVideoSegment(t *testing.T) {
 
 	testInstance := fmt.Sprintf("ut-%s", uuid.NewString())
 	testDB := fmt.Sprintf("/tmp/%s.db", testInstance)
-	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB), logger.Info, true)
+	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB, 20), logger.Info, false)
 	assert.Nil(err)
 
 	log.Debugf("Using %s", testDB)
@@ -477,7 +480,7 @@ func TestDBManagerVideoSegmentPurgeOldSegments(t *testing.T) {
 
 	testInstance := fmt.Sprintf("ut-%s", uuid.NewString())
 	testDB := fmt.Sprintf("/tmp/%s.db", testInstance)
-	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB), logger.Info, true)
+	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB, 20), logger.Info, false)
 	assert.Nil(err)
 
 	log.Debugf("Using %s", testDB)
@@ -569,7 +572,7 @@ func TestDBManagerVideoRecording(t *testing.T) {
 
 	testInstance := fmt.Sprintf("ut-%s", uuid.NewString())
 	testDB := fmt.Sprintf("/tmp/%s.db", testInstance)
-	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB), logger.Info, true)
+	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB, 20), logger.Info, false)
 	assert.Nil(err)
 
 	log.Debugf("Using %s", testDB)
@@ -1014,4 +1017,76 @@ func TestDBManagerRecordingSegments(t *testing.T) {
 		assert.Contains(segByID, testSegments0[2].ID)
 		uut.Close()
 	}
+}
+
+func TestDBManagerParallelTableWries(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	testInstance := fmt.Sprintf("ut-%s", uuid.NewString())
+	testDB := fmt.Sprintf("/tmp/%s.db", testInstance)
+	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB, 20), logger.Info, false)
+	assert.Nil(err)
+
+	log.Debugf("Using %s", testDB)
+
+	utCtxt := context.Background()
+
+	{
+		uut := conns.NewPersistanceManager()
+		assert.Nil(uut.Ready(utCtxt))
+		uut.Close()
+	}
+
+	// Create a source
+	var sourceID string
+	{
+		uut := conns.NewPersistanceManager()
+		sourceID, err = uut.DefineVideoSource(utCtxt, uuid.NewString(), 4, nil, nil)
+		assert.Nil(err)
+		uut.Close()
+	}
+
+	startTime := time.Now().UTC()
+	segDuration := time.Second * 4
+
+	// Register segments in parallel
+	testSegments := 1000
+	writers := 10
+	segmentPerWriter := int(testSegments / writers)
+	segmentIDs := map[int]string{}
+	recordSegment := func(writerID int, idx int) {
+		segmentIDX := writerID*segmentPerWriter + idx
+		segmentName := fmt.Sprintf("seg-%d-%s.ts", segmentIDX, uuid.NewString())
+		segStart := startTime.Add(segDuration * time.Duration(segmentIDX))
+		segStop := segStart.Add(segDuration)
+		uut := conns.NewPersistanceManager()
+		segmentID, err := uut.RegisterLiveStreamSegment(utCtxt, sourceID, hls.Segment{
+			Name:      segmentName,
+			StartTime: segStart,
+			EndTime:   segStop,
+			Length:    segDuration.Seconds(),
+			URI:       fmt.Sprintf("file:///%s", segmentName),
+		})
+		uut.Close()
+		assert.Nil(err)
+		segmentIDs[segmentIDX] = segmentID
+	}
+
+	// Start the writers
+	wg := sync.WaitGroup{}
+	wg.Add(writers)
+	for itr := 0; itr < writers; itr++ {
+		go func() {
+			defer wg.Done()
+			for segIdx := 0; segIdx < segmentPerWriter; segIdx++ {
+				time.Sleep(time.Millisecond * time.Duration(rand.Intn(20)))
+				log.WithField("writer", itr).WithField("segment", segIdx).Debug("Recording segment")
+				recordSegment(itr, segIdx)
+				log.WithField("writer", itr).WithField("segment", segIdx).Debug("Recorded segment")
+			}
+		}()
+	}
+
+	assert.Nil(goutils.TimeBoundedWaitGroupWait(utCtxt, &wg, time.Second*10))
 }

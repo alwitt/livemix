@@ -161,8 +161,8 @@ func DefineEdgeNode(
 	log.WithFields(logTags).WithField("initialize", initStep).Info("Initializing persistence layer")
 
 	// Setup database connection manager
-	sqlDSN := db.GetSqliteDialector(config.Sqlite.DBFile)
-	dbConns, err := db.NewSQLConnection(sqlDSN, logger.Error, true)
+	sqlDSN := db.GetSqliteDialector(config.Sqlite.DBFile, config.Sqlite.BusyTimeoutMSec)
+	dbConns, err := db.NewSQLConnection(sqlDSN, logger.Error, config.Sqlite.NoTransactions)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to define SQL connection manager")
 		return theNode, err

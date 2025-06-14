@@ -183,6 +183,11 @@ type PostgresConfig struct {
 type SqliteConfig struct {
 	// DBFile the sqlite DB file path
 	DBFile string `mapstructure:"db" json:"db" validate:"required"`
+	// BusyTimeoutMSec in case of `SQLITE_BUSY` during transaction start, wait this
+	// many millisecond before trying again
+	BusyTimeoutMSec int `mapstructure:"busyTimeoutMSec" json:"busyTimeoutMSec" validate:"required,gte=1"`
+	// NoTransactions perform SQL queries without transactions
+	NoTransactions bool `mapstructure:"noTransactions" json:"noTransactions"`
 }
 
 // S3Credentials S3 credentials
@@ -568,6 +573,8 @@ func InstallDefaultEdgeNodeConfigValues() {
 
 	// Default sqlite config
 	viper.SetDefault("sqlite.db", fmt.Sprintf("/tmp/livemix-edge-%s.db", ulid.Make().String()))
+	viper.SetDefault("sqlite.busyTimeoutMSec", 50)
+	viper.SetDefault("sqlite.noTransactions", false)
 
 	// Default video source monitor config
 	viper.SetDefault("monitor.segmentReaderWorkerCount", 4)

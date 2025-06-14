@@ -17,10 +17,20 @@ import (
 GetSqliteDialector define Sqlite GORM dialector
 
 	@param dbFile string - Sqlite DB file
+	@param txBusyTimeoutMSec int - in case of `SQLITE_BUSY` during transaction start, wait this
+	    many millisecond before trying again
 	@return GORM sqlite dialector
 */
-func GetSqliteDialector(dbFile string) gorm.Dialector {
-	return sqlite.Open(fmt.Sprintf("%s?cache=shared&_foreign_keys=on", dbFile))
+func GetSqliteDialector(dbFile string, txBusyTimeoutMSec int) gorm.Dialector {
+	options := []string{
+		"_pragma=journal_mode(wal)",
+		"_pragma=synchronous(normal)",
+		fmt.Sprintf("_pragma=busy_timeout(%d)", txBusyTimeoutMSec),
+		"_txlock=deferred",
+		"cache=shared",
+		"_foreign_keys=on",
+	}
+	return sqlite.Open(fmt.Sprintf("%s?%s", dbFile, strings.Join(options, "&")))
 }
 
 /*
@@ -128,16 +138,13 @@ func NewSQLConnection(
 	}
 
 	// Prepare the databases
-	if err := db.AutoMigrate(&videoSource{}); err != nil {
-		return nil, err
-	}
-	if err := db.AutoMigrate(&liveStreamVideoSegment{}); err != nil {
-		return nil, err
-	}
-	if err := db.AutoMigrate(&segmentToRecordingAssociation{}); err != nil {
-		return nil, err
-	}
-	if err := db.AutoMigrate(&recordingSession{}, &recordingVideoSegment{}); err != nil {
+	if err := db.AutoMigrate(
+		&videoSource{},
+		&liveStreamVideoSegment{},
+		&segmentToRecordingAssociation{},
+		&recordingSession{},
+		&recordingVideoSegment{},
+	); err != nil {
 		return nil, err
 	}
 
