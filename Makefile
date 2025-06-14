@@ -17,23 +17,7 @@ fix: .prepare ## Lint and fix vialoations
 
 .PHONY: mock
 mock: .prepare ## Generate test mock interfaces
-	@mockery --dir db --name PersistenceManager
-	@mockery --dir db --name ConnectionManager
-	@mockery --dir utils --name SegmentReader
-	@mockery --dir utils --name VideoSegmentCache
-	@mockery --dir utils --name S3Client
-	@mockery --dir utils --name Broadcaster
-	@mockery --dir vod --name PlaylistBuilder
-	@mockery --dir vod --name SegmentManager
-	@mockery --dir vod --name PlaylistManager
-	@mockery --dir api --name RequestResponseClient
-	@mockery --dir control --name SystemManager
-	@mockery --dir control --name EdgeRequestClient
-	@mockery --dir edge --name ControlRequestClient
-	@mockery --dir edge --name VideoSourceOperator
-	@mockery --dir forwarder --name SegmentSender
-	@mockery --dir forwarder --name RecordingSegmentForwarder
-	@mockery --dir forwarder --name LiveStreamSegmentForwarder
+	@mockery
 
 .PHONY: test
 test: .prepare ## Run unittests

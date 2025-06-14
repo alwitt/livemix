@@ -3,7 +3,6 @@ tmp/
 *.bin
 *.bkp
 .prepare
-mocks/
 .env
 .env.ctrl
 .env.edge

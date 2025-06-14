@@ -1,0 +1,34 @@
+all: false
+dir: 'mocks'
+filename: '{{.SrcPackageName}}_mocks.go'
+force-file-write: true
+formatter: goimports
+log-level: info
+structname: '{{.InterfaceName}}'
+pkgname: 'mocks'
+recursive: false
+require-template-schema-exists: true
+template: testify
+template-schema: '{{.Template}}.schema.json'
+packages:
+  github.com/alwitt/livemix/db:
+    config:
+      all: true
+  github.com/alwitt/livemix/utils:
+    config:
+      all: true
+  github.com/alwitt/livemix/vod:
+    config:
+      all: true
+  github.com/alwitt/livemix/api:
+    config:
+      all: true
+  github.com/alwitt/livemix/control:
+    config:
+      all: true
+  github.com/alwitt/livemix/edge:
+    config:
+      all: true
+  github.com/alwitt/livemix/forwarder:
+    config:
+      all: true
