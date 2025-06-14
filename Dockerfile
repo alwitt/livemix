@@ -1,5 +1,5 @@
 # build environment
-FROM golang:1.22-alpine as build
+FROM golang:1.24-alpine as build
 RUN apk add --update gcc musl-dev && \
     mkdir -vp /app
 COPY ./go.mod /app/go.mod
