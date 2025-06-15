@@ -27,10 +27,11 @@ func GetSqliteDialector(dbFile string, txBusyTimeoutMSec int) gorm.Dialector {
 		"_pragma=synchronous(normal)",
 		fmt.Sprintf("_pragma=busy_timeout(%d)", txBusyTimeoutMSec),
 		"_txlock=deferred",
-		"cache=shared",
 		"_foreign_keys=on",
 	}
-	return sqlite.Open(fmt.Sprintf("%s?%s", dbFile, strings.Join(options, "&")))
+	uri := fmt.Sprintf("file:%s?%s", dbFile, strings.Join(options, "&"))
+	log.WithField("uri", uri).Info("SQLITE URI")
+	return sqlite.Open(uri)
 }
 
 /*
@@ -40,7 +41,7 @@ GetInMemSqliteDialector define a in-memory Sqlite GORM dialector
 	@return GORM sqlite dialector
 */
 func GetInMemSqliteDialector(dbName string) gorm.Dialector {
-	return sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared&_foreign_keys=on", dbName))
+	return sqlite.Open(fmt.Sprintf("file:%s?mode=memory&_foreign_keys=on", dbName))
 }
 
 /*
