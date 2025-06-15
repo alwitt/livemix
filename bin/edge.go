@@ -167,6 +167,10 @@ func DefineEdgeNode(
 		log.WithError(err).WithFields(logTags).Error("Failed to define SQL connection manager")
 		return theNode, err
 	}
+	if err := dbConns.ApplySQLitePragmas(config.Sqlite); err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to directly set SQLite runtime PRAGMAs")
+		return theNode, err
+	}
 
 	log.WithFields(logTags).WithField("initialize", initStep).Info("Initialized persistence layer")
 	initStep++

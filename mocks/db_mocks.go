@@ -42,6 +42,57 @@ func (_m *ConnectionManager) EXPECT() *ConnectionManager_Expecter {
 	return &ConnectionManager_Expecter{mock: &_m.Mock}
 }
 
+// ApplySQLitePragmas provides a mock function for the type ConnectionManager
+func (_mock *ConnectionManager) ApplySQLitePragmas(config common.SqliteConfig) error {
+	ret := _mock.Called(config)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ApplySQLitePragmas")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(common.SqliteConfig) error); ok {
+		r0 = returnFunc(config)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// ConnectionManager_ApplySQLitePragmas_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ApplySQLitePragmas'
+type ConnectionManager_ApplySQLitePragmas_Call struct {
+	*mock.Call
+}
+
+// ApplySQLitePragmas is a helper method to define mock.On call
+//   - config common.SqliteConfig
+func (_e *ConnectionManager_Expecter) ApplySQLitePragmas(config interface{}) *ConnectionManager_ApplySQLitePragmas_Call {
+	return &ConnectionManager_ApplySQLitePragmas_Call{Call: _e.mock.On("ApplySQLitePragmas", config)}
+}
+
+func (_c *ConnectionManager_ApplySQLitePragmas_Call) Run(run func(config common.SqliteConfig)) *ConnectionManager_ApplySQLitePragmas_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 common.SqliteConfig
+		if args[0] != nil {
+			arg0 = args[0].(common.SqliteConfig)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *ConnectionManager_ApplySQLitePragmas_Call) Return(err error) *ConnectionManager_ApplySQLitePragmas_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *ConnectionManager_ApplySQLitePragmas_Call) RunAndReturn(run func(config common.SqliteConfig) error) *ConnectionManager_ApplySQLitePragmas_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Commit provides a mock function for the type ConnectionManager
 func (_mock *ConnectionManager) Commit(session *gorm.DB) {
 	_mock.Called(session)

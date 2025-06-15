@@ -29,6 +29,7 @@ func TestDBManagerVideoSource(t *testing.T) {
 	testDB := fmt.Sprintf("/tmp/%s.db", testInstance)
 	conns, err := db.NewSQLConnection(db.GetSqliteDialector(testDB, 20), logger.Info, false)
 	assert.Nil(err)
+	assert.Nil(conns.ApplySQLitePragmas(common.SqliteConfig{BusyTimeoutMSec: 20}))
 
 	log.Debugf("Using %s", testDB)
 

@@ -29,7 +29,7 @@ func GetSqliteDialector(dbFile string, txBusyTimeoutMSec int) gorm.Dialector {
 		"_txlock=deferred",
 		"_foreign_keys=on",
 	}
-	uri := fmt.Sprintf("file:%s?%s", dbFile, strings.Join(options, "&"))
+	uri := fmt.Sprintf("%s?%s", dbFile, strings.Join(options, "&"))
 	log.WithField("uri", uri).Info("SQLITE URI")
 	return sqlite.Open(uri)
 }
@@ -84,6 +84,13 @@ func GetPostgresDialector(config common.PostgresConfig, password string) (gorm.D
 
 // ConnectionManager manages connections and transactions with a DB
 type ConnectionManager interface {
+	/*
+		ApplySQLitePragmas For SQLite connection, optionally apply runtime PRAGMA after opening DB.
+
+			@param config common.SqliteConfig - SQLite config
+	*/
+	ApplySQLitePragmas(config common.SqliteConfig) error
+
 	/*
 		NewTransaction start and get handle to a new transaction
 
@@ -158,6 +165,21 @@ func NewSQLConnection(
 			},
 		}, db: db, noTransactions: noTransactions,
 	}, nil
+}
+
+func (c *connectionManagerImpl) ApplySQLitePragmas(config common.SqliteConfig) error {
+	if tmp := c.db.Exec("PRAGMA journal_mode(wal);"); tmp.Error != nil {
+		return tmp.Error
+	}
+	if tmp := c.db.Exec("PRAGMA synchronous(normal);"); tmp.Error != nil {
+		return tmp.Error
+	}
+	if tmp := c.db.Exec(
+		fmt.Sprintf("PRAGMA busy_timeout(%d);", config.BusyTimeoutMSec),
+	); tmp.Error != nil {
+		return tmp.Error
+	}
+	return nil
 }
 
 func (c *connectionManagerImpl) NewTransaction() *gorm.DB {
