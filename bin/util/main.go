@@ -439,6 +439,10 @@ func purgeUnknownSegmentsFromObjStore(c *cli.Context) error {
 			knownRecordingSegments[entry.URI] = entry
 		}
 	}
+	log.
+		WithFields(logTags).
+		WithField("known-segments", len(knownRecordingSegments)).
+		Info("Number of known segments")
 
 	// ================================================================================
 	// Get the current set of all segments in the object store
@@ -458,6 +462,10 @@ func purgeUnknownSegmentsFromObjStore(c *cli.Context) error {
 			objectsInStorage[fullURI] = objectKey
 		}
 	}
+	log.
+		WithFields(logTags).
+		WithField("recorded-segments", len(objectsInStorage)).
+		Info("Number of recorded segments")
 
 	// ================================================================================
 	// Get list of all objects in storage that doesn't match an recording segment entry
