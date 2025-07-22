@@ -243,7 +243,7 @@ type ReqRespClientConfig struct {
 	// SupportWorkerCount number of support workers to spawn to process inbound requests
 	SupportWorkerCount int `mapstructure:"supportWorkerCount" json:"supportWorkerCount" validate:"required"`
 	// MaxOutboundRequestDurationInSec the max duration for outbound request in secs
-	MaxOutboundRequestDurationInSec uint32 `mapstructure:"outboundRequestDurationInSec" json:"outboundRequestDurationInSec" validate:"gte=5,lte=60"`
+	MaxOutboundRequestDurationInSec uint32 `mapstructure:"outboundRequestDurationInSec" json:"outboundRequestDurationInSec" validate:"gte=5"`
 	// RequestTimeoutEnforceIntInSec outbound request timeout enforcement check interval in secs
 	RequestTimeoutEnforceIntInSec uint32 `mapstructure:"requestTimeoutEnforceIntInSec" json:"requestTimeoutEnforceIntInSec" validate:"gte=15,lte=120"`
 }
