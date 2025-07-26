@@ -923,13 +923,49 @@ func (m *systemManagerImpl) ProcessBroadcastMsgs(
 
 	case reflect.TypeOf(ipc.RecordingSegmentReport{}):
 		newSegmentReport := parsed.(ipc.RecordingSegmentReport)
+		if len(newSegmentReport.Segments) == 0 {
+			break
+		}
+		// Filter down the recording IDs to only the known recordings
+		recordings, err := dbClient.ListRecordingSessionsOfSource(
+			ctxt, newSegmentReport.Segments[0].SourceID, false,
+		)
+		if err != nil {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				WithField("source-id", newSegmentReport.Segments[0].SourceID).
+				Error("Unable to list recordings of video source")
+			return err
+		}
+		recordingsByID := map[string]bool{}
+		for _, oneRecording := range recordings {
+			recordingsByID[oneRecording.ID] = true
+		}
+		validRecordingIDs := []string{}
+		for _, oneID := range newSegmentReport.RecordingIDs {
+			if _, ok := recordingsByID[oneID]; ok {
+				validRecordingIDs = append(validRecordingIDs, oneID)
+			}
+		}
+		// Ignore the request if none of the recording IDs are known
+		if len(validRecordingIDs) == 0 {
+			log.
+				WithError(err).
+				WithFields(logTags).
+				WithField("source-id", newSegmentReport.Segments[0].SourceID).
+				WithField("recordings", newSegmentReport.RecordingIDs).
+				Debug("Video recording segment report only referenced unknown recordings")
+			break
+		}
 		// Record the new segments
 		if err := dbClient.RegisterRecordingSegments(
-			ctxt, newSegmentReport.RecordingIDs, newSegmentReport.Segments,
+			ctxt, validRecordingIDs, newSegmentReport.Segments,
 		); err != nil {
 			log.
 				WithError(err).
 				WithFields(logTags).
+				WithField("source-id", newSegmentReport.Segments[0].SourceID).
 				WithField("recordings", newSegmentReport.RecordingIDs).
 				Error("Unable to record new recording video segments report")
 			return err

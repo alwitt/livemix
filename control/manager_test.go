@@ -70,30 +70,74 @@ func TestSystemManagerProcessNewRecordingSegmentsBroadcast(t *testing.T) {
 
 	currentTime := time.Now().UTC()
 
-	testMessage := ipc.NewRecordingSegmentReport(
-		[]string{uuid.NewString(), uuid.NewString(), uuid.NewString()},
-		[]common.VideoSegment{
-			{
-				ID:       uuid.NewString(),
-				SourceID: uuid.NewString(),
-				Segment:  hls.Segment{Name: uuid.NewString()},
+	// Case 0: recording segments only referenced unknown recordings
+	{
+		testMessage := ipc.NewRecordingSegmentReport(
+			[]string{uuid.NewString(), uuid.NewString(), uuid.NewString()},
+			[]common.VideoSegment{
+				{
+					ID:       uuid.NewString(),
+					SourceID: uuid.NewString(),
+					Segment:  hls.Segment{Name: uuid.NewString()},
+				},
 			},
-		},
-	)
+		)
+		knownRecordings := []common.Recording{
+			{ID: uuid.NewString()}, {ID: uuid.NewString()},
+		}
 
-	broadcastMsg, err := json.Marshal(&testMessage)
-	assert.Nil(err)
+		broadcastMsg, err := json.Marshal(&testMessage)
+		assert.Nil(err)
 
-	// Setup mock
-	mockDB.On(
-		"RegisterRecordingSegments",
-		mock.AnythingOfType("context.backgroundCtx"),
-		testMessage.RecordingIDs,
-		testMessage.Segments,
-	).Return(nil).Once()
+		// Setup mock
+		mockDB.On(
+			"ListRecordingSessionsOfSource",
+			mock.AnythingOfType("context.backgroundCtx"),
+			testMessage.Segments[0].SourceID,
+			false,
+		).Return(knownRecordings, nil).Once()
 
-	// Process the broadcast message
-	assert.Nil(uut.ProcessBroadcastMsgs(utCtxt, currentTime, broadcastMsg, nil))
+		// Process the broadcast message
+		assert.Nil(uut.ProcessBroadcastMsgs(utCtxt, currentTime, broadcastMsg, nil))
+	}
+
+	// Case 1: one recording is correct
+	{
+		commonRecordID := uuid.NewString()
+		testMessage := ipc.NewRecordingSegmentReport(
+			[]string{uuid.NewString(), commonRecordID, uuid.NewString()},
+			[]common.VideoSegment{
+				{
+					ID:       uuid.NewString(),
+					SourceID: uuid.NewString(),
+					Segment:  hls.Segment{Name: uuid.NewString()},
+				},
+			},
+		)
+		knownRecordings := []common.Recording{
+			{ID: commonRecordID}, {ID: uuid.NewString()}, {ID: uuid.NewString()},
+		}
+
+		broadcastMsg, err := json.Marshal(&testMessage)
+		assert.Nil(err)
+
+		// Setup mock
+		mockDB.On(
+			"ListRecordingSessionsOfSource",
+			mock.AnythingOfType("context.backgroundCtx"),
+			testMessage.Segments[0].SourceID,
+			false,
+		).Return(knownRecordings, nil).Once()
+		mockDB.On(
+			"RegisterRecordingSegments",
+			mock.AnythingOfType("context.backgroundCtx"),
+			[]string{commonRecordID},
+			testMessage.Segments,
+		).Return(nil).Once()
+
+		// Process the broadcast message
+		assert.Nil(uut.ProcessBroadcastMsgs(utCtxt, currentTime, broadcastMsg, nil))
+	}
 }
 
 func TestSystemManagerRequestStreamingStateChange(t *testing.T) {
