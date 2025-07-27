@@ -345,6 +345,9 @@ func (c VideoSourceManagementConfig) StatusReportMaxDelay() time.Duration {
 
 // RecordingManagementConfig recording session management settings
 type RecordingManagementConfig struct {
+	// StartRecordIgnoreRRError when starting a recording, whether to ignore error from the
+	// Req-Resp RPC call.
+	StartRecordIgnoreRRError bool `mapstructure:"startRecordIgnoreRRError" json:"startRecordIgnoreRRError"`
 	// SegmentCleanupIntInSec The number of seconds between recording segment cleanup runs.
 	// During each run, recording segments not associated with any recordings are purged.
 	SegmentCleanupIntInSec uint32 `mapstructure:"segmentCleanupIntInSec" json:"segmentCleanupIntInSec" validate:"required,gte=60"`
@@ -516,6 +519,7 @@ func InstallDefaultControlNodeConfigValues() {
 	// Default video source management config
 	viper.SetDefault("management.videoSourceManagement.statusReportMaxDelayInSec", 60)
 	// Default recording management config
+	viper.SetDefault("management.recordingManagement.startRecordIgnoreRRError", false)
 	viper.SetDefault("management.recordingManagement.segmentCleanupIntInSec", 60)
 
 	// Default VOD server config

@@ -391,6 +391,7 @@ func DefineControlNode(
 		parentCtxt,
 		dbConns,
 		ctrlToEdgeRRClient,
+		config.Management.RecordingManagement.StartRecordIgnoreRRError,
 		s3Client,
 		config.Management.SourceManagement.StatusReportMaxDelay(),
 		config.Management.RecordingManagement.SegmentCleanupInt(),

@@ -29,7 +29,7 @@ func TestSystemManagerProcessSourceStatusBroadcast(t *testing.T) {
 	mockSQL.On("NewPersistanceManager").Return(mockDB)
 	mockDB.On("Close").Return()
 
-	uut, err := control.NewManager(utCtxt, mockSQL, nil, mockS3, time.Minute, time.Hour, nil)
+	uut, err := control.NewManager(utCtxt, mockSQL, nil, false, mockS3, time.Minute, time.Hour, nil)
 	assert.Nil(err)
 
 	currentTime := time.Now().UTC()
@@ -65,7 +65,7 @@ func TestSystemManagerProcessNewRecordingSegmentsBroadcast(t *testing.T) {
 	mockSQL.On("NewPersistanceManager").Return(mockDB)
 	mockDB.On("Close").Return()
 
-	uut, err := control.NewManager(utCtxt, mockSQL, nil, mockS3, time.Minute, time.Hour, nil)
+	uut, err := control.NewManager(utCtxt, mockSQL, nil, false, mockS3, time.Minute, time.Hour, nil)
 	assert.Nil(err)
 
 	currentTime := time.Now().UTC()
@@ -154,7 +154,9 @@ func TestSystemManagerRequestStreamingStateChange(t *testing.T) {
 
 	currentTime := time.Now().UTC()
 
-	uut, err := control.NewManager(utCtxt, mockSQL, mockRR, mockS3, time.Minute, time.Hour, nil)
+	uut, err := control.NewManager(
+		utCtxt, mockSQL, mockRR, false, mockS3, time.Minute, time.Hour, nil,
+	)
 	assert.Nil(err)
 
 	// Case 0: video has not specified target RR ID
@@ -261,7 +263,9 @@ func TestSystemManagerDefineRecordingSession(t *testing.T) {
 
 	currentTime := time.Now().UTC()
 
-	uut, err := control.NewManager(utCtxt, mockSQL, mockRR, mockS3, time.Minute, time.Hour, nil)
+	uut, err := control.NewManager(
+		utCtxt, mockSQL, mockRR, false, mockS3, time.Minute, time.Hour, nil,
+	)
 	assert.Nil(err)
 
 	// Case 0: unknown video source
@@ -384,8 +388,52 @@ func TestSystemManagerDefineRecordingSession(t *testing.T) {
 			testRecording,
 		).Return(nil).Once()
 
-		_, err := uut.DefineRecordingSession(utCtxt, testSource.ID, nil, nil, currentTime)
+		recordingID, err := uut.DefineRecordingSession(utCtxt, testSource.ID, nil, nil, currentTime)
 		assert.Nil(err)
+		assert.Equal(testRecording.ID, recordingID)
+	}
+
+	// Case 4: allow RR request to fail
+	uut, err = control.NewManager(
+		utCtxt, mockSQL, mockRR, true, mockS3, time.Minute, time.Hour, nil,
+	)
+	assert.Nil(err)
+	{
+		testRRTargetID := uuid.NewString()
+		testSource := common.VideoSource{
+			ID: uuid.NewString(), ReqRespTargetID: &testRRTargetID, SourceLocalTime: currentTime,
+		}
+		testRecording := common.Recording{ID: uuid.NewString(), SourceID: testSource.ID}
+
+		// Prepare mock
+		mockDB.On(
+			"GetVideoSource",
+			mock.AnythingOfType("context.backgroundCtx"),
+			testSource.ID,
+		).Return(testSource, nil).Once()
+		mockDB.On(
+			"DefineRecordingSession",
+			mock.AnythingOfType("context.backgroundCtx"),
+			testSource.ID,
+			mock.AnythingOfType("*string"),
+			mock.AnythingOfType("*string"),
+			currentTime,
+		).Return(testRecording.ID, nil).Once()
+		mockDB.On(
+			"GetRecordingSession",
+			mock.AnythingOfType("context.backgroundCtx"),
+			testRecording.ID,
+		).Return(testRecording, nil).Once()
+		mockRR.On(
+			"StartRecordingSession",
+			mock.AnythingOfType("context.backgroundCtx"),
+			testSource,
+			testRecording,
+		).Return(fmt.Errorf("dummy error")).Once()
+
+		recordingID, err := uut.DefineRecordingSession(utCtxt, testSource.ID, nil, nil, currentTime)
+		assert.Nil(err)
+		assert.Equal(testRecording.ID, recordingID)
 	}
 }
 
@@ -403,7 +451,9 @@ func TestSystemManagerMarkEndOfRecordingSession(t *testing.T) {
 
 	currentTime := time.Now().UTC()
 
-	uut, err := control.NewManager(utCtxt, mockSQL, mockRR, mockS3, time.Minute, time.Hour, nil)
+	uut, err := control.NewManager(
+		utCtxt, mockSQL, mockRR, false, mockS3, time.Minute, time.Hour, nil,
+	)
 	assert.Nil(err)
 
 	// Case 0: unknown recording
@@ -630,7 +680,9 @@ func TestSystemManagerStopAllActiveRecordingsOfSource(t *testing.T) {
 
 	currentTime := time.Now().UTC()
 
-	uut, err := control.NewManager(utCtxt, mockSQL, mockRR, mockS3, time.Minute, time.Hour, nil)
+	uut, err := control.NewManager(
+		utCtxt, mockSQL, mockRR, false, mockS3, time.Minute, time.Hour, nil,
+	)
 	assert.Nil(err)
 
 	// Case 0: unknown video source
@@ -761,7 +813,7 @@ func TestSystemManagerPurgeUnassociatedRecordingSegments(t *testing.T) {
 	mockSQL.On("NewPersistanceManager").Return(mockDB)
 	mockDB.On("Close").Return()
 
-	uut, err := control.NewManager(utCtxt, mockSQL, nil, mockS3, time.Minute, time.Hour, nil)
+	uut, err := control.NewManager(utCtxt, mockSQL, nil, false, mockS3, time.Minute, time.Hour, nil)
 	assert.Nil(err)
 
 	// ------------------------------------------------------------------------------------

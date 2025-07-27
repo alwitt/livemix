@@ -244,6 +244,7 @@ type systemManagerImpl struct {
 	goutils.Component
 	dbConns                     db.ConnectionManager
 	rrClient                    EdgeRequestClient
+	startRecordIgnoreRRErr      bool
 	s3                          utils.S3Client
 	maxAgeForSourceStatusReport time.Duration
 	segmentCleanupTimer         goutils.IntervalTimer
@@ -266,6 +267,8 @@ NewManager define a new system manager
 	@param parentCtxt context.Context - parent execution context
 	@param dbConns db.ConnectionManager - DB connection manager
 	@param rrClient EdgeRequestClient - request-response client
+	@param startRecordIgnoreRRErr bool - when starting a recording, whether to ignore error
+	    from the Req-Resp RPC call.
 	@param s3 utils.S3Client - S3 operation client
 	@param maxAgeForSourceStatusReport time.Duration - for the system to send a requests to a
 	    particular video source, this source must have sent out a video source status report
@@ -279,6 +282,7 @@ func NewManager(
 	parentCtxt context.Context,
 	dbConns db.ConnectionManager,
 	rrClient EdgeRequestClient,
+	startRecordIgnoreRRErr bool,
 	s3 utils.S3Client,
 	maxAgeForSourceStatusReport time.Duration,
 	segmentCleanupInt time.Duration,
@@ -295,6 +299,7 @@ func NewManager(
 		},
 		dbConns:                     dbConns,
 		rrClient:                    rrClient,
+		startRecordIgnoreRRErr:      startRecordIgnoreRRErr,
 		s3:                          s3,
 		maxAgeForSourceStatusReport: maxAgeForSourceStatusReport,
 	}
@@ -624,8 +629,13 @@ func (m *systemManagerImpl) DefineRecordingSession(
 			WithField("source-id", sourceID).
 			WithField("recording", recordingID).
 			Error("Unable to command source to start recording")
-		dbClient.MarkExternalError(err)
-		return "", err
+		// We are ignoring this error.
+		//
+		// This error can be caused by delay in the RR RPC communication and processing.
+		if !m.startRecordIgnoreRRErr {
+			dbClient.MarkExternalError(err)
+			return "", err
+		}
 	}
 
 	log.
