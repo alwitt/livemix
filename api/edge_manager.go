@@ -86,7 +86,7 @@ func (h EdgeAPIHandler) ListVideoSources(w http.ResponseWriter, r *http.Request)
 
 	// Return new video source
 	respCode = http.StatusOK
-	response = VideoSourceInfoListResponse{
+	response = common.VideoSourceInfoListResponse{
 		RestAPIBaseResponse: h.GetStdRESTSuccessMsg(r.Context()), Sources: entries,
 	}
 }

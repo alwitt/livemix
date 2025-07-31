@@ -11,7 +11,6 @@ import (
 
 	"github.com/alwitt/goutils"
 	"github.com/alwitt/livemix/common"
-	"github.com/alwitt/livemix/common/ipc"
 	"github.com/alwitt/livemix/db"
 	"github.com/alwitt/livemix/forwarder"
 	"github.com/alwitt/livemix/utils"
@@ -126,8 +125,6 @@ type VideoSourceOperatorConfig struct {
 	DBConns db.ConnectionManager
 	// VideoCache video segment cache
 	VideoCache utils.VideoSegmentCache
-	// BroadcastClient message broadcast client
-	BroadcastClient utils.Broadcaster
 	// RecordingSegmentForwarder client for forwarding segments associated with recording sessions
 	RecordingSegmentForwarder forwarder.RecordingSegmentForwarder
 	// LiveStreamSegmentForwarder client for forwarding segments associated with live stream
@@ -222,7 +219,7 @@ func NewManager(
 	instance.reportTriggerTimer = reportTriggerTimer
 
 	// Make first status report
-	if err := instance.sendSourceStatusReport(); err != nil {
+	if err := instance.SyncActiveRecordingState(time.Now().UTC()); err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to send first status report")
 		return nil, err
 	}
@@ -266,15 +263,6 @@ func NewManager(
 	// Start the worker
 	if err = worker.StartEventLoop(&instance.wg); err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to start support worker")
-		return nil, err
-	}
-
-	// Start timer to periodically send video source status reports to the system control node
-	err = reportTriggerTimer.Start(
-		params.StatusReportInterval, instance.sendSourceStatusReport, false,
-	)
-	if err != nil {
-		log.WithError(err).WithFields(logTags).Error("Failed to start status report trigger timer")
 		return nil, err
 	}
 
@@ -374,30 +362,6 @@ func (o *videoSourceOperatorImpl) ChangeVideoSourceStreamState(
 	dbClient := o.DBConns.NewPersistanceManager()
 	defer dbClient.Close()
 	return dbClient.ChangeVideoSourceStreamState(ctxt, o.Self.ID, streaming)
-}
-
-func (o *videoSourceOperatorImpl) sendSourceStatusReport() error {
-	logTags := o.GetLogTagsForContext(o.workerCtxt)
-
-	timestamp := time.Now().UTC()
-
-	report := ipc.NewVideoSourceStatusReport(o.Self.ID, o.SelfReqRespTargetID, time.Now().UTC())
-
-	if err := o.BroadcastClient.Broadcast(o.workerCtxt, &report); err != nil {
-		log.WithError(err).WithFields(logTags).Error("Failed to send status report message")
-		return err
-	}
-
-	db := o.DBConns.NewPersistanceManager()
-	defer db.Close()
-
-	err := db.UpdateVideoSourceStats(o.workerCtxt, o.Self.ID, o.SelfReqRespTargetID, timestamp)
-	if err != nil {
-		log.WithError(err).WithFields(logTags).Error("Failed to locally update video source stats")
-		return err
-	}
-
-	return nil
 }
 
 // =====================================================================================
@@ -782,8 +746,10 @@ func (o *videoSourceOperatorImpl) handleNewSegmentFromSource(
 func (o *videoSourceOperatorImpl) SyncActiveRecordingState(timestamp time.Time) error {
 	logTags := o.GetLogTagsForContext(o.workerCtxt)
 
-	// List currently active recordings
-	activeRecordings, err := o.rrClient.ListActiveRecordingsOfSource(o.workerCtxt, o.Self.ID)
+	// Exchange status with control
+	sourceInfoAtCtrl, activeRecordings, err := o.rrClient.ExchangeVideoSourceStatus(
+		o.workerCtxt, o.Self.ID, o.SelfReqRespTargetID, timestamp,
+	)
 	if err != nil {
 		log.
 			WithError(err).
@@ -800,11 +766,31 @@ func (o *videoSourceOperatorImpl) SyncActiveRecordingState(timestamp time.Time) 
 			Debug("Associated active recordings reported by system control node")
 	}
 
-	// Get list of active recordings known locally
+	// ====================================================================================
+	// Locally update state
+
 	dbClient := o.DBConns.NewPersistanceManager()
 	defer dbClient.Close()
 
-	knownActiveRecordings, err := dbClient.ListRecordingSessionsOfSource(o.workerCtxt, o.Self.ID, true)
+	err = dbClient.UpdateVideoSourceStats(o.workerCtxt, o.Self.ID, o.SelfReqRespTargetID, timestamp)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to locally update video source stats")
+		return err
+	}
+
+	err = dbClient.ChangeVideoSourceStreamState(o.workerCtxt, o.Self.ID, sourceInfoAtCtrl.Streaming)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to update video source streaming state")
+		return err
+	}
+
+	// ====================================================================================
+	// Sync recording status with control
+
+	// Get list of active recordings known locally
+	knownActiveRecordings, err := dbClient.ListRecordingSessionsOfSource(
+		o.workerCtxt, o.Self.ID, true,
+	)
 	if err != nil {
 		log.
 			WithError(err).

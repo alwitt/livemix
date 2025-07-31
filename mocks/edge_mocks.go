@@ -40,6 +40,92 @@ func (_m *ControlRequestClient) EXPECT() *ControlRequestClient_Expecter {
 	return &ControlRequestClient_Expecter{mock: &_m.Mock}
 }
 
+// ExchangeVideoSourceStatus provides a mock function for the type ControlRequestClient
+func (_mock *ControlRequestClient) ExchangeVideoSourceStatus(ctxt context.Context, sourceID string, reqRespTargetID string, localTime time.Time) (common.VideoSource, []common.Recording, error) {
+	ret := _mock.Called(ctxt, sourceID, reqRespTargetID, localTime)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ExchangeVideoSourceStatus")
+	}
+
+	var r0 common.VideoSource
+	var r1 []common.Recording
+	var r2 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, time.Time) (common.VideoSource, []common.Recording, error)); ok {
+		return returnFunc(ctxt, sourceID, reqRespTargetID, localTime)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, time.Time) common.VideoSource); ok {
+		r0 = returnFunc(ctxt, sourceID, reqRespTargetID, localTime)
+	} else {
+		r0 = ret.Get(0).(common.VideoSource)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, time.Time) []common.Recording); ok {
+		r1 = returnFunc(ctxt, sourceID, reqRespTargetID, localTime)
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).([]common.Recording)
+		}
+	}
+	if returnFunc, ok := ret.Get(2).(func(context.Context, string, string, time.Time) error); ok {
+		r2 = returnFunc(ctxt, sourceID, reqRespTargetID, localTime)
+	} else {
+		r2 = ret.Error(2)
+	}
+	return r0, r1, r2
+}
+
+// ControlRequestClient_ExchangeVideoSourceStatus_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ExchangeVideoSourceStatus'
+type ControlRequestClient_ExchangeVideoSourceStatus_Call struct {
+	*mock.Call
+}
+
+// ExchangeVideoSourceStatus is a helper method to define mock.On call
+//   - ctxt context.Context
+//   - sourceID string
+//   - reqRespTargetID string
+//   - localTime time.Time
+func (_e *ControlRequestClient_Expecter) ExchangeVideoSourceStatus(ctxt interface{}, sourceID interface{}, reqRespTargetID interface{}, localTime interface{}) *ControlRequestClient_ExchangeVideoSourceStatus_Call {
+	return &ControlRequestClient_ExchangeVideoSourceStatus_Call{Call: _e.mock.On("ExchangeVideoSourceStatus", ctxt, sourceID, reqRespTargetID, localTime)}
+}
+
+func (_c *ControlRequestClient_ExchangeVideoSourceStatus_Call) Run(run func(ctxt context.Context, sourceID string, reqRespTargetID string, localTime time.Time)) *ControlRequestClient_ExchangeVideoSourceStatus_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 time.Time
+		if args[3] != nil {
+			arg3 = args[3].(time.Time)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *ControlRequestClient_ExchangeVideoSourceStatus_Call) Return(videoSource common.VideoSource, recordings []common.Recording, err error) *ControlRequestClient_ExchangeVideoSourceStatus_Call {
+	_c.Call.Return(videoSource, recordings, err)
+	return _c
+}
+
+func (_c *ControlRequestClient_ExchangeVideoSourceStatus_Call) RunAndReturn(run func(ctxt context.Context, sourceID string, reqRespTargetID string, localTime time.Time) (common.VideoSource, []common.Recording, error)) *ControlRequestClient_ExchangeVideoSourceStatus_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetVideoSourceInfo provides a mock function for the type ControlRequestClient
 func (_mock *ControlRequestClient) GetVideoSourceInfo(ctxt context.Context, sourceName string) (common.VideoSource, error) {
 	ret := _mock.Called(ctxt, sourceName)

@@ -316,6 +316,19 @@ func startControlNode(c *cli.Context) error {
 			}
 		}()
 	}
+	// Start edge node support admin HTTP server
+	{
+		svr := ctrlNode.EdgeMgmtAPIServer
+		apiServers["edge-mgmt-api"] = svr
+		// Start the server
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := svr.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.WithError(err).Error("Edge Node Support API HTTP server failure")
+			}
+		}()
+	}
 	// Start VOD HTTP server
 	{
 		svr := ctrlNode.VODAPIServer

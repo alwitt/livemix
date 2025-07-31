@@ -59,7 +59,7 @@ func TestEdgeListVideoSources(t *testing.T) {
 
 	assert.Equal(http.StatusOK, respRecorder.Code)
 	// Verify response
-	var resp api.VideoSourceInfoListResponse
+	var resp common.VideoSourceInfoListResponse
 	assert.Nil(json.Unmarshal(respRecorder.Body.Bytes(), &resp))
 	assert.EqualValues(testSources, resp.Sources)
 }

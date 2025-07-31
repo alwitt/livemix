@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-func TestEdgeToControlGetVideoSourceInfoRequest(t *testing.T) {
+func TestEdgeToControlPubSubGetVideoSourceInfoRequest(t *testing.T) {
 	assert := assert.New(t)
 	log.SetLevel(log.DebugLevel)
 	utCtxt := context.Background()
@@ -37,7 +37,7 @@ func TestEdgeToControlGetVideoSourceInfoRequest(t *testing.T) {
 
 	edgeName := "unit-tester"
 	controlName := "ut-controller"
-	uut, err := edge.NewControlRequestClient(utCtxt, edgeName, controlName, mockRRClient, time.Second)
+	uut, err := edge.NewPubSubControlRequestClient(utCtxt, edgeName, controlName, mockRRClient, time.Second)
 	assert.Nil(err)
 
 	// --------------------------------------------------------------------------
@@ -86,7 +86,7 @@ func TestEdgeToControlGetVideoSourceInfoRequest(t *testing.T) {
 	assert.EqualValues(testResponse.Source, recerivedInfo)
 }
 
-func TestEdgeToControlGetVideoSourceInfoErrorResponse(t *testing.T) {
+func TestEdgeToControlPubSubGetVideoSourceInfoErrorResponse(t *testing.T) {
 	assert := assert.New(t)
 	log.SetLevel(log.DebugLevel)
 	utCtxt := context.Background()
@@ -104,7 +104,7 @@ func TestEdgeToControlGetVideoSourceInfoErrorResponse(t *testing.T) {
 
 	edgeName := "unit-tester"
 	controlName := "ut-controller"
-	uut, err := edge.NewControlRequestClient(utCtxt, edgeName, controlName, mockRRClient, time.Second)
+	uut, err := edge.NewPubSubControlRequestClient(utCtxt, edgeName, controlName, mockRRClient, time.Second)
 	assert.Nil(err)
 
 	// --------------------------------------------------------------------------
@@ -146,7 +146,7 @@ func TestEdgeToControlGetVideoSourceInfoErrorResponse(t *testing.T) {
 	assert.NotNil(err)
 }
 
-func TestEdgeToControlGetVideoSourceInfoRequestTimeout(t *testing.T) {
+func TestEdgeToControlPubSubGetVideoSourceInfoRequestTimeout(t *testing.T) {
 	assert := assert.New(t)
 	log.SetLevel(log.DebugLevel)
 	utCtxt := context.Background()
@@ -164,7 +164,7 @@ func TestEdgeToControlGetVideoSourceInfoRequestTimeout(t *testing.T) {
 
 	edgeName := "unit-tester"
 	controlName := "ut-controller"
-	uut, err := edge.NewControlRequestClient(utCtxt, edgeName, controlName, mockRRClient, time.Second)
+	uut, err := edge.NewPubSubControlRequestClient(utCtxt, edgeName, controlName, mockRRClient, time.Second)
 	assert.Nil(err)
 
 	// --------------------------------------------------------------------------
@@ -202,7 +202,7 @@ func TestEdgeToControlGetVideoSourceInfoRequestTimeout(t *testing.T) {
 	assert.NotNil(err)
 }
 
-func TestEdgeToControlChangeStreamingState(t *testing.T) {
+func TestEdgeToControlPubSubChangeStreamingState(t *testing.T) {
 	assert := assert.New(t)
 	log.SetLevel(log.DebugLevel)
 	utCtxt := context.Background()
@@ -224,7 +224,7 @@ func TestEdgeToControlChangeStreamingState(t *testing.T) {
 
 	edgeName := "unit-tester"
 	controlName := "ut-controller"
-	uut, err := edge.NewControlRequestClient(utCtxt, edgeName, controlName, mockRRClient, time.Second)
+	uut, err := edge.NewPubSubControlRequestClient(utCtxt, edgeName, controlName, mockRRClient, time.Second)
 	assert.Nil(err)
 
 	// --------------------------------------------------------------------------
@@ -327,7 +327,7 @@ func TestEdgeToControlChangeStreamingState(t *testing.T) {
 	assert.Nil(requestInject(utCtxt, request))
 }
 
-func TestEdgeToControlStartRecording(t *testing.T) {
+func TestEdgeToControlPubSubStartRecording(t *testing.T) {
 	assert := assert.New(t)
 	log.SetLevel(log.DebugLevel)
 	utCtxt := context.Background()
@@ -349,7 +349,7 @@ func TestEdgeToControlStartRecording(t *testing.T) {
 
 	edgeName := "unit-tester"
 	controlName := "ut-controller"
-	uut, err := edge.NewControlRequestClient(utCtxt, edgeName, controlName, mockRRClient, time.Second)
+	uut, err := edge.NewPubSubControlRequestClient(utCtxt, edgeName, controlName, mockRRClient, time.Second)
 	assert.Nil(err)
 
 	// --------------------------------------------------------------------------
@@ -453,7 +453,7 @@ func TestEdgeToControlStartRecording(t *testing.T) {
 	}
 }
 
-func TestEdgeToControlStopRecording(t *testing.T) {
+func TestEdgeToControlPubSubStopRecording(t *testing.T) {
 	assert := assert.New(t)
 	log.SetLevel(log.DebugLevel)
 	utCtxt := context.Background()
@@ -475,7 +475,7 @@ func TestEdgeToControlStopRecording(t *testing.T) {
 
 	edgeName := "unit-tester"
 	controlName := "ut-controller"
-	uut, err := edge.NewControlRequestClient(utCtxt, edgeName, controlName, mockRRClient, time.Second)
+	uut, err := edge.NewPubSubControlRequestClient(utCtxt, edgeName, controlName, mockRRClient, time.Second)
 	assert.Nil(err)
 
 	// --------------------------------------------------------------------------
@@ -579,7 +579,7 @@ func TestEdgeToControlStopRecording(t *testing.T) {
 	}
 }
 
-func TestEdgeToControlStopAllRecordings(t *testing.T) {
+func TestEdgeToControlPubSubStopAllRecordings(t *testing.T) {
 	assert := assert.New(t)
 	log.SetLevel(log.DebugLevel)
 	utCtxt := context.Background()
@@ -598,7 +598,7 @@ func TestEdgeToControlStopAllRecordings(t *testing.T) {
 
 	edgeName := "unit-tester"
 	controlName := "ut-controller"
-	uut, err := edge.NewControlRequestClient(utCtxt, edgeName, controlName, mockRRClient, time.Second)
+	uut, err := edge.NewPubSubControlRequestClient(utCtxt, edgeName, controlName, mockRRClient, time.Second)
 	assert.Nil(err)
 
 	// --------------------------------------------------------------------------
@@ -675,7 +675,7 @@ func TestEdgeToControlStopAllRecordings(t *testing.T) {
 	assert.Equal("dummy response", err.Error())
 }
 
-func TestEdgeToControlListActiveRecordingsOfSource(t *testing.T) {
+func TestEdgeToControlPubSubListActiveRecordingsOfSource(t *testing.T) {
 	assert := assert.New(t)
 	log.SetLevel(log.DebugLevel)
 	utCtxt := context.Background()
@@ -694,7 +694,7 @@ func TestEdgeToControlListActiveRecordingsOfSource(t *testing.T) {
 
 	edgeName := "unit-tester"
 	controlName := "ut-controller"
-	uut, err := edge.NewControlRequestClient(utCtxt, edgeName, controlName, mockRRClient, time.Second)
+	uut, err := edge.NewPubSubControlRequestClient(utCtxt, edgeName, controlName, mockRRClient, time.Second)
 	assert.Nil(err)
 
 	// --------------------------------------------------------------------------

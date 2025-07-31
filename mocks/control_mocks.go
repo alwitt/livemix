@@ -1645,6 +1645,75 @@ func (_c *SystemManager_UpdateVideoSource_Call) RunAndReturn(run func(ctxt conte
 	return _c
 }
 
+// UpdateVideoSourceStatus provides a mock function for the type SystemManager
+func (_mock *SystemManager) UpdateVideoSourceStatus(ctxt context.Context, id string, reqRespTargetID string, sourceLocalTime time.Time) error {
+	ret := _mock.Called(ctxt, id, reqRespTargetID, sourceLocalTime)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateVideoSourceStatus")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, time.Time) error); ok {
+		r0 = returnFunc(ctxt, id, reqRespTargetID, sourceLocalTime)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// SystemManager_UpdateVideoSourceStatus_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateVideoSourceStatus'
+type SystemManager_UpdateVideoSourceStatus_Call struct {
+	*mock.Call
+}
+
+// UpdateVideoSourceStatus is a helper method to define mock.On call
+//   - ctxt context.Context
+//   - id string
+//   - reqRespTargetID string
+//   - sourceLocalTime time.Time
+func (_e *SystemManager_Expecter) UpdateVideoSourceStatus(ctxt interface{}, id interface{}, reqRespTargetID interface{}, sourceLocalTime interface{}) *SystemManager_UpdateVideoSourceStatus_Call {
+	return &SystemManager_UpdateVideoSourceStatus_Call{Call: _e.mock.On("UpdateVideoSourceStatus", ctxt, id, reqRespTargetID, sourceLocalTime)}
+}
+
+func (_c *SystemManager_UpdateVideoSourceStatus_Call) Run(run func(ctxt context.Context, id string, reqRespTargetID string, sourceLocalTime time.Time)) *SystemManager_UpdateVideoSourceStatus_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 time.Time
+		if args[3] != nil {
+			arg3 = args[3].(time.Time)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *SystemManager_UpdateVideoSourceStatus_Call) Return(err error) *SystemManager_UpdateVideoSourceStatus_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *SystemManager_UpdateVideoSourceStatus_Call) RunAndReturn(run func(ctxt context.Context, id string, reqRespTargetID string, sourceLocalTime time.Time) error) *SystemManager_UpdateVideoSourceStatus_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewLiveStreamSegmentManager creates a new instance of LiveStreamSegmentManager. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewLiveStreamSegmentManager(t interface {

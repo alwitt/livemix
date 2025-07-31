@@ -80,7 +80,7 @@ type VideoSourceConfig struct {
 	// Name video source system entry name (as recorded by the system control node)
 	Name string `mapstructure:"name" json:"name" validate:"required"`
 	// StatusReportIntInSec interval in secs between video source status report to system controller
-	StatusReportIntInSec uint32 `mapstructure:"statusReportIntInSec" json:"statusReportIntInSec" validate:"gte=10"`
+	StatusReportIntInSec uint32 `mapstructure:"statusReportIntInSec" json:"statusReportIntInSec" validate:"gte=2"`
 }
 
 // StatusReportInt convert StatusReportIntInSec to time.Duration
@@ -234,8 +234,8 @@ func (c PubSubSubcriptionConfig) MsgTTL() time.Duration {
 	return time.Second * time.Duration(c.MsgTTLInSec)
 }
 
-// ReqRespClientConfig PubSub request-response client config
-type ReqRespClientConfig struct {
+// PubSubReqRespClientConfig PubSub request-response client config
+type PubSubReqRespClientConfig struct {
 	// GCPProject the GCP project to operate in
 	GCPProject string `mapstructure:"gcpProject" json:"gcpProject" validate:"required"`
 	// InboudRequestTopic the PubSub topic this client listen on for inbound request
@@ -249,18 +249,19 @@ type ReqRespClientConfig struct {
 }
 
 // MaxOutboundRequestDuration convert MaxOutboundRequestDurationInSec to time.Duration
-func (c ReqRespClientConfig) MaxOutboundRequestDuration() time.Duration {
+func (c PubSubReqRespClientConfig) MaxOutboundRequestDuration() time.Duration {
 	return time.Second * time.Duration(c.MaxOutboundRequestDurationInSec)
 }
 
 // RequestTimeoutEnforceInt convert RequestTimeoutEnforceIntInSec to time.Duration
-func (c ReqRespClientConfig) RequestTimeoutEnforceInt() time.Duration {
+func (c PubSubReqRespClientConfig) RequestTimeoutEnforceInt() time.Duration {
 	return time.Second * time.Duration(c.RequestTimeoutEnforceIntInSec)
 }
 
-// EdgeReqRespClientConfig PubSub request-response client config for edge-to-control requests
-type EdgeReqRespClientConfig struct {
-	ReqRespClientConfig `mapstructure:",squash"`
+// EdgePubSubReqRespClientConfig PubSub request-response client config for
+// edge-to-control requests
+type EdgePubSubReqRespClientConfig struct {
+	PubSubReqRespClientConfig `mapstructure:",squash"`
 	// ControlRRTopic the PubSub topic for reaching system control
 	ControlRRTopic string `mapstructure:"systemControlTopic" json:"systemControlTopic" validate:"required"`
 }
@@ -362,8 +363,10 @@ func (c RecordingManagementConfig) SegmentCleanupInt() time.Duration {
 type SystemManagementConfig struct {
 	// APIServer management REST API server config
 	APIServer APIServerConfig `mapstructure:"api" json:"api" validate:"required,dive"`
+	// EdgeAPIServer edge node management support REST API server config
+	EdgeAPIServer APIServerConfig `mapstructure:"edgeAPI" json:"edgeAPI" validate:"required,dive"`
 	// RRClient PubSub request-response client config
-	RRClient ReqRespClientConfig `mapstructure:"requestResponse" json:"requestResponse" validate:"required,dive"`
+	RRClient PubSubReqRespClientConfig `mapstructure:"requestResponse" json:"requestResponse" validate:"required,dive"`
 	// SourceManagement video source management settings
 	SourceManagement VideoSourceManagementConfig `mapstructure:"videoSourceManagement" json:"videoSourceManagement" validate:"required,dive"`
 	// RecordingManagement recording session management settings
@@ -430,6 +433,24 @@ func (c CentralVODServerConfig) SegmentReadMaxWaitTime() time.Duration {
 	return time.Second * time.Duration(c.SegmentReadMaxWaitTimeInSec)
 }
 
+// EdgeRESTReqRespClientConfig REST request-response client config for edge-to-control requests
+type EdgeRESTReqRespClientConfig struct {
+	// BaseURL controller base URL
+	BaseURL string `mapstructure:"BaseURL" json:"BaseURL" validate:"required,url"`
+	// RequestIDHeader request ID header name
+	RequestIDHeader string `mapstructure:"requestIDHeader" json:"requestIDHeader" validate:"required"`
+	// Client HTTP client config. This is designed to support `go-resty`
+	Client HTTPClientConfig `mapstructure:"client" json:"client" validate:"required,dive"`
+}
+
+// EdgeReqRespClientConfig request-response client config for edge-to-control requests
+type EdgeReqRespClientConfig struct {
+	// PubSub request-response client config
+	PubSub EdgePubSubReqRespClientConfig `mapstructure:"pubSub" json:"pubSub" validate:"required,dive"`
+	// REST REST request-response client config
+	REST EdgeRESTReqRespClientConfig `mapstructure:"rest" json:"rest" validate:"required,dive"`
+}
+
 // ===============================================================================
 // Complete Configuration Structures
 
@@ -465,8 +486,8 @@ type EdgeNodeConfig struct {
 	VODConfig VODServerConfig `mapstructure:"vod" json:"vod" validate:"required,dive"`
 	// APIServer local REST API config
 	APIServer APIServerConfig `mapstructure:"api" json:"api" validate:"required,dive"`
-	// RRClient PubSub request-response client config
-	RRClient EdgeReqRespClientConfig `mapstructure:"requestResponse" json:"requestResponse" validate:"required,dive"`
+	// ReqResp request-response client config
+	ReqResp EdgeReqRespClientConfig `mapstructure:"requestResponse" json:"requestResponse" validate:"required,dive"`
 	// BroadcastSystem system broadcast channel configuration
 	BroadcastSystem BroadcastSystemConfig `mapstructure:"broadcast" json:"broadcast" validate:"required,dive"`
 }
@@ -509,6 +530,20 @@ func InstallDefaultControlNodeConfigValues() {
 	viper.SetDefault("management.api.apis.requestLogging.healthLogLevel", "debug")
 	viper.SetDefault("management.api.apis.requestLogging.requestIDHeader", "X-Request-ID")
 	viper.SetDefault("management.api.apis.requestLogging.skipHeaders", []string{
+		"WWW-Authenticate", "Authorization", "Proxy-Authenticate", "Proxy-Authorization",
+	})
+	// Default edge node support management HTTP server config
+	viper.SetDefault("management.edgeAPI.enabled", true)
+	viper.SetDefault("management.edgeAPI.service.listenOn", "0.0.0.0")
+	viper.SetDefault("management.edgeAPI.service.appPort", 8082)
+	viper.SetDefault("management.edgeAPI.service.timeoutSecs.read", 60)
+	viper.SetDefault("management.edgeAPI.service.timeoutSecs.write", 60)
+	viper.SetDefault("management.edgeAPI.service.timeoutSecs.idle", 60)
+	viper.SetDefault("management.edgeAPI.apis.endPoint.pathPrefix", "/")
+	viper.SetDefault("management.edgeAPI.apis.requestLogging.logLevel", "debug")
+	viper.SetDefault("management.edgeAPI.apis.requestLogging.healthLogLevel", "debug")
+	viper.SetDefault("management.edgeAPI.apis.requestLogging.requestIDHeader", "X-Request-ID")
+	viper.SetDefault("management.edgeAPI.apis.requestLogging.skipHeaders", []string{
 		"WWW-Authenticate", "Authorization", "Proxy-Authenticate", "Proxy-Authorization",
 	})
 	// Default system manager request-response client config
@@ -615,12 +650,18 @@ func InstallDefaultEdgeNodeConfigValues() {
 		"WWW-Authenticate", "Authorization", "Proxy-Authenticate", "Proxy-Authorization",
 	})
 
-	// Default edge node request-response client config
-	viper.SetDefault("requestResponse.self.msgTTL", 600)
-	viper.SetDefault("requestResponse.supportWorkerCount", 4)
-	viper.SetDefault("requestResponse.requestTimeoutEnforceIntInSec", 30)
-	viper.SetDefault("requestResponse.systemControlTopic", "system-control-node")
-	viper.SetDefault("requestResponse.outboundRequestDurationInSec", 15)
+	// Default edge node PubSub request-response client config
+	viper.SetDefault("requestResponse.pubSub.self.msgTTL", 600)
+	viper.SetDefault("requestResponse.pubSub.supportWorkerCount", 4)
+	viper.SetDefault("requestResponse.pubSub.requestTimeoutEnforceIntInSec", 30)
+	viper.SetDefault("requestResponse.pubSub.systemControlTopic", "system-control-node")
+	viper.SetDefault("requestResponse.pubSub.outboundRequestDurationInSec", 15)
+
+	// Default edge node REST request-response client config
+	viper.SetDefault("requestResponse.rest.requestIDHeader", "X-Request-ID")
+	viper.SetDefault("requestResponse.rest.client.retry.maxAttempts", 5)
+	viper.SetDefault("requestResponse.rest.client.retry.initialWaitTimeInSec", 2)
+	viper.SetDefault("requestResponse.rest.client.retry.maxWaitTimeInSec", 30)
 
 	// Default broadcast channel config
 	viper.SetDefault("broadcast.pubsub.msgTTL", 600)

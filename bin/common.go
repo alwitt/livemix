@@ -12,7 +12,7 @@ import (
 func buildReqRespClients(
 	ctxt context.Context,
 	nodeName string,
-	config common.ReqRespClientConfig,
+	config common.PubSubReqRespClientConfig,
 	metrics goutils.PubSubMetricHelper,
 ) (goutils.PubSubClient, goutils.RequestResponseClient, error) {
 	var psClient goutils.PubSubClient

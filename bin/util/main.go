@@ -273,7 +273,7 @@ func provisionVideoSources(c *cli.Context) error {
 			Error("Video source query failed")
 		return err
 	}
-	var existingSources api.VideoSourceInfoListResponse
+	var existingSources common.VideoSourceInfoListResponse
 	if err := json.Unmarshal(resp.Body(), &existingSources); err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to parse video source query response")
 		return err

@@ -30,6 +30,7 @@ type ControlNode struct {
 	coreManager           control.SystemManager
 	playlistManager       vod.PlaylistManager
 	MgmtAPIServer         *http.Server
+	EdgeMgmtAPIServer     *http.Server
 	VODAPIServer          *http.Server
 	MetricsServer         *http.Server
 }
@@ -434,6 +435,31 @@ func DefineControlNode(
 		WithFields(logTags).
 		WithField("initialize", initStep).
 		Info("Initialized system manager REST API server")
+	initStep++
+
+	// ====================================================================================
+	// Prepare edge node support admin REST API
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing edge node support admin REST API server")
+
+	theNode.EdgeMgmtAPIServer, err = api.BuildEdgeNodeQueryServer(
+		config.Management.EdgeAPIServer, theNode.coreManager, httpMetricsAgent,
+	)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Failed to create edge node support admin API HTTP server")
+		return nil, err
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized edge node support admin REST API server")
 	initStep++
 
 	// ====================================================================================

@@ -99,6 +99,19 @@ type SystemManager interface {
 	ChangeVideoSourceStreamState(ctxt context.Context, id string, streaming int) error
 
 	/*
+		UpdateVideoSourceStatus update the status of a video source
+
+			@param ctxt context.Context - execution context
+			@param id string - source ID
+			@param reqRespTargetID string - the request-response target ID for reaching video source
+			    over request-response network.
+			@param sourceLocalTime time.Time - video source local time
+	*/
+	UpdateVideoSourceStatus(
+		ctxt context.Context, id string, reqRespTargetID string, sourceLocalTime time.Time,
+	) error
+
+	/*
 		DeleteVideoSource delete a video source
 
 			@param ctxt context.Context - execution context
@@ -550,10 +563,30 @@ func (m *systemManagerImpl) ChangeVideoSourceStreamState(
 			WithFields(logTags).
 			WithField("source-id", id).
 			Error("Streaming state change request failed")
-		dbClient.MarkExternalError(err)
-		return err
+		// We ignore the error, as the edge will periodically sync streaming state
+		// against control node.
 	}
 
+	return nil
+}
+
+func (m *systemManagerImpl) UpdateVideoSourceStatus(
+	ctxt context.Context, id string, reqRespTargetID string, sourceLocalTime time.Time,
+) error {
+	logTags := m.GetLogTagsForContext(ctxt)
+
+	dbClient := m.dbConns.NewPersistanceManager()
+	defer dbClient.Close()
+
+	err := dbClient.UpdateVideoSourceStats(ctxt, id, reqRespTargetID, sourceLocalTime)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			WithField("source-id", id).
+			Error("Unable to record new video source status report")
+		return err
+	}
 	return nil
 }
 

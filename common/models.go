@@ -3,6 +3,7 @@ package common
 import (
 	"time"
 
+	"github.com/alwitt/goutils"
 	"github.com/alwitt/livemix/hls"
 )
 
@@ -64,4 +65,36 @@ type Recording struct {
 	Active    int       `json:"active" gorm:"column:active;default:-1" validate:"oneof=-1 1"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// VideoSourceInfoListResponse response containing list of video sources
+type VideoSourceInfoListResponse struct {
+	goutils.RestAPIBaseResponse
+	// Sources list of video source infos
+	Sources []VideoSource `json:"sources"`
+}
+
+// RecordingSessionListResponse response containing information for set of recording session
+type RecordingSessionListResponse struct {
+	goutils.RestAPIBaseResponse
+	// Recordings video recording session info list
+	Recordings []Recording `json:"recordings" validate:"required,dive"`
+}
+
+// VideoSourceStatusReport edge node report on the current status of a video source
+type VideoSourceStatusReport struct {
+	// RequestResponseTargetID the request-response target ID for reaching video source
+	// over request-response network.
+	RequestResponseTargetID string `json:"rr_target_id" validate:"required"`
+	// LocalTimestamp video source local time
+	LocalTimestamp time.Time `json:"local_timestamp"`
+}
+
+// VideoSourceCurrentStateResponse current video source status according to control
+type VideoSourceCurrentStateResponse struct {
+	goutils.RestAPIBaseResponse
+	// Source the video source info
+	Source VideoSource `json:"source" validate:"required,dive"`
+	// Recordings active recordings for the video source
+	Recordings []Recording `json:"recordings,omitempty" validate:"omitempty,dive"`
 }

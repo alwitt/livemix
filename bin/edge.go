@@ -192,11 +192,14 @@ func DefineEdgeNode(
 	// ====================================================================================
 	// Prepare base layer - RPC clients
 
-	log.WithFields(logTags).WithField("initialize", initStep).Info("Initializing RPC clients")
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing PubSub RPC clients")
 
 	// Define PubSub and request-response clients
 	theNode.psClient, theNode.rrClient, err = buildReqRespClients(
-		parentCtxt, nodeName, config.RRClient.ReqRespClientConfig, pubsubMetricsAgent,
+		parentCtxt, nodeName, config.ReqResp.PubSub.PubSubReqRespClientConfig, pubsubMetricsAgent,
 	)
 	if err != nil {
 		log.
@@ -206,28 +209,100 @@ func DefineEdgeNode(
 		return theNode, err
 	}
 
-	log.WithFields(logTags).WithField("initialize", initStep).Info("Initialized RPC clients")
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized RPC clients")
 	initStep++
 
-	log.WithFields(logTags).WithField("initialize", initStep).Info("Initializing RPC driver")
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing PubSub request-response client")
 
-	// Define edge-to-controller request-response client
-	edgeToCtrlRRClient, err := edge.NewControlRequestClient(
+	// Define PubSub request-response client
+	pubSubReqRespClient, err := edge.NewPubSubControlRequestClient(
 		parentCtxt,
 		nodeName,
-		config.RRClient.ControlRRTopic,
+		config.ReqResp.PubSub.ControlRRTopic,
 		theNode.rrClient,
-		config.RRClient.MaxOutboundRequestDuration(),
+		config.ReqResp.PubSub.MaxOutboundRequestDuration(),
 	)
 	if err != nil {
 		log.
 			WithError(err).
 			WithFields(logTags).
-			Error("Failed to create edge-to-controller request-response client")
+			Error("Failed to create PubSub request-response client")
 		return theNode, err
 	}
 
-	log.WithFields(logTags).WithField("initialize", initStep).Info("Initialized RPC driver")
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized PubSub request-response client")
+	initStep++
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initializing REST request-response client")
+
+	// Define resty HTTP client for request-response
+	var reqRespHTTPClientAuthConfig *goutils.HTTPClientAuthConfig
+	if config.ReqResp.REST.Client.OAuth != nil {
+		reqRespHTTPClientAuthConfig = &goutils.HTTPClientAuthConfig{
+			IssuerURL:      config.ReqResp.REST.Client.OAuth.IssuerURL,
+			ClientID:       config.ReqResp.REST.Client.OAuth.ClientID,
+			ClientSecret:   config.ReqResp.REST.Client.OAuth.ClientSecret,
+			TargetAudience: config.ReqResp.REST.Client.OAuth.TargetAudience,
+			LogTags: log.Fields{
+				"module": "go-utils", "component": "oauth-token-manager", "instance": "client-cred-flow",
+			},
+		}
+	} else {
+		reqRespHTTPClientAuthConfig = nil
+	}
+
+	reqRespHTTPClient, err := goutils.DefineHTTPClient(
+		theNode.nodeRuntimeCtxt,
+		goutils.HTTPClientRetryConfig{
+			MaxAttempts:  config.ReqResp.REST.Client.Retry.MaxAttempts,
+			InitWaitTime: config.ReqResp.REST.Client.Retry.InitWaitTime(),
+			MaxWaitTime:  config.ReqResp.REST.Client.Retry.MaxWaitTime(),
+		},
+		reqRespHTTPClientAuthConfig,
+	)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to define resty HTTP client")
+		return theNode, err
+	}
+
+	// Parse the control edge API base URL
+	ctrlEdgeAPIBase, err := url.Parse(config.ReqResp.REST.BaseURL)
+	if err != nil {
+		log.WithError(err).WithFields(logTags).Error("Failed to parse control edge API base URL")
+		return theNode, err
+	}
+
+	// Define REST request-response client
+	restReqRespClient, err := edge.NewRestControlRequestClient(
+		parentCtxt,
+		ctrlEdgeAPIBase,
+		config.ReqResp.REST.RequestIDHeader,
+		reqRespHTTPClient,
+	)
+	if err != nil {
+		log.
+			WithError(err).
+			WithFields(logTags).
+			Error("Failed to create REST request-response client")
+		return theNode, err
+	}
+
+	log.
+		WithFields(logTags).
+		WithField("initialize", initStep).
+		Info("Initialized REST request-response client")
 	initStep++
 
 	log.
@@ -262,7 +337,7 @@ func DefineEdgeNode(
 		Info("Querying system control node regarding video source under management")
 
 	// Query control for target video source info
-	sourceInfo, err := edgeToCtrlRRClient.GetVideoSourceInfo(parentCtxt, config.VideoSource.Name)
+	sourceInfo, err := restReqRespClient.GetVideoSourceInfo(parentCtxt, config.VideoSource.Name)
 	if err != nil {
 		log.
 			WithError(err).
@@ -306,9 +381,9 @@ func DefineEdgeNode(
 		Info("Initializing HTTP client for segment forwarding")
 
 	// Define resty HTTP client for forwarder
-	var httpClientAuthConfig *goutils.HTTPClientAuthConfig
+	var forwarderHTTPClientAuthConfig *goutils.HTTPClientAuthConfig
 	if config.Forwarder.Live.Remote.Client.OAuth != nil {
-		httpClientAuthConfig = &goutils.HTTPClientAuthConfig{
+		forwarderHTTPClientAuthConfig = &goutils.HTTPClientAuthConfig{
 			IssuerURL:      config.Forwarder.Live.Remote.Client.OAuth.IssuerURL,
 			ClientID:       config.Forwarder.Live.Remote.Client.OAuth.ClientID,
 			ClientSecret:   config.Forwarder.Live.Remote.Client.OAuth.ClientSecret,
@@ -318,17 +393,17 @@ func DefineEdgeNode(
 			},
 		}
 	} else {
-		httpClientAuthConfig = nil
+		forwarderHTTPClientAuthConfig = nil
 	}
 
-	httpClient, err := goutils.DefineHTTPClient(
+	forwarderHTTPClient, err := goutils.DefineHTTPClient(
 		theNode.nodeRuntimeCtxt,
 		goutils.HTTPClientRetryConfig{
 			MaxAttempts:  config.Forwarder.Live.Remote.Client.Retry.MaxAttempts,
 			InitWaitTime: config.Forwarder.Live.Remote.Client.Retry.InitWaitTime(),
 			MaxWaitTime:  config.Forwarder.Live.Remote.Client.Retry.MaxWaitTime(),
 		},
-		httpClientAuthConfig,
+		forwarderHTTPClientAuthConfig,
 	)
 	if err != nil {
 		log.WithError(err).WithFields(logTags).Error("Failed to define resty HTTP client")
@@ -358,7 +433,7 @@ func DefineEdgeNode(
 		parentCtxt,
 		httpForwardTarget,
 		config.Forwarder.Live.Remote.RequestIDHeader,
-		httpClient,
+		forwarderHTTPClient,
 		segmentForwarderMetrics,
 		forwarderLatencyMetrics,
 	)
@@ -451,10 +526,9 @@ func DefineEdgeNode(
 
 	edgeOperatorConfig := edge.VideoSourceOperatorConfig{
 		Self:                       sourceInfo,
-		SelfReqRespTargetID:        config.RRClient.InboudRequestTopic.Topic,
+		SelfReqRespTargetID:        config.ReqResp.PubSub.InboudRequestTopic.Topic,
 		DBConns:                    dbConns,
 		VideoCache:                 cache,
-		BroadcastClient:            psBroadcast,
 		RecordingSegmentForwarder:  recordingForwarder,
 		LiveStreamSegmentForwarder: liveForwarder,
 		StatusReportInterval:       config.VideoSource.StatusReportInt(),
@@ -464,7 +538,7 @@ func DefineEdgeNode(
 
 	// Define video source operator
 	theNode.operator, err = edge.NewManager(
-		parentCtxt, edgeOperatorConfig, edgeToCtrlRRClient, metrics, taskProcessorMetricsAgent,
+		parentCtxt, edgeOperatorConfig, restReqRespClient, metrics, taskProcessorMetricsAgent,
 	)
 	if err != nil {
 		log.
@@ -475,7 +549,7 @@ func DefineEdgeNode(
 	}
 
 	// Install reference to VideoSourceOperator
-	edgeToCtrlRRClient.InstallReferenceToManager(theNode.operator)
+	pubSubReqRespClient.InstallReferenceToManager(theNode.operator)
 
 	log.WithFields(logTags).WithField("initialize", initStep).Info("Initialized node operator")
 	initStep++
@@ -606,38 +680,6 @@ func DefineEdgeNode(
 		WithFields(logTags).
 		WithField("initialize", initStep).
 		Info("Initialized HLS playlist HTTP receiver")
-	initStep++
-
-	// ====================================================================================
-	// Perform support tasks
-
-	log.
-		WithFields(logTags).
-		WithField("initialize", initStep).
-		Info("Populating local persistence of active recordings associated with this source")
-
-	// Query system control for active recordings
-	recordings, err := edgeToCtrlRRClient.ListActiveRecordingsOfSource(parentCtxt, sourceInfo.ID)
-	if err != nil {
-		log.
-			WithError(err).
-			WithFields(logTags).
-			Error("Failed to fetch list of active recordings from system control node")
-		return theNode, err
-	}
-	for _, recording := range recordings {
-		if err := theNode.operator.StartRecording(parentCtxt, recording); err != nil {
-			log.
-				WithError(err).
-				WithFields(logTags).
-				WithField("recording-id", recording.ID).
-				Error("Failed to install ongoing recording")
-		}
-	}
-
-	log.
-		WithField("initialize", initStep).
-		Info("Updated local persistence of active recordings associated with this source")
 
 	return theNode, nil
 }

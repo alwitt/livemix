@@ -178,9 +178,56 @@ func TestManagerListVideoSources(t *testing.T) {
 
 	assert.Equal(http.StatusOK, respRecorder.Code)
 	// Verify response
-	var resp api.VideoSourceInfoListResponse
+	var resp common.VideoSourceInfoListResponse
 	assert.Nil(json.Unmarshal(respRecorder.Body.Bytes(), &resp))
 	assert.EqualValues(testSources, resp.Sources)
+}
+
+func TestManagerListOneTargetVideoSource(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	mockManager := mocks.NewSystemManager(t)
+
+	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
+		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
+	}, nil)
+	assert.Nil(err)
+
+	testSource := common.VideoSource{ID: uuid.NewString(), Name: uuid.NewString()}
+
+	// Setup mock
+	mockManager.On(
+		"GetVideoSourceByName",
+		mock.AnythingOfType("*context.valueCtx"),
+		testSource.Name,
+	).Return(testSource, nil).Once()
+
+	// Prepare request
+	req, err := http.NewRequest("GET", "/v1/source", nil)
+	assert.Nil(err)
+	{
+		q := req.URL.Query()
+		q.Add("source_name", testSource.Name)
+		req.URL.RawQuery = q.Encode()
+	}
+
+	// Setup HTTP handling
+	router := mux.NewRouter()
+	respRecorder := httptest.NewRecorder()
+	router.HandleFunc(
+		"/v1/source", uut.LoggingMiddleware(uut.ListVideoSourcesHandler()),
+	)
+
+	// Request
+	router.ServeHTTP(respRecorder, req)
+
+	assert.Equal(http.StatusOK, respRecorder.Code)
+	// Verify response
+	var resp common.VideoSourceInfoListResponse
+	assert.Nil(json.Unmarshal(respRecorder.Body.Bytes(), &resp))
+	assert.Len(resp.Sources, 1)
+	assert.EqualValues(testSource, resp.Sources[0])
 }
 
 func TestManagerGetVideoSource(t *testing.T) {
@@ -353,6 +400,140 @@ func TestManagerChangeVideoStreamingState(t *testing.T) {
 	assert.Equal(http.StatusOK, respRecorder.Code)
 }
 
+func TestManagerExchangeVideoSourceStatusInfo(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+
+	mockManager := mocks.NewSystemManager(t)
+
+	uut, err := api.NewSystemManagerHandler(mockManager, common.HTTPRequestLogging{
+		RequestIDHeader: "X-Request-ID", DoNotLogHeaders: []string{},
+	}, nil)
+	assert.Nil(err)
+
+	testSource := common.VideoSource{ID: uuid.NewString()}
+
+	// Case 0: no payload provided
+	{
+		req, err := http.NewRequest("POST", fmt.Sprintf("/v1/source/%s/status", testSource.ID), nil)
+		assert.Nil(err)
+
+		// Setup HTTP handling
+		router := mux.NewRouter()
+		respRecorder := httptest.NewRecorder()
+		router.HandleFunc(
+			"/v1/source/{sourceID}/status",
+			uut.LoggingMiddleware(uut.ExchangeVideoSourceStatusInfoHandler()),
+		)
+
+		// Request
+		router.ServeHTTP(respRecorder, req)
+
+		assert.Equal(http.StatusBadRequest, respRecorder.Code)
+	}
+
+	// Case 1: non-json payload
+	{
+		payload := uuid.NewString()
+		req, err := http.NewRequest(
+			"POST", fmt.Sprintf("/v1/source/%s/status", testSource.ID), bytes.NewBufferString(payload),
+		)
+		assert.Nil(err)
+
+		// Setup HTTP handling
+		router := mux.NewRouter()
+		respRecorder := httptest.NewRecorder()
+		router.HandleFunc(
+			"/v1/source/{sourceID}/status",
+			uut.LoggingMiddleware(uut.ExchangeVideoSourceStatusInfoHandler()),
+		)
+
+		// Request
+		router.ServeHTTP(respRecorder, req)
+
+		assert.Equal(http.StatusBadRequest, respRecorder.Code)
+	}
+
+	// Case 2: incorrect format
+	{
+		payload := common.VideoSourceStatusReport{}
+		payloadByte, err := json.Marshal(&payload)
+		assert.Nil(err)
+		req, err := http.NewRequest(
+			"POST", fmt.Sprintf("/v1/source/%s/status", testSource.ID), bytes.NewBuffer(payloadByte),
+		)
+		assert.Nil(err)
+
+		// Setup HTTP handling
+		router := mux.NewRouter()
+		respRecorder := httptest.NewRecorder()
+		router.HandleFunc(
+			"/v1/source/{sourceID}/status",
+			uut.LoggingMiddleware(uut.ExchangeVideoSourceStatusInfoHandler()),
+		)
+
+		// Request
+		router.ServeHTTP(respRecorder, req)
+
+		assert.Equal(http.StatusBadRequest, respRecorder.Code)
+	}
+
+	// Case 3: correct format
+	{
+		testRecordings := []common.Recording{{ID: uuid.NewString()}, {ID: uuid.NewString()}}
+		testReqRespTargetID := uuid.NewString()
+		currentTime := time.Now().UTC()
+
+		// Prepare mock
+		mockManager.On(
+			"GetVideoSource",
+			mock.AnythingOfType("*context.valueCtx"),
+			testSource.ID,
+		).Return(testSource, nil).Once()
+		mockManager.On(
+			"UpdateVideoSourceStatus",
+			mock.AnythingOfType("*context.valueCtx"),
+			testSource.ID,
+			testReqRespTargetID,
+			currentTime,
+		).Return(nil).Once()
+		mockManager.On(
+			"ListRecordingSessionsOfSource",
+			mock.AnythingOfType("*context.valueCtx"),
+			testSource.ID,
+			true,
+		).Return(testRecordings, nil).Once()
+
+		payload := common.VideoSourceStatusReport{
+			RequestResponseTargetID: testReqRespTargetID, LocalTimestamp: currentTime,
+		}
+		payloadByte, err := json.Marshal(&payload)
+		assert.Nil(err)
+		req, err := http.NewRequest(
+			"POST", fmt.Sprintf("/v1/source/%s/status", testSource.ID), bytes.NewBuffer(payloadByte),
+		)
+		assert.Nil(err)
+
+		// Setup HTTP handling
+		router := mux.NewRouter()
+		respRecorder := httptest.NewRecorder()
+		router.HandleFunc(
+			"/v1/source/{sourceID}/status",
+			uut.LoggingMiddleware(uut.ExchangeVideoSourceStatusInfoHandler()),
+		)
+
+		// Request
+		router.ServeHTTP(respRecorder, req)
+
+		assert.Equal(http.StatusOK, respRecorder.Code)
+		// Verify response
+		var resp common.VideoSourceCurrentStateResponse
+		assert.Nil(json.Unmarshal(respRecorder.Body.Bytes(), &resp))
+		assert.EqualValues(testSource, resp.Source)
+		assert.EqualValues(testRecordings, resp.Recordings)
+	}
+}
+
 func TestManagerStartRecordingSession(t *testing.T) {
 	assert := assert.New(t)
 	log.SetLevel(log.DebugLevel)
@@ -505,7 +686,7 @@ func TestManagerListRecordingSession(t *testing.T) {
 
 	assert.Equal(http.StatusOK, respRecorder.Code)
 	// Verify response
-	var resp api.RecordingSessionListResponse
+	var resp common.RecordingSessionListResponse
 	assert.Nil(json.Unmarshal(respRecorder.Body.Bytes(), &resp))
 	assert.Len(resp.Recordings, len(testRecordings))
 	for idx, recording := range resp.Recordings {
@@ -564,7 +745,7 @@ func TestManagerListRecordingOfSource(t *testing.T) {
 
 		assert.Equal(http.StatusOK, respRecorder.Code)
 		// Verify response
-		var resp api.RecordingSessionListResponse
+		var resp common.RecordingSessionListResponse
 		assert.Nil(json.Unmarshal(respRecorder.Body.Bytes(), &resp))
 		assert.Len(resp.Recordings, len(testRecordings))
 		for idx, recording := range resp.Recordings {
@@ -599,7 +780,7 @@ func TestManagerListRecordingOfSource(t *testing.T) {
 
 		assert.Equal(http.StatusOK, respRecorder.Code)
 		// Verify response
-		var resp api.RecordingSessionListResponse
+		var resp common.RecordingSessionListResponse
 		assert.Nil(json.Unmarshal(respRecorder.Body.Bytes(), &resp))
 		assert.Len(resp.Recordings, len(testRecordings))
 		for idx, recording := range resp.Recordings {

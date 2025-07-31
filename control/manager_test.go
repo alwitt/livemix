@@ -54,6 +54,38 @@ func TestSystemManagerProcessSourceStatusBroadcast(t *testing.T) {
 	assert.Nil(uut.ProcessBroadcastMsgs(utCtxt, currentTime, broadcastMsg, nil))
 }
 
+func TestSystemManagerProcessSourceStatusUpdate(t *testing.T) {
+	assert := assert.New(t)
+	log.SetLevel(log.DebugLevel)
+	utCtxt := context.Background()
+
+	mockS3 := mocks.NewS3Client(t)
+	mockSQL := mocks.NewConnectionManager(t)
+	mockDB := mocks.NewPersistenceManager(t)
+	mockSQL.On("NewPersistanceManager").Return(mockDB)
+	mockDB.On("Close").Return()
+
+	uut, err := control.NewManager(utCtxt, mockSQL, nil, false, mockS3, time.Minute, time.Hour, nil)
+	assert.Nil(err)
+
+	currentTime := time.Now().UTC()
+
+	testSourceID := uuid.NewString()
+	testReqRespTargetID := uuid.NewString()
+
+	// Setup mock
+	mockDB.On(
+		"UpdateVideoSourceStats",
+		mock.AnythingOfType("context.backgroundCtx"),
+		testSourceID,
+		testReqRespTargetID,
+		currentTime,
+	).Return(nil).Once()
+
+	// Process the broadcast message
+	assert.Nil(uut.UpdateVideoSourceStatus(utCtxt, testSourceID, testReqRespTargetID, currentTime))
+}
+
 func TestSystemManagerProcessNewRecordingSegmentsBroadcast(t *testing.T) {
 	assert := assert.New(t)
 	log.SetLevel(log.DebugLevel)

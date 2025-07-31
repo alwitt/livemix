@@ -178,20 +178,14 @@ func (h SystemManagerHandler) DefineNewVideoSourceHandler() http.HandlerFunc {
 
 // ------------------------------------------------------------------------------------
 
-// VideoSourceInfoListResponse response containing list of video sources
-type VideoSourceInfoListResponse struct {
-	goutils.RestAPIBaseResponse
-	// Sources list of video source infos
-	Sources []common.VideoSource `json:"sources"`
-}
-
 // ListVideoSources godoc
 // @Summary List known video sources
 // @Description Fetch list of known video sources in the system
 // @tags management,cloud
 // @Produce json
 // @Param X-Request-ID header string false "Request ID"
-// @Success 200 {object} VideoSourceInfoListResponse "success"
+// @Param source_name query string false "If exist, return this particular video source"
+// @Success 200 {object} common.VideoSourceInfoListResponse "success"
 // @Failure 400 {object} goutils.RestAPIBaseResponse "error"
 // @Failure 403 {object} goutils.RestAPIBaseResponse "error"
 // @Failure 404 {string} string "error"
@@ -207,18 +201,37 @@ func (h SystemManagerHandler) ListVideoSources(w http.ResponseWriter, r *http.Re
 		}
 	}()
 
-	entries, err := h.manager.ListVideoSources(r.Context())
-	if err != nil {
-		msg := "failed to list known video sources"
-		log.WithError(err).WithFields(logTags).Error(msg)
-		respCode = http.StatusInternalServerError
-		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusInternalServerError, msg, err.Error())
-		return
+	// Whether to find a particular video source
+	queryParams := r.URL.Query()
+	targetSourceName := queryParams.Get("source_name")
+	entries := []common.VideoSource{}
+	if targetSourceName != "" {
+		// Only query for this source
+		entry, err := h.manager.GetVideoSourceByName(r.Context(), targetSourceName)
+		if err != nil {
+			msg := "failed to find specific video source"
+			log.WithError(err).WithFields(logTags).Error(msg)
+			respCode = http.StatusInternalServerError
+			response = h.GetStdRESTErrorMsg(r.Context(), http.StatusInternalServerError, msg, err.Error())
+			return
+		}
+		entries = append(entries, entry)
+	} else {
+		// Return all sources
+		var err error
+		entries, err = h.manager.ListVideoSources(r.Context())
+		if err != nil {
+			msg := "failed to list known video sources"
+			log.WithError(err).WithFields(logTags).Error(msg)
+			respCode = http.StatusInternalServerError
+			response = h.GetStdRESTErrorMsg(r.Context(), http.StatusInternalServerError, msg, err.Error())
+			return
+		}
 	}
 
 	// Return new video source
 	respCode = http.StatusOK
-	response = VideoSourceInfoListResponse{
+	response = common.VideoSourceInfoListResponse{
 		RestAPIBaseResponse: h.GetStdRESTSuccessMsg(r.Context()), Sources: entries,
 	}
 }
@@ -504,6 +517,125 @@ func (h SystemManagerHandler) ChangeSourceStreamingStateHandler() http.HandlerFu
 
 // ------------------------------------------------------------------------------------
 
+// ExchangeVideoSourceStatusInfo godoc
+// @Summary Edge and Control Exchange Video Source State
+// @Description Process video source status report from an edge node, and return the
+// current state of the video source according to control.
+// @tags management,cloud
+// @Produce json
+// @Param X-Request-ID header string false "Request ID"
+// @Param sourceID path string true "Video source ID"
+// @Param param body common.VideoSourceStatusReport true "Video source status report"
+// @Success 200 {object} common.VideoSourceCurrentStateResponse "success"
+// @Failure 400 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 403 {object} goutils.RestAPIBaseResponse "error"
+// @Failure 404 {string} string "error"
+// @Failure 500 {object} goutils.RestAPIBaseResponse "error"
+// @Router /v1/source/{sourceID}/status [post]
+func (h SystemManagerHandler) ExchangeVideoSourceStatusInfo(
+	w http.ResponseWriter, r *http.Request,
+) {
+	var respCode int
+	var response interface{}
+	logTags := h.GetLogTagsForContext(r.Context())
+	defer func() {
+		if err := h.WriteRESTResponse(w, respCode, response, nil); err != nil {
+			log.WithError(err).WithFields(logTags).Error("Failed to form response")
+		}
+	}()
+
+	// Get video source ID
+	vars := mux.Vars(r)
+	videoSourceID, ok := vars["sourceID"]
+	if !ok {
+		msg := "video source ID missing from request URL"
+		log.WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
+		return
+	}
+
+	if r.Body == nil {
+		msg := "no payload provided to for status report"
+		log.WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, msg)
+		return
+	}
+
+	// Parse the status report
+	var params common.VideoSourceStatusReport
+	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+		msg := "unable to parse video source status report from request"
+		log.WithError(err).WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, err.Error())
+		return
+	}
+	defer func() {
+		if err := r.Body.Close(); err != nil {
+			log.WithError(err).WithFields(logTags).Error("Request body close error")
+		}
+	}()
+
+	// Validate parameters
+	if err := h.validate.Struct(&params); err != nil {
+		msg := "messing required values to update video source status"
+		log.WithError(err).WithFields(logTags).Error(msg)
+		respCode = http.StatusBadRequest
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusBadRequest, msg, err.Error())
+		return
+	}
+
+	// Get the video source
+	entry, err := h.manager.GetVideoSource(r.Context(), videoSourceID)
+	if err != nil {
+		msg := "failed to fetch video source info"
+		log.WithError(err).WithFields(logTags).WithField("video-source", videoSourceID).Error(msg)
+		respCode = http.StatusInternalServerError
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusInternalServerError, msg, err.Error())
+		return
+	}
+
+	// Record new video source status
+	if err := h.manager.UpdateVideoSourceStatus(
+		r.Context(), entry.ID, params.RequestResponseTargetID, params.LocalTimestamp,
+	); err != nil {
+		msg := "failed to update video source status"
+		log.WithError(err).WithFields(logTags).Error(msg)
+		respCode = http.StatusInternalServerError
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusInternalServerError, msg, err.Error())
+		return
+	}
+
+	// Get active recordings of video source
+	recordings, err := h.manager.ListRecordingSessionsOfSource(r.Context(), videoSourceID, true)
+	if err != nil {
+		msg := "failed to list active recording sessions of source"
+		log.WithError(err).WithFields(logTags).Error(msg)
+		respCode = http.StatusInternalServerError
+		response = h.GetStdRESTErrorMsg(r.Context(), http.StatusInternalServerError, msg, err.Error())
+		return
+	}
+
+	// Return the recording session
+	respCode = http.StatusOK
+	response = common.VideoSourceCurrentStateResponse{
+		RestAPIBaseResponse: h.GetStdRESTSuccessMsg(r.Context()),
+		Source:              entry,
+		Recordings:          recordings,
+	}
+}
+
+// ExchangeVideoSourceStatusInfoHandler Wrapper around ExchangeVideoSourceStatusInfo
+func (h SystemManagerHandler) ExchangeVideoSourceStatusInfoHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.ExchangeVideoSourceStatusInfo(w, r)
+	}
+}
+
+// ------------------------------------------------------------------------------------
+
 // StartNewRecordingRequest parameters to start a new video recording
 type StartNewRecordingRequest struct {
 	Alias       *string `json:"alias,omitempty"`
@@ -629,20 +761,13 @@ func (h SystemManagerHandler) StartNewRecordingHandler() http.HandlerFunc {
 
 // ------------------------------------------------------------------------------------
 
-// RecordingSessionListResponse response containing information for set of recording session
-type RecordingSessionListResponse struct {
-	goutils.RestAPIBaseResponse
-	// Recordings video recording session info list
-	Recordings []common.Recording `json:"recordings" validate:"required,dive"`
-}
-
 // ListRecordings godoc
 // @Summary Fetch recordings
 // @Description Fetch video recording sessions
 // @tags management,cloud
 // @Produce json
 // @Param X-Request-ID header string false "Request ID"
-// @Success 200 {object} RecordingSessionListResponse "success"
+// @Success 200 {object} common.RecordingSessionListResponse "success"
 // @Failure 400 {object} goutils.RestAPIBaseResponse "error"
 // @Failure 403 {object} goutils.RestAPIBaseResponse "error"
 // @Failure 404 {string} string "error"
@@ -669,7 +794,7 @@ func (h SystemManagerHandler) ListRecordings(w http.ResponseWriter, r *http.Requ
 
 	// Return the recording session
 	respCode = http.StatusOK
-	response = RecordingSessionListResponse{
+	response = common.RecordingSessionListResponse{
 		RestAPIBaseResponse: h.GetStdRESTSuccessMsg(r.Context()), Recordings: recordings,
 	}
 }
@@ -733,7 +858,7 @@ func (h SystemManagerHandler) ListRecordingsOfSource(w http.ResponseWriter, r *h
 
 	// Return the recording session
 	respCode = http.StatusOK
-	response = RecordingSessionListResponse{
+	response = common.RecordingSessionListResponse{
 		RestAPIBaseResponse: h.GetStdRESTSuccessMsg(r.Context()), Recordings: recordings,
 	}
 }

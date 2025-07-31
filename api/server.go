@@ -177,6 +177,71 @@ func BuildSystemManagementServer(
 	return httpSrv, nil
 }
 
+/*
+BuildEdgeNodeQueryServer build API server to support edge node queries
+
+	@param httpCfg common.APIServerConfig - HTTP server configuration
+	@param manager control.SystemManager - core system manager
+	@param metrics goutils.HTTPRequestMetricHelper - metric collection agent
+	@returns HTTP server instance
+*/
+func BuildEdgeNodeQueryServer(
+	httpCfg common.APIServerConfig,
+	manager control.SystemManager,
+	metrics goutils.HTTPRequestMetricHelper,
+) (*http.Server, error) {
+	mgmtHandler, err := NewSystemManagerHandler(manager, httpCfg.APIs.RequestLogging, metrics)
+	if err != nil {
+		return nil, err
+	}
+	router := mux.NewRouter()
+	mainRouter := registerPathPrefix(router, httpCfg.APIs.Endpoint.PathPrefix, nil)
+	v1Router := registerPathPrefix(mainRouter, "/v1", nil)
+
+	// --------------------------------------------------------------------------------
+	// Edge node query APIs
+	videoSourceRouter := registerPathPrefix(v1Router, "/source", map[string]http.HandlerFunc{
+		"get": mgmtHandler.ListVideoSourcesHandler(),
+	})
+
+	perSourceRouter := registerPathPrefix(
+		videoSourceRouter, "/{sourceID}", map[string]http.HandlerFunc{
+			"get": mgmtHandler.GetVideoSourceHandler(),
+		},
+	)
+
+	_ = registerPathPrefix(perSourceRouter, "/recording", map[string]http.HandlerFunc{
+		"get": mgmtHandler.ListRecordingsOfSourceHandler(),
+	})
+
+	_ = registerPathPrefix(perSourceRouter, "/status", map[string]http.HandlerFunc{
+		"post": mgmtHandler.ExchangeVideoSourceStatusInfoHandler(),
+	})
+
+	// --------------------------------------------------------------------------------
+	// Middleware
+
+	router.Use(func(next http.Handler) http.Handler {
+		return mgmtHandler.LoggingMiddleware(next.ServeHTTP)
+	})
+
+	// --------------------------------------------------------------------------------
+	// HTTP Server
+
+	serverListen := fmt.Sprintf(
+		"%s:%d", httpCfg.Server.ListenOn, httpCfg.Server.Port,
+	)
+	httpSrv := &http.Server{
+		Addr:         serverListen,
+		WriteTimeout: time.Second * time.Duration(httpCfg.Server.Timeouts.WriteTimeout),
+		ReadTimeout:  time.Second * time.Duration(httpCfg.Server.Timeouts.ReadTimeout),
+		IdleTimeout:  time.Second * time.Duration(httpCfg.Server.Timeouts.IdleTimeout),
+		Handler:      h2c.NewHandler(router, &http2.Server{}),
+	}
+
+	return httpSrv, nil
+}
+
 // ====================================================================================
 // Edge Node API Server
 
