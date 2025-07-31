@@ -406,6 +406,10 @@ func startEdgeNode(c *cli.Context) error {
 		configs.Forwarder.Live.Remote.Client.OAuth.ClientID = edgeNodeArgs.OAuthClientID
 		configs.Forwarder.Live.Remote.Client.OAuth.ClientSecret = edgeNodeArgs.OAuthClientSecret
 	}
+	if configs.ReqResp.REST.Client.OAuth != nil {
+		configs.ReqResp.REST.Client.OAuth.ClientID = edgeNodeArgs.OAuthClientID
+		configs.ReqResp.REST.Client.OAuth.ClientSecret = edgeNodeArgs.OAuthClientSecret
+	}
 
 	// Validate edge node config
 	if err := validate.Struct(&configs); err != nil {

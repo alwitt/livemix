@@ -436,7 +436,7 @@ func (c CentralVODServerConfig) SegmentReadMaxWaitTime() time.Duration {
 // EdgeRESTReqRespClientConfig REST request-response client config for edge-to-control requests
 type EdgeRESTReqRespClientConfig struct {
 	// BaseURL controller base URL
-	BaseURL string `mapstructure:"BaseURL" json:"BaseURL" validate:"required,url"`
+	BaseURL string `mapstructure:"baseURL" json:"baseURL" validate:"required,url"`
 	// RequestIDHeader request ID header name
 	RequestIDHeader string `mapstructure:"requestIDHeader" json:"requestIDHeader" validate:"required"`
 	// Client HTTP client config. This is designed to support `go-resty`
